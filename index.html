@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>暮幕 · 互动式剧本体验</title>
+  <meta name="description" content="暮幕 —— 一个唯美的网页版互动剧本体验。导入你的剧本，在印象派黄昏里展开一段故事。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="./styles/main.css" />
+</head>
+<body>
+  <!-- 入场遮罩 -->
+  <div id="boot-veil" class="boot-veil">
+    <div class="boot-inner">
+      <div class="boot-title">暮幕</div>
+      <div class="boot-sub">MUMU · INTERACTIVE STORY</div>
+      <div class="boot-hint">点按进入暮色</div>
+    </div>
+  </div>
+
+  <!-- ===================== 首页 ===================== -->
+  <main id="home" class="screen home" aria-hidden="false">
+    <!-- 动态夕阳画布 -->
+    <canvas id="sunset" class="sunset-canvas"></canvas>
+    <div class="vignette"></div>
+
+    <!-- 左上角品牌 -->
+    <div class="brand">
+      <span class="brand-mark">暮幕</span>
+      <span class="brand-sub">MUMU</span>
+    </div>
+
+    <!-- 右上角功能按钮组 -->
+    <nav class="top-actions" aria-label="主功能">
+      <button class="glass-btn" id="btn-library" title="选择剧本">
+        <span class="gi">❖</span><span class="gl">选择剧本</span>
+      </button>
+      <button class="glass-btn" id="btn-import" title="导入剧本">
+        <span class="gi">↥</span><span class="gl">导入剧本</span>
+      </button>
+      <button class="glass-btn" id="btn-saves" title="选择存档">
+        <span class="gi">◷</span><span class="gl">选择存档</span>
+      </button>
+      <button class="glass-btn icon-only" id="btn-audio" title="音乐 / 静音" aria-pressed="false">
+        <span class="gi" id="audio-icon">♪</span>
+      </button>
+    </nav>
+
+    <!-- 主标题（中间偏左） -->
+    <div class="hero">
+      <div class="hero-kicker">AN INTERACTIVE TWILIGHT</div>
+      <h1 class="hero-title">互动式<br />剧本体验</h1>
+      <p class="hero-desc">在一场缓缓沉落的黄昏里，让你的剧本成为一段可以走进去的故事。</p>
+      <div class="hero-cta">
+        <button class="primary-cta" id="btn-start">开始体验</button>
+        <button class="ghost-cta" id="btn-how">玩法与格式</button>
+      </div>
+    </div>
+
+    <!-- 底部音乐条 -->
+    <div class="now-playing" id="now-playing">
+      <span class="np-dot"></span>
+      <span class="np-text" id="np-text">轻音乐 · 暮色</span>
+    </div>
+  </main>
+
+  <!-- ===================== 剧情舞台 ===================== -->
+  <section id="stage" class="screen stage" aria-hidden="true">
+    <canvas id="scene" class="scene-canvas"></canvas>
+    <div class="scene-grain"></div>
+
+    <div class="stage-top">
+      <button class="stage-btn" id="stage-back">← 返回首页</button>
+      <div class="stage-meta" id="stage-title">序章</div>
+      <div class="stage-top-right">
+        <button class="stage-btn" id="stage-save">保存进度</button>
+        <button class="stage-btn icon-only" id="stage-audio" title="音乐 / 静音">♪</button>
+      </div>
+    </div>
+
+    <div class="dialogue" id="dialogue">
+      <div class="dlg-name" id="dlg-name"></div>
+      <div class="dlg-text" id="dlg-text"></div>
+      <div class="dlg-choices" id="dlg-choices"></div>
+      <div class="dlg-hint" id="dlg-hint">点击继续 ▸</div>
+    </div>
+  </section>
+
+  <!-- ===================== 弹层容器 ===================== -->
+  <div id="modal-root"></div>
+
+  <!-- 轻提示 -->
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="./scripts/main.js"></script>
+</body>
+</html>
