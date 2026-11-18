@@ -1,5 +1,7 @@
 # 暮幕 MUMU · 互动剧情舞台
 
+> GitHub（私有）：https://github.com/Yonger-wind/mumu
+
 一个零依赖的网页互动剧情游戏：唯美印象派场景 + 极简氛围剪影人物 + 分支叙事。
 纯原生 HTML / CSS / ES Modules + Canvas 2D + Web Audio，无构建步骤、无第三方依赖。
 
