@@ -292,7 +292,7 @@ function compileText(text, fileName) {
     }
     // 结束 / 清场
     if (/^【\s*(?:清场|空场|无人)\s*】$/.test(line)) { flushChoices(); nodes.push({ t: 'clear' }); continue; }
-    if (/^【\s*(结束|完)\s*】$/.test(line)) { flushChoices(); nodes.push({ t: 'end' }); continue; }
+    if ((m = line.match(/^【\s*(?:结束|完)\s*(?:[:：]\s*(.+?)\s*)?】$/))) { flushChoices(); nodes.push({ t: 'end', ending: (m[1] || '').trim() }); continue; }
     // 标签 [xxx]
     if ((m = line.match(/^\[([^\]]+)\]$/))) {
       flushChoices();
