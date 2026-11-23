@@ -1,10 +1,14 @@
 /* ============================================================
    暮幕 · 存储层
    剧本（自定义）与存档都放在 localStorage
+   存档写入 mumu.saves.v2；旧的 mumu.saves.v1 只读并在读取时自动迁移。
    ============================================================ */
 
+import { upgradeSave } from './state.js';
+
 const K_SCRIPTS = 'mumu.scripts.v1';
-const K_SAVES = 'mumu.saves.v1';
+const K_SAVES_V1 = 'mumu.saves.v1';   // 旧键，只读迁移用
+const K_SAVES_V2 = 'mumu.saves.v2';   // 新键
 
 function read(key, fallback) {
   try {
@@ -31,14 +35,28 @@ export function removeCustomScript(id) {
   return list;
 }
 
-export function loadSaves() { return read(K_SAVES, []); }
-export function saveAll(saves) { return write(K_SAVES, saves); }
+export function loadSaves() {
+  const v2 = read(K_SAVES_V2, null);
+  if (Array.isArray(v2)) return v2.map(upgradeSave);
+  // 旧版本存档：读取即迁移，补齐 version / state
+  const v1 = read(K_SAVES_V1, []);
+  if (!Array.isArray(v1) || !v1.length) return [];
+  const migrated = v1.map(upgradeSave);
+  saveAll(migrated);
+  return migrated;
+}
+export function saveAll(saves) { return write(K_SAVES_V2, saves); }
 
 export function upsertSave(save) {
   const list = loadSaves().filter((s) => s.id !== save.id);
-  list.unshift(save);
-  saveAll(list.slice(0, 40));       // 上限 40 条
-  return list;
+  list.unshift(upgradeSave(save));
+  const trimmed = list.slice(0, 40);       // 上限 40 条
+  const ok = saveAll(trimmed);
+  return {
+    ok,
+    error: ok ? null : '浏览器存储空间不足，进度没有保存成功。',
+    list: trimmed,
+  };
 }
 export function removeSave(id) {
   const list = loadSaves().filter((s) => s.id !== id);
