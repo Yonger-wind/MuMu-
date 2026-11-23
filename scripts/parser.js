@@ -4,6 +4,8 @@
    全部在浏览器内完成，无第三方依赖
    ============================================================ */
 
+import { unzipEntries, extractEntry } from './zip.js';
+
 export const LIMITS = {
   minChars: 200,
   maxChars: 30000,
@@ -451,52 +453,7 @@ export async function readFileToScript(file) {
   return script;
 }
 
-/* ---------------- 最小 ZIP 读取器（central directory + deflate-raw） ---------------- */
-async function unzipEntries(buf) {
-  const dv = new DataView(buf);
-  const u8 = new Uint8Array(buf);
-  // 找 End Of Central Directory
-  let eocd = -1;
-  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) {
-    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd < 0) throw fail('无法识别该压缩包，请确认它是标准 .zip 文件。');
-  const count = dv.getUint16(eocd + 10, true);
-  let p = dv.getUint32(eocd + 16, true);
-  const entries = [];
-  const dec = new TextDecoder('utf-8');
-  for (let i = 0; i < count; i++) {
-    if (dv.getUint32(p, true) !== 0x02014b50) break;
-    const flag = dv.getUint16(p + 8, true);
-    const method = dv.getUint16(p + 10, true);
-    const csize = dv.getUint32(p + 20, true);
-    const nameLen = dv.getUint16(p + 28, true);
-    const extraLen = dv.getUint16(p + 30, true);
-    const cmtLen = dv.getUint16(p + 32, true);
-    const localOff = dv.getUint32(p + 42, true);
-    const name = dec.decode(u8.subarray(p + 46, p + 46 + nameLen));
-    entries.push({ name, method, csize, localOff, flag });
-    p += 46 + nameLen + extraLen + cmtLen;
-  }
-  return { entries, dv, u8 };
-}
-
-async function extractEntry({ dv, u8 }, e) {
-  const p = e.localOff;
-  const nameLen = dv.getUint16(p + 26, true);
-  const extraLen = dv.getUint16(p + 28, true);
-  const start = p + 30 + nameLen + extraLen;
-  const data = u8.subarray(start, start + e.csize);
-  if (e.method === 0) return data;
-  if (e.method === 8) {
-    if (typeof DecompressionStream === 'undefined') throw fail('当前浏览器不支持解压 zip，请升级到较新的浏览器，或直接导入 .txt 文件。');
-    const ds = new DecompressionStream('deflate-raw');
-    const stream = new Blob([data]).stream().pipeThrough(ds);
-    return new Uint8Array(await new Response(stream).arrayBuffer());
-  }
-  throw fail('压缩包使用了不支持的压缩方式。');
-}
-
+/* ---------------- ZIP 读取（实现见 scripts/zip.js） ---------------- */
 async function readFromZip(buf) {
   const z = await unzipEntries(buf);
   const usable = z.entries
