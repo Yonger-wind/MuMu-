@@ -15,6 +15,15 @@ node serve.js
 必须通过 HTTP 访问（ES modules 不支持 file:// 直接打开）。`serve.js` 无缓存头，
 改代码后请强制刷新（DevTools 勾选 Disable cache，或 Ctrl+F5）。
 
+单元测试（零依赖，Node 内置测试运行器）：
+
+```bash
+node --test          # 运行 tests/*.test.mjs
+```
+
+存档写入 `mumu.saves.v2`，旧版本 `mumu.saves.v1` 的存档会在读取时自动迁移补齐；
+存档同时携带故事状态（旗标、数值、结局标识、检查点），因此读档可以回到原位继续。
+
 ## 目录结构
 
 ```
@@ -38,12 +47,16 @@ scripts/
   prop.js           特写道具（录音带 / 耳机 / 纸质文件 / 旧照片 / 信纸 / 长卷 / 令牌 /
                     紫檀木盒 / 颜料研钵 / 星月夜 / 放大镜 / 档案袋 / 黑皮账册 / 星图 /
                     手机 / 画布碎片 / 咖啡 / 手抄乐谱 / 小提琴 / 钢琴键盘 / 橘子汽水 / 素圈戒指）
-  engine.js         剧情引擎：节点推进、打字机、选项、场景/姿态/视角状态、快照存档
+  engine.js         剧情引擎：节点推进、打字机、选项、场景/姿态/视角状态、快照存档、
+                    状态层（旗标/数值/结局标识/选项检查点与 rewind 回退）
+  state.js          状态层纯逻辑：createState / setFlag / setVar / pushCheckpoint /
+                    upgradeSave（单测见 tests/state.test.mjs）
   parser.js         剧本解析（.txt/.md/.json/.docx/.zip）：台词、分支、舞台指示标签
   character-manager.js  角色 cid 分配与模型选择（仅剧本明写的模型/性别线索）
   builtin.js        内置剧本：《蝉鸣止于逢魔时》《青绿长卷·千里未归》
                     《月光下的未完奏鸣》各四章，《漩涡与深蓝：星月夜的回响》三章（双结局）
-  storage.js        localStorage：自定义剧本 mumu.scripts.v1 / 存档 mumu.saves.v1
+  storage.js        localStorage：自定义剧本 mumu.scripts.v1 / 存档 mumu.saves.v2
+                    （旧 mumu.saves.v1 只读，读取时自动迁移补齐）
   modals.js         剧本库（曲目 → 章节两级选择）/ 存档 / 导入 / 玩法说明弹窗
   audio.js          Web Audio 程序化轻音乐（可静音、切曲）
 tools/png-alpha.js  离线素材工具：白底/透明底人物 → 去底裁边 → *.cut.png（不勾边）；
@@ -155,7 +168,7 @@ tools/cdp-shoot.cjs 零依赖截图回归工具（headless Edge + CDP）：按 s
   五年前未完成的二重奏、相视一笑/各自沉浸两支分支，曲终后苏晚离开，林深独对最后一枚休止符。
 - 浏览器回归通过：四张曲目卡与十五章列表、青绿/漩涡/月光全部章节、各套分支与双结局、
   特写道具开合与延续、《星月夜》与镜像版本、《悲怆》乐谱原图、二十八张立绘双人/三人构图、
-  火夜与雨夜光影、陆家嘴昼/夜幕墙、保存 → 刷新 → 读档续演、旧存档（缺 `actState`）可读、
+  火夜与雨夜光影、陆家嘴昼/夜幕墙、保存 → 刷新 → 读档续演、旧存档（`mumu.saves.v1`）自动迁移可读、
   剧本库/导入/玩法弹窗、控制台无错误。
 
 ## 设计原则（修改时必须遵守）

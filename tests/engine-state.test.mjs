@@ -73,6 +73,39 @@ test('没有检查点时 rewind 返回 false', () => {
   assert.equal(h.engine.rewind(), false);
 });
 
+test('连续 rewind 可以逐级退回更早的选项', () => {
+  const twoChoice = {
+    ...SCRIPT,
+    nodes: [
+      { t: 'scene', scene: 'classroom', time: 'dusk', cam: 'mid' },
+      { t: 'say', who: '甲', text: '第一句' },
+      { t: 'choice', options: [{ text: '甲选', to: 'A' }] },
+      { t: 'say', who: '甲', text: '甲分支' },
+      { t: 'choice', options: [{ text: '乙选', to: 'B' }] },
+      { t: 'say', who: '甲', text: '乙分支' },
+      { t: 'end', ending: 'b' },
+      { t: 'say', who: '甲', text: '甲分支的另一种走向' },
+      { t: 'end', ending: 'a' },
+    ],
+    labels: { A: 3, B: 5 },
+  };
+  const h = makeHarness(twoChoice);
+  h.engine.start(twoChoice);
+  h.engine.advance();
+  h.engine.advance();          // 第一个选项
+  h.log.cb(0);                 // 选“甲选”
+  h.engine.advance();          // 打完“甲分支”
+  h.engine.advance();          // 第二个选项
+  assert.deepEqual(h.log.choices, ['乙选']);
+  assert.equal(h.engine.state.checkpoints.length, 2);
+
+  assert.equal(h.engine.rewind(), true);
+  assert.deepEqual(h.log.choices, ['甲选']);        // 退回上一个选项
+  assert.equal(h.engine.state.checkpoints.length, 0);
+
+  assert.equal(h.engine.rewind(), false);          // 已是最早的选项
+});
+
 test('start 带快照时一并恢复状态', () => {
   const h = makeHarness(SCRIPT);
   playToChoice(h);

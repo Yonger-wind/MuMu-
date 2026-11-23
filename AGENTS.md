@@ -16,6 +16,7 @@
 node serve.js        # → http://localhost:5173
 ```
 
+- 单元测试：仓库根目录执行 `node --test`（Node 内置测试运行器，零依赖）；用例在 `tests/*.test.mjs`。
 - 必须走 HTTP，且 `serve.js` 不发缓存头：改完代码一定强制刷新（ignoreCache / Ctrl+F5）。
 - 首次进入需点击一次遮罩（解锁音频），否则弹窗会被遮罩盖住。
 - 每次改动后先确认入口：首页「开始体验」应打开「选择剧本」，库中有四张曲目卡
@@ -90,7 +91,7 @@ node serve.js        # → http://localhost:5173
   以及《漩涡与深蓝：星月夜的回响》第一至三章（第三章为双结局终章）；
   删除内置剧本/人物前先确认这是产品决策。
 - 不得破坏：剧本解析、人物识别、对话播放、剧情分支、存档、角色稳定性（同一剧本同一 cid 外观不变）、分镜系统。
-- 存档兼容：`mumu.saves.v1` 中的旧存档（缺少 `actState` 等新字段）必须仍可读取，新字段一律给默认值。
+- 存档兼容：`mumu.saves.v2` 为当前写入键；`mumu.saves.v1` 的旧存档（缺少 `state`、`actState` 等新字段）必须仍可读取，新字段一律给默认值。
 - 修改解析器/引擎时保持向后兼容：旧剧本（无舞台指示、4 列角色行）必须按原有方式正常播放。
 
 ## 4. 修改速查表
@@ -110,7 +111,8 @@ node serve.js        # → http://localhost:5173
 | 内置剧本与演示 | `scripts/builtin.js` |
 | 弹窗（剧本库/存档/导入/玩法说明） | `scripts/modals.js` |
 | 首页视觉、按钮、模块装配 | `scripts/sunset.js`、`scripts/main.js`、`index.html` |
-| 存储键与读写 | `scripts/storage.js`（`mumu.scripts.v1`、`mumu.saves.v1`） |
+| 存储键与读写 | `scripts/storage.js`（`mumu.scripts.v1`、`mumu.saves.v2`；旧 `mumu.saves.v1` 只读迁移） |
+| 状态层（旗标/数值/结局标识/检查点） | `scripts/state.js`（纯逻辑单测在 `tests/state.test.mjs`） |
 
 ## 5. 交付前自检清单
 

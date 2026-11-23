@@ -4,7 +4,7 @@
    存档只保存：剧本 id、当前节点下标、场景/镜头状态、在场角色、历史选择
    ============================================================ */
 
-import { createState, cloneState, deserializeState, pushCheckpoint, popCheckpoint } from './state.js';
+import { createState, cloneState, deserializeState, pushCheckpoint } from './state.js';
 
 export function createEngine({ renderer, ui, onEnd, endOptions }) {
   let script = null;
@@ -21,6 +21,7 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
   let waitingChoice = false;
   let ended = false;
   let state = createState();        // 旗标 / 数值 / 结局标识 / 检查点
+  let skipCheckpoint = false;       // 回退到选项时跳过一次检查点登记
 
   function charOf(name) {
     return script.characters.find((c) => c.name === name);
@@ -163,16 +164,21 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
       }
       if (n.t === 'choice') {
         // 选项出现前先留一个检查点：玩家可以退回这里重选
-        pushCheckpoint(state, {
-          idx,
-          label: n.label || '',
-          choices: [...choices],
-          cast: [...cast],
-          sceneState: { ...sceneState },
-          actState: { poses: { ...actState.poses }, actions: { ...actState.actions }, view: actState.view },
-          flags: { ...state.flags },
-          vars: { ...state.vars },
-        });
+        if (skipCheckpoint) {
+          // 从回退回到这个选项时不再重复登记同一个检查点
+          skipCheckpoint = false;
+        } else {
+          pushCheckpoint(state, {
+            idx,
+            label: n.label || '',
+            choices: [...choices],
+            cast: [...cast],
+            sceneState: { ...sceneState },
+            actState: { poses: { ...actState.poses }, actions: { ...actState.actions }, view: actState.view },
+            flags: { ...state.flags },
+            vars: { ...state.vars },
+          });
+        }
         ui.setName('');
         ui.setText('你会怎么做？');
         ui.showHint(false);
@@ -217,6 +223,7 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
     idx = 0;
     actState = { poses: {}, actions: {}, view: 'normal' };
     state = snapshot && snapshot.state ? deserializeState(snapshot.state) : createState();
+    skipCheckpoint = false;
     lastSpeaker = '';
     lastProp = '';
     sceneState = { scene: sc.cover.scene, time: sc.cover.time, cam: 'mid' };
@@ -280,10 +287,18 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
     return v === undefined ? fallback : v;
   }
 
-  /** 退回上一个选项：位置、站位、旗标、数值一起回滚。 */
+  /**
+   * 退回上一个选项：位置、站位、旗标、数值一起回滚。
+   * 站在选项上时退到再前一个选项；已经走过选项时退回最后一个选项重新选。
+   */
   function rewind() {
-    const cp = popCheckpoint(state);
-    if (!cp) return false;
+    const list = state.checkpoints || [];
+    const t = waitingChoice ? list.length - 2 : list.length - 1;
+    if (t < 0) return false;
+    const cp = list[t];
+    // 目标检查点不再重复登记：回到该选项时由 skipCheckpoint 拦掉
+    state.checkpoints = list.slice(0, t);
+    skipCheckpoint = true;
     idx = cp.idx;
     cast = [...cp.cast];
     sceneState = { ...cp.sceneState };

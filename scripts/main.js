@@ -136,8 +136,9 @@ $('stage-back').addEventListener('click', () => leaveStage());
 $('stage-save').addEventListener('click', () => {
   const snap = engine.snapshot();
   if (!snap) return;
-  upsertSave({ ...snap, id: makeId('save'), time: Date.now() });
-  toast('进度已保存');
+  const res = upsertSave({ ...snap, id: makeId('save'), time: Date.now() });
+  if (res.ok) toast('进度已保存');
+  else toast(res.error || '进度保存失败');
 });
 
 /* ---------------- 首页按钮 ---------------- */
@@ -186,4 +187,4 @@ $('btn-how').addEventListener('click', openHow);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
 // 对外暴露，便于调试
-window.__mumu = { engine, audio, sunset, castManager, sceneRenderer };
+window.__mumu = { engine, audio, sunset, castManager, sceneRenderer, get state() { return engine.state; } };
