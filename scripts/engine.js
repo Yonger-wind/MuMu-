@@ -4,6 +4,8 @@
    存档只保存：剧本 id、当前节点下标、场景/镜头状态、在场角色、历史选择
    ============================================================ */
 
+import { createState, cloneState, deserializeState, pushCheckpoint, popCheckpoint } from './state.js';
+
 export function createEngine({ renderer, ui, onEnd, endOptions }) {
   let script = null;
   let idx = 0;
@@ -18,6 +20,7 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
   let waiting = false;           // 正在等待玩家点击
   let waitingChoice = false;
   let ended = false;
+  let state = createState();        // 旗标 / 数值 / 结局标识 / 检查点
 
   function charOf(name) {
     return script.characters.find((c) => c.name === name);
@@ -159,6 +162,17 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
         return;
       }
       if (n.t === 'choice') {
+        // 选项出现前先留一个检查点：玩家可以退回这里重选
+        pushCheckpoint(state, {
+          idx,
+          label: n.label || '',
+          choices: [...choices],
+          cast: [...cast],
+          sceneState: { ...sceneState },
+          actState: { poses: { ...actState.poses }, actions: { ...actState.actions }, view: actState.view },
+          flags: { ...state.flags },
+          vars: { ...state.vars },
+        });
         ui.setName('');
         ui.setText('你会怎么做？');
         ui.showHint(false);
@@ -173,6 +187,7 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
       }
       if (n.t === 'end') {
         ended = true;
+        if (n.ending) state.endingId = n.ending;
         ui.setName('');
         ui.setText('—— 故事暂时落幕 ——');
         ui.showHint(false);
@@ -201,6 +216,7 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
     cast = [];
     idx = 0;
     actState = { poses: {}, actions: {}, view: 'normal' };
+    state = snapshot && snapshot.state ? deserializeState(snapshot.state) : createState();
     lastSpeaker = '';
     lastProp = '';
     sceneState = { scene: sc.cover.scene, time: sc.cover.time, cam: 'mid' };
@@ -245,8 +261,52 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
       choices: [...choices],
       preview: lastSay ? lastSay.text.slice(0, 36) : '',
       progress: Math.round((safeIdx / Math.max(1, script.nodes.length - 1)) * 100),
+      state: cloneState(state),
     };
   }
 
-  return { start, advance, snapshot, get script() { return script; }, get ended() { return ended; } };
+  /* ---------- 状态层对外接口 ---------- */
+  function setFlag(key, value = true) {
+    if (key) state.flags[key] = value;
+    return state;
+  }
+  function getFlag(key) { return !!(state.flags && state.flags[key]); }
+  function setVar(key, value) {
+    if (key) state.vars[key] = value;
+    return state;
+  }
+  function getVar(key, fallback = 0) {
+    const v = state.vars ? state.vars[key] : undefined;
+    return v === undefined ? fallback : v;
+  }
+
+  /** 退回上一个选项：位置、站位、旗标、数值一起回滚。 */
+  function rewind() {
+    const cp = popCheckpoint(state);
+    if (!cp) return false;
+    idx = cp.idx;
+    cast = [...cp.cast];
+    sceneState = { ...cp.sceneState };
+    actState = {
+      poses: { ...(cp.actState.poses || {}) },
+      actions: { ...(cp.actState.actions || {}) },
+      view: cp.actState.view || 'normal',
+    };
+    state.flags = { ...cp.flags };
+    state.vars = { ...cp.vars };
+    state.endingId = '';
+    lastSpeaker = '';
+    lastProp = '';
+    ended = false;
+    syncRenderer();
+    run();
+    return true;
+  }
+
+  return {
+    start, advance, snapshot, rewind, setFlag, getFlag, setVar, getVar,
+    get script() { return script; },
+    get ended() { return ended; },
+    get state() { return state; },
+  };
 }
