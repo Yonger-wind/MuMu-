@@ -400,8 +400,12 @@ function finalize({ meta, characters, nodes, labels }, fileName) {
   if (!nodes.some((n) => n.t === 'say')) throw fail('没有读取到任何台词或旁白，请对照格式说明检查剧本。');
   if (!nodes.some((n) => n.t === 'scene')) {
     nodes.unshift({ t: 'scene', scene: 'classroom', time: 'dusk', cam: 'mid' });
+    // 前面补了场景节点，所有标签下标整体后移一位，否则标签会指错台词
+    for (const k of Object.keys(labels)) labels[k] += 1;
   } else if (nodes[0].t !== 'scene') {
     nodes.unshift({ t: 'scene', scene: nodes.find((n) => n.t === 'scene').scene, time: 'dusk', cam: 'mid' });
+    // 前面补了场景节点，所有标签下标整体后移一位，否则标签会指错台词
+    for (const k of Object.keys(labels)) labels[k] += 1;
   }
   for (const n of nodes) {
     const targets = n.t === 'jump' ? [n.to] : n.t === 'choice' ? n.options.map((o) => o.to) : [];
