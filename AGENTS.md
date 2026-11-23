@@ -112,7 +112,7 @@ node serve.js        # → http://localhost:5173
 | 弹窗（剧本库/存档/导入/玩法说明） | `scripts/modals.js` |
 | 首页视觉、按钮、模块装配 | `scripts/sunset.js`、`scripts/main.js`、`index.html` |
 | 存储键与读写 | `scripts/storage.js`（`mumu.scripts.v1`、`mumu.saves.v2`；旧 `mumu.saves.v1` 只读迁移） |
-| 状态层（旗标/数值/结局标识/检查点） | `scripts/state.js`（纯逻辑单测在 `tests/state.test.mjs`） |
+| 状态层（旗标/数值/结局标识/检查点） | `scripts/state.js`（纯逻辑单测在 `tests/state.test.mjs`）；引擎侧 `engine.state / setFlag / getFlag / setVar / getVar / rewind`（`rewind()` 逐级退回上一个选项，UI 入口属 P3-1） |
 
 ## 5. 交付前自检清单
 
