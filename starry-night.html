@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#07142d" />
+  <meta name="description" content="走进一幅会呼吸的星夜油画，在普鲁士蓝、暖金星光与连绵山丘之间，静看风缓缓流动。" />
+  <link rel="icon" href="data:," />
+  <title>星月夜 · The Starry Night</title>
+  <style>
+    :root {
+      --prussian-950: 225 67% 6%;
+      --prussian-900: 224 61% 10%;
+      --indigo-800: 227 52% 19%;
+      --ultramarine-700: 224 55% 30%;
+      --cobalt-500: 214 52% 48%;
+      --cobalt-300: 207 38% 65%;
+      --gold-500: 42 88% 57%;
+      --gold-300: 45 94% 73%;
+      --amber-500: 34 79% 51%;
+      --ivory-100: 46 58% 94%;
+      --forest-900: 190 40% 9%;
+      --sage-400: 158 17% 48%;
+      --text: hsl(var(--ivory-100));
+      --text-soft: hsl(var(--ivory-100) / 0.76);
+      --text-muted: hsl(var(--ivory-100) / 0.56);
+      --accent: hsl(var(--gold-300));
+      --line: hsl(var(--ivory-100) / 0.2);
+      --serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
+      --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      --z-scene: 0;
+      --z-ui: 10;
+      --z-pure: 20;
+      --z-dialog: 40;
+      --z-skip: 60;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; min-height: 100%; }
+    body {
+      overflow: hidden;
+      background: hsl(var(--prussian-950));
+      color: var(--text);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button { color: inherit; font: inherit; }
+    a { color: inherit; text-decoration: none; }
+    button:focus-visible, a:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 5px;
+    }
+    ::selection { background: hsl(var(--gold-300) / 0.24); }
+    .skip-link {
+      position: fixed; top: 1rem; left: 1rem; z-index: var(--z-skip);
+      padding: 0.75rem 1rem; transform: translateY(-180%);
+      border-radius: 6px; background: var(--text); color: hsl(var(--prussian-950));
+      transition: transform 180ms var(--ease);
+    }
+    .skip-link:focus { transform: translateY(0); }
+
+    .experience, .scene {
+      position: fixed; inset: 0; width: 100%; height: 100%; height: 100dvh;
+    }
+    .experience { isolation: isolate; overflow: hidden; }
+    .scene {
+      z-index: var(--z-scene);
+      background:
+        radial-gradient(ellipse at 55% 30%, hsl(var(--ultramarine-700) / 0.5), transparent 62%),
+        hsl(var(--prussian-950));
+    }
+    .night-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+    .scene-shade {
+      position: absolute; inset: 0; pointer-events: none;
+      background:
+        linear-gradient(90deg, hsl(var(--prussian-950) / 0.68), hsl(var(--prussian-950) / 0.2) 34%, transparent 62%),
+        linear-gradient(0deg, hsl(var(--prussian-950) / 0.7), transparent 32%, transparent 82%, hsl(var(--prussian-950) / 0.18));
+      transition: opacity 900ms var(--ease);
+    }
+    .is-pure .scene-shade { opacity: 0.12; }
+
+    [data-ui] { transition: opacity 650ms var(--ease), visibility 650ms, transform 650ms var(--ease); }
+    .is-pure [data-ui] { opacity: 0; visibility: hidden; pointer-events: none; }
+    .topbar {
+      position: absolute; z-index: var(--z-ui); top: 0; left: 0; right: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.7rem clamp(1.5rem, 3.8vw, 4.6rem);
+    }
+    .brand { display: inline-flex; align-items: center; gap: 0.75rem; }
+    .brand-symbol { width: 2.25rem; height: 2.25rem; color: var(--accent); }
+    .brand-name { display: block; font-family: var(--serif); font-size: 1.1rem; letter-spacing: 0.26em; }
+    .brand-subtitle { display: block; margin-top: 0.25rem; color: var(--text-muted); font-size: 0.46rem; letter-spacing: 0.32em; }
+    .nav { display: flex; align-items: center; gap: 0.55rem; }
+    .nav-button, .text-button {
+      position: relative; min-height: 2.55rem; padding: 0.65rem 1rem;
+      border: 0; border-radius: 999px; background: transparent;
+      color: var(--text-soft); cursor: pointer; font-size: 0.72rem; letter-spacing: 0.08em;
+      transition: color 220ms, background 220ms;
+    }
+    .nav-button:hover, .text-button:hover { color: var(--text); background: hsl(var(--ivory-100) / 0.07); }
+    .nav-button[aria-pressed="true"] { color: var(--accent); background: hsl(var(--gold-300) / 0.08); }
+    .nav-icon { width: 0.9rem; height: 0.9rem; margin-left: 0.35rem; vertical-align: -0.14rem; }
+
+    .hero {
+      position: absolute; z-index: var(--z-ui);
+      left: clamp(1.5rem, 8vw, 9rem); top: 47%; transform: translateY(-50%);
+      width: min(31rem, 42vw);
+    }
+    .hero-eyebrow { display: flex; align-items: center; gap: 0.75rem; color: var(--accent); font-size: 0.56rem; letter-spacing: 0.28em; }
+    .hero-eyebrow::before { content: ""; width: 2.3rem; height: 1px; background: hsl(var(--gold-300) / 0.58); }
+    .hero-title { margin-top: 1.35rem; font-family: var(--serif); font-weight: 400; text-wrap: balance; }
+    .title-chinese { display: block; font-size: clamp(4rem, 6.6vw, 6rem); line-height: 1.06; letter-spacing: 0.08em; text-shadow: 0 2px 12px hsl(var(--prussian-950) / 0.25); }
+    .title-english { display: block; margin-top: 0.8rem; color: var(--text-soft); font: italic 1.08rem Georgia, serif; letter-spacing: 0.1em; }
+    .hero-lead { margin-top: 1.7rem; color: var(--text-soft); font-family: var(--serif); font-size: 0.88rem; line-height: 2.05; letter-spacing: 0.08em; text-wrap: pretty; }
+    .hero-actions { display: flex; align-items: center; gap: 0.85rem; margin-top: 2rem; }
+    .primary-action, .secondary-action {
+      position: relative; min-height: 3rem; border-radius: 999px; cursor: pointer;
+      font-size: 0.76rem; letter-spacing: 0.1em;
+      transition: transform 240ms var(--ease), background 240ms;
+    }
+    .primary-action {
+      display: inline-flex; align-items: center; gap: 1.25rem; padding: 0.35rem 0.45rem 0.35rem 1.5rem;
+      border: 1px solid hsl(var(--gold-300) / 0.68);
+      background: linear-gradient(112deg, hsl(var(--gold-300)), hsl(var(--gold-500)) 62%, hsl(var(--amber-500)));
+      color: hsl(var(--prussian-950)); box-shadow: inset 0 2px 0 hsl(var(--ivory-100) / 0.34), 3px 4px 0 hsl(var(--prussian-950) / 0.25);
+    }
+    .primary-action::after {
+      content: ""; position: absolute; inset: 3px 5px auto; height: 35%;
+      border-radius: inherit; background: linear-gradient(100deg, hsl(var(--ivory-100) / 0.18), transparent);
+      pointer-events: none;
+    }
+    .primary-action:hover, .secondary-action:hover { transform: translateY(-2px); }
+    .action-arrow { display: grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: 50%; background: hsl(var(--prussian-950) / 0.1); }
+    .action-arrow svg { width: 1.05rem; height: 1.05rem; }
+    .secondary-action { padding: 0.75rem 1.35rem; border: 1px solid var(--line); background: hsl(var(--prussian-950) / 0.22); color: var(--text); }
+    .secondary-action:hover { background: hsl(var(--ivory-100) / 0.08); }
+    .hero-note { margin-top: 1.6rem; color: var(--text-muted); font-family: var(--serif); font-size: 0.63rem; letter-spacing: 0.12em; }
+
+    .scene-footer {
+      position: absolute; z-index: var(--z-ui); left: clamp(1.5rem, 3.8vw, 4.6rem); right: clamp(1.5rem, 3.8vw, 4.6rem); bottom: 1.7rem;
+      display: flex; align-items: center; justify-content: space-between;
+      color: var(--text-muted); font-size: 0.52rem; letter-spacing: 0.16em;
+    }
+    .motion-hint { display: flex; align-items: center; gap: 0.6rem; font-family: var(--serif); letter-spacing: 0.1em; }
+    .motion-hint::before { content: ""; width: 1.7rem; height: 1px; background: var(--line); }
+    .collection-link { display: inline-flex; align-items: center; gap: 0.4rem; transition: color 200ms; }
+    .collection-link:hover { color: var(--accent); }
+    .collection-link svg { width: 0.8rem; height: 0.8rem; }
+
+    .exit-pure {
+      position: absolute; z-index: var(--z-pure); right: 1.7rem; bottom: 1.7rem;
+      display: flex; align-items: center; gap: 0.65rem; padding: 0.65rem 0.85rem;
+      border: 1px solid var(--line); border-radius: 999px; background: hsl(var(--prussian-950) / 0.48);
+      color: var(--text-soft); cursor: pointer; opacity: 0.62; transition: opacity 200ms;
+    }
+    .exit-pure:hover { opacity: 1; }
+    .exit-pure[hidden] { display: none; }
+    .exit-pure svg { width: 0.95rem; height: 0.95rem; }
+    .exit-pure span { font-size: 0.68rem; letter-spacing: 0.08em; }
+    .exit-pure kbd { color: var(--text-muted); font: 0.5rem var(--sans); }
+
+    .archive-dialog {
+      position: fixed; inset: 0 0 0 auto; width: min(30rem, 100%); max-width: 100%; height: 100%; height: 100dvh; max-height: none;
+      margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0;
+      background: linear-gradient(155deg, hsl(var(--indigo-800)), hsl(var(--forest-900)));
+      color: var(--text); box-shadow: -4px 0 0 hsl(var(--prussian-950) / 0.24);
+    }
+    .archive-dialog[open] { animation: panel-in 450ms var(--ease) both; }
+    .archive-dialog::backdrop { background: hsl(var(--prussian-950) / 0.66); backdrop-filter: blur(4px); }
+    @keyframes panel-in { from { opacity: 0; transform: translateX(5%); } to { opacity: 1; transform: translateX(0); } }
+    .archive-frame { display: flex; flex-direction: column; height: 100%; }
+    .archive-header { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem 2rem; border-bottom: 1px solid var(--line); color: var(--text-muted); font-size: 0.55rem; letter-spacing: 0.22em; }
+    .archive-close { display: grid; place-items: center; width: 2.3rem; height: 2.3rem; border: 1px solid var(--line); border-radius: 50%; background: transparent; cursor: pointer; }
+    .archive-close:hover { background: hsl(var(--ivory-100) / 0.08); }
+    .archive-close svg { width: 1rem; height: 1rem; }
+    .archive-content { flex: 1; padding: 2.6rem 2.2rem; overflow-y: auto; }
+    .archive-overline { color: var(--accent); font-size: 0.6rem; letter-spacing: 0.18em; }
+    .archive-content h2 { margin-top: 1.1rem; font-family: var(--serif); font-size: 2.8rem; font-weight: 400; letter-spacing: 0.12em; text-wrap: balance; }
+    .archive-english { margin-top: 0.35rem; color: var(--text-soft); font: italic 1.05rem Georgia, serif; }
+    .archive-rule { width: 100%; height: 1px; margin: 2rem 0; background: linear-gradient(90deg, hsl(var(--gold-300) / 0.45), transparent); }
+    .archive-description { color: var(--text-soft); font-family: var(--serif); font-size: 0.88rem; line-height: 2.05; text-wrap: pretty; }
+    .archive-facts { margin-top: 1.8rem; border-top: 1px solid var(--line); }
+    .archive-facts > div { display: grid; grid-template-columns: 4.5rem 1fr; padding: 0.85rem 0; border-bottom: 1px solid var(--line); font-size: 0.74rem; line-height: 1.6; }
+    .archive-facts dt { color: var(--text-muted); }
+    .archive-facts dd { color: var(--text-soft); }
+    .curatorial-note { margin-top: 1.8rem; padding: 1.1rem; border: 1px solid hsl(var(--gold-300) / 0.2); border-radius: 8px; background: hsl(var(--gold-300) / 0.035); }
+    .curatorial-note h3 { color: var(--accent); font-family: var(--serif); font-size: 0.84rem; font-weight: 400; }
+    .curatorial-note p { margin-top: 0.6rem; color: var(--text-soft); font-family: var(--serif); font-size: 0.8rem; line-height: 1.9; }
+    .archive-link { display: inline-flex; align-items: center; gap: 0.6rem; margin-top: 1.8rem; padding-bottom: 0.3rem; border-bottom: 1px solid hsl(var(--gold-300) / 0.4); color: var(--accent); font-size: 0.72rem; }
+    .archive-link svg { width: 0.95rem; height: 0.95rem; }
+    .archive-footer { display: flex; justify-content: space-between; padding: 1.2rem 2rem; border-top: 1px solid var(--line); color: var(--text-muted); font-size: 0.5rem; letter-spacing: 0.18em; }
+
+    @media (max-width: 900px) {
+      .hero { left: 6vw; width: min(28rem, 56vw); }
+      .brand-subtitle { display: none; }
+    }
+    @media (max-width: 700px) {
+      .topbar { padding: 1.1rem 1.25rem; }
+      .brand-symbol { width: 2rem; height: 2rem; }
+      .brand-name { font-size: 1rem; }
+      .nav { gap: 0.1rem; }
+      .nav-button { min-height: 2.3rem; padding: 0.5rem 0.7rem; font-size: 0.66rem; }
+      #nav-pure { display: none; }
+      .hero { left: 1.5rem; right: 1.5rem; top: auto; bottom: 5.6rem; width: auto; transform: none; }
+      .hero-eyebrow { font-size: 0.5rem; }
+      .hero-title { margin-top: 1rem; }
+      .title-chinese { font-size: clamp(3.7rem, 18vw, 5rem); }
+      .title-english { margin-top: 0.5rem; font-size: 1rem; }
+      .hero-lead { margin-top: 1rem; font-size: 0.8rem; }
+      .hero-actions { margin-top: 1.3rem; }
+      .primary-action, .secondary-action { min-height: 2.85rem; }
+      .hero-note, .motion-hint { display: none; }
+      .scene-shade { background: linear-gradient(0deg, hsl(var(--prussian-950) / 0.9), hsl(var(--prussian-950) / 0.18) 58%, transparent 82%); }
+      .scene-footer { left: 1.5rem; right: 1.5rem; bottom: 1.25rem; justify-content: flex-end; }
+      .art-medium { display: none; }
+      .exit-pure { right: 1.2rem; bottom: 1.2rem; }
+      .archive-content { padding: 2rem 1.6rem; }
+      .archive-header { padding: 1.2rem 1.4rem; }
+    }
+    @media (max-height: 700px) and (min-width: 701px) {
+      .hero { top: 49%; }
+      .title-chinese { font-size: 4rem; }
+      .hero-lead { margin-top: 1rem; }
+      .hero-actions { margin-top: 1.2rem; }
+      .hero-note { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#experience">跳至画境</a>
+  <main class="experience" id="experience" aria-labelledby="page-title">
+    <div class="scene" aria-hidden="true">
+      <canvas class="night-canvas" id="night-canvas"></canvas>
+      <div class="scene-shade"></div>
+    </div>
+
+    <header class="topbar" data-ui>
+      <a class="brand" href="./starry-night.html" aria-label="星月夜首页">
+        <svg class="brand-symbol" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <circle cx="20" cy="20" r="18.5" stroke="currentColor" stroke-opacity="0.28" />
+          <path d="M25.8 9.5a12.4 12.4 0 1 0 4.7 20.3A13.8 13.8 0 0 1 25.8 9.5Z" fill="currentColor" />
+          <circle cx="11.5" cy="11.5" r="1.2" fill="currentColor" />
+        </svg>
+        <span><span class="brand-name">星月夜</span><span class="brand-subtitle">STARRY NIGHT</span></span>
+      </a>
+      <nav class="nav" aria-label="画境控制">
+        <button class="nav-button" id="atmosphere-toggle" type="button" aria-pressed="false">梦境旋涡</button>
+        <button class="nav-button" id="nav-archive" type="button" aria-haspopup="dialog">作品档案</button>
+        <button class="nav-button" id="nav-pure" type="button">纯净观赏<svg class="nav-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 2H2v4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-linecap="round" /></svg></button>
+      </nav>
+    </header>
+
+    <section class="hero" data-ui aria-label="星月夜作品导览">
+      <div class="hero-eyebrow">VINCENT VAN GOGH · 1889</div>
+      <h1 class="hero-title" id="page-title"><span class="title-chinese">星月夜</span><span class="title-english">The Starry Night</span></h1>
+      <p class="hero-lead">当夜空开始流动，<br />让思绪随星光，坠入一场蓝色的梦。</p>
+      <div class="hero-actions">
+        <button class="primary-action" id="enter-pure" type="button"><span>走进星夜</span><span class="action-arrow"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11M11 6l4 4-4 4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" /></svg></span></button>
+        <button class="secondary-action" id="open-archive" type="button" aria-haspopup="dialog">作品档案</button>
+      </div>
+      <p class="hero-note">在缓慢的笔触间，静看夜的回响</p>
+    </section>
+
+    <footer class="scene-footer" data-ui>
+      <span class="art-medium">OIL ON CANVAS · 73.7 × 92.1 CM</span>
+      <span class="motion-hint">移动光标，感受夜的微风</span>
+      <a class="collection-link" href="https://www.moma.org/collection/works/79802" target="_blank" rel="noopener noreferrer">MoMA COLLECTION<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 11 11 5M5 5h6v6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" /></svg></a>
+    </footer>
+
+    <button class="exit-pure" id="exit-pure" type="button" hidden>
+      <svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M6 2H2v4M12 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-linecap="round" /></svg>
+      <span>退出纯净模式</span><kbd>ESC</kbd>
+    </button>
+  </main>
+
+  <dialog class="archive-dialog" id="archive-dialog" aria-labelledby="archive-title">
+    <article class="archive-frame">
+      <header class="archive-header"><span>WORK ARCHIVE · 001</span><button class="archive-close" id="close-archive" type="button" aria-label="关闭作品档案"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-linecap="round" /></svg></button></header>
+      <div class="archive-content">
+        <p class="archive-overline">文森特·梵高 · 1889</p>
+        <h2 id="archive-title">星月夜</h2>
+        <p class="archive-english">The Starry Night</p>
+        <div class="archive-rule"></div>
+        <p class="archive-description">1889 年 6 月，梵高在法国圣雷米创作了这幅作品。翻涌的夜空、明亮的星月与沉静的村庄，在富有节奏感的笔触中相遇。</p>
+        <dl class="archive-facts">
+          <div><dt>媒介</dt><dd>布面油画</dd></div>
+          <div><dt>尺寸</dt><dd>73.7 × 92.1 厘米</dd></div>
+          <div><dt>创作地</dt><dd>法国 · 圣雷米</dd></div>
+          <div><dt>收藏</dt><dd>纽约现代艺术博物馆</dd></div>
+        </dl>
+        <section class="curatorial-note" aria-labelledby="note-title"><h3 id="note-title">画境手记</h3><p>旋涡并非装饰，而是整幅画的呼吸。让目光顺着笔触缓慢移动，星空便有了时间。</p></section>
+        <a class="archive-link" href="https://www.moma.org/collection/works/79802" target="_blank" rel="noopener noreferrer">前往 MoMA 查看馆藏<svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M4 9h10M10 5l4 4-4 4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" /></svg></a>
+      </div>
+      <footer class="archive-footer"><span>THE STARRY NIGHT</span><span>SAINT-RÉMY · 1889</span></footer>
+    </article>
+  </dialog>
+
+  <script>
+    const TAU = Math.PI * 2;
+
+    function createSeededRandom(seed) {
+      let state = seed >>> 0;
+      return () => {
+        state = (state + 0x6D2B79F5) >>> 0;
+        let value = state;
+        value = Math.imul(value ^ (value >>> 15), value | 1);
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function breathingValue(time, phase, frequency) {
+      return 0.68 + 0.32 * (0.5 + 0.5 * Math.sin(time * frequency * TAU + phase));
+    }
+
+    function brushWidthAt(t, start, end, width) {
+      if (t <= 0.5) return width * (start + (1 - start) * t * 2);
+      return width * (1 - (1 - end) * (t - 0.5) * 2);
+    }
+
+    function createBrushSpec(random, minLength, maxLength) {
+      return {
+        length: minLength + random() * (maxLength - minLength),
+        width: 2.4 + random() * 6.8,
+        opacity: 0.12 + random() * 0.5,
+        start: 0.06 + random() * 0.28,
+        end: 0.18 + random() * 0.55,
+        bend: (random() - 0.5) * 16,
+        highlight: 0.08 + random() * 0.22,
+      };
+    }
+
+    function qualityLevelFor(frameAverage, currentLevel) {
+      if (frameAverage > 20) return Math.min(2, currentLevel + 1);
+      if (frameAverage < 14) return Math.max(0, currentLevel - 1);
+      return currentLevel;
+    }
+
+    function spiralPhase(radiusRatio, arm, armCount, turns = 1.45) {
+      return arm * TAU / armCount + radiusRatio * TAU * turns;
+    }
+
+    function flowPosition(particle, time, centers, width, height, out = {}) {
+      if (particle.type === 'spiral') {
+        const center = centers[particle.center];
+        const angle = particle.angle + time * particle.speed;
+        const pulseAngle = time * 0.18 + particle.phase;
+        const radius = particle.radius + Math.sin(pulseAngle) * particle.pulse;
+        const radiusVelocity = Math.cos(pulseAngle) * particle.pulse * 0.18;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const verticalDrift = Math.sin(time * 0.13 + particle.phase) * 3;
+        out.x = center.x + cos * radius;
+        out.y = center.y + sin * radius * particle.flatten + verticalDrift;
+        const dx = -sin * radius * particle.speed + cos * radiusVelocity;
+        const dy = (cos * radius * particle.speed + sin * radiusVelocity) * particle.flatten + Math.cos(time * 0.13 + particle.phase) * 0.39;
+        out.angle = Math.atan2(dy, dx);
+        return out;
+      }
+      const span = width + 240;
+      const x = ((particle.baseX + time * particle.speed) % span + span) % span - 120;
+      const primary = x * particle.frequency + particle.phase + time * 0.16;
+      const secondary = x * particle.frequency * 0.43 - time * 0.09 + particle.phase;
+      out.x = x;
+      out.y = particle.baseY + Math.sin(primary) * particle.amplitude + Math.sin(secondary) * particle.amplitude * 0.35;
+      const slope = Math.cos(primary) * particle.amplitude * particle.frequency + Math.cos(secondary) * particle.amplitude * 0.35 * particle.frequency * 0.43;
+      out.angle = Math.atan2(slope, 1);
+      return out;
+    }
+
+    function colorWithAlpha(hex, alpha) {
+      const value = Number.parseInt(hex.slice(1), 16);
+      return `rgba(${value >> 16},${value >> 8 & 255},${value & 255},${alpha})`;
+    }
+
+    function createSurface(width, height, ratio = 1) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(width * ratio));
+      canvas.height = Math.max(1, Math.round(height * ratio));
+      const context = canvas.getContext('2d', { alpha: true });
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      return { canvas, context, width, height, ratio };
+    }
+
+    function traceTaperedBrush(context, spec) {
+      const steps = 18;
+      context.beginPath();
+      for (let index = 0; index <= steps; index += 1) {
+        const t = index / steps;
+        const x = t * spec.length;
+        const y = Math.sin(t * Math.PI) * spec.bend;
+        const half = brushWidthAt(t, spec.start, spec.end, spec.width) * 0.5;
+        if (index === 0) context.moveTo(x, y - half);
+        else context.lineTo(x, y - half);
+      }
+      for (let index = steps; index >= 0; index -= 1) {
+        const t = index / steps;
+        const x = t * spec.length;
+        const y = Math.sin(t * Math.PI) * spec.bend;
+        const half = brushWidthAt(t, spec.start, spec.end, spec.width) * 0.5;
+        context.lineTo(x, y + half);
+      }
+      context.closePath();
+    }
+
+    function createBrushSprite(spec, color) {
+      const pad = 9;
+      const logicalWidth = spec.length + pad * 2;
+      const logicalHeight = spec.width * 2.2 + Math.abs(spec.bend) + pad * 2;
+      const surface = createSurface(logicalWidth, logicalHeight, 1.25);
+      const context = surface.context;
+      context.translate(pad, logicalHeight * 0.5);
+      const under = { ...spec, width: spec.width * 1.35, bend: spec.bend * 1.04 };
+      traceTaperedBrush(context, under);
+      context.fillStyle = colorWithAlpha('#071a38', 0.34);
+      context.fill();
+      const gradient = context.createLinearGradient(0, 0, spec.length, 0);
+      gradient.addColorStop(0, colorWithAlpha(color, 0.22));
+      gradient.addColorStop(0.16, colorWithAlpha(color, 0.78));
+      gradient.addColorStop(0.58, colorWithAlpha(color, 1));
+      gradient.addColorStop(0.9, colorWithAlpha(color, 0.66));
+      gradient.addColorStop(1, colorWithAlpha(color, 0.08));
+      traceTaperedBrush(context, spec);
+      context.fillStyle = gradient;
+      context.fill();
+      const highlight = { ...spec, width: Math.max(0.7, spec.width * 0.18), length: spec.length * 0.82, bend: spec.bend * 0.82 - 0.7 };
+      context.translate(spec.length * 0.07, -spec.width * 0.18);
+      traceTaperedBrush(context, highlight);
+      context.fillStyle = colorWithAlpha('#e5e3bd', spec.highlight);
+      context.fill();
+      return { canvas: surface.canvas, width: logicalWidth, height: logicalHeight };
+    }
+
+    function createGlowSprite(kind) {
+      const surface = createSurface(256, 256);
+      const context = surface.context;
+      const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
+      if (kind === 'window') {
+        gradient.addColorStop(0, 'rgba(255,232,154,0.96)');
+        gradient.addColorStop(0.12, 'rgba(246,188,75,0.62)');
+        gradient.addColorStop(0.42, 'rgba(224,139,46,0.16)');
+        gradient.addColorStop(1, 'rgba(224,139,46,0)');
+      } else if (kind === 'moon') {
+        gradient.addColorStop(0, 'rgba(255,239,164,0.72)');
+        gradient.addColorStop(0.18, 'rgba(247,201,87,0.44)');
+        gradient.addColorStop(0.48, 'rgba(222,178,79,0.14)');
+        gradient.addColorStop(0.78, 'rgba(129,151,120,0.035)');
+        gradient.addColorStop(1, 'rgba(80,113,150,0)');
+      } else {
+        gradient.addColorStop(0, 'rgba(255,253,224,1)');
+        gradient.addColorStop(0.055, 'rgba(255,239,151,0.98)');
+        gradient.addColorStop(0.14, 'rgba(247,198,72,0.76)');
+        gradient.addColorStop(0.3, 'rgba(232,164,53,0.34)');
+        gradient.addColorStop(0.56, 'rgba(182,158,78,0.085)');
+        gradient.addColorStop(0.82, 'rgba(95,131,156,0.018)');
+        gradient.addColorStop(1, 'rgba(72,105,148,0)');
+      }
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 256, 256);
+      return surface.canvas;
+    }
+
+    function createMoonSprite(radius) {
+      const size = radius * 2.7;
+      const surface = createSurface(size, size, 1.5);
+      const context = surface.context;
+      const x = size * 0.5;
+      const y = size * 0.5;
+      const gradient = context.createLinearGradient(x - radius, y - radius, x + radius, y + radius);
+      gradient.addColorStop(0, '#fff3af');
+      gradient.addColorStop(0.42, '#f7ce57');
+      gradient.addColorStop(1, '#d98b2e');
+      context.fillStyle = gradient;
+      context.shadowColor = 'rgba(247,196,75,0.48)';
+      context.shadowBlur = radius * 0.36;
+      context.beginPath();
+      context.arc(x, y, radius, 0, TAU);
+      context.fill();
+      context.shadowBlur = 0;
+      context.globalCompositeOperation = 'destination-out';
+      context.beginPath();
+      context.arc(x - radius * 0.4, y - radius * 0.13, radius * 0.88, 0, TAU);
+      context.fill();
+      context.globalCompositeOperation = 'source-over';
+      return { canvas: surface.canvas, size };
+    }
+
+    function createNightRenderer(canvas) {
+      const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
+      const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const finePointer = window.matchMedia('(pointer: fine)');
+      const pointer = { x: 0, y: 0, targetX: 0, targetY: 0 };
+      const centers = [];
+      const flows = [];
+      const stars = [];
+      const windows = [];
+      const state = {
+        width: 0, height: 0, dpr: 1, quality: 0, atmosphere: 'breeze',
+        flowTime: 0, lightTime: 0, lastFrame: 0, raf: 0, running: false,
+        visible: !document.hidden, reduced: motionQuery.matches,
+        averageFrameMs: 16.67, samples: 0, sampleTotal: 0, warmup: 0,
+      };
+      let skyBase;
+      let landBase;
+      let moon;
+      let linenPattern;
+      let resizeTimer;
+      const starGlow = createGlowSprite('star');
+      const moonGlow = createGlowSprite('moon');
+      const windowGlow = createGlowSprite('window');
+      const paintPalette = ['#315d96', '#4778a8', '#688fa9', '#8fa797', '#b5b78d', '#24477e', '#637f9d', '#d0c99b'];
+      const random = createSeededRandom(1889);
+      const rand = (min, max) => min + random() * (max - min);
+
+      function hillY(x, base, amplitude, phase) {
+        const ratio = x / state.width;
+        return base - Math.sin(ratio * Math.PI + phase) * amplitude - Math.sin(ratio * TAU * 1.7 + phase) * amplitude * 0.18;
+      }
+
+      function traceHill(context, base, amplitude, phase) {
+        context.beginPath();
+        context.moveTo(0, state.height);
+        context.lineTo(0, hillY(0, base, amplitude, phase));
+        for (let x = 0; x <= state.width + 24; x += 24) context.lineTo(x, hillY(x, base, amplitude, phase));
+        context.lineTo(state.width, state.height);
+        context.closePath();
+      }
+
+      function paintStaticBrush(context, x, y, angle, spec, color, alphaScale = 1) {
+        context.save();
+        context.translate(x, y);
+        context.rotate(angle);
+        context.translate(-spec.length * 0.5, 0);
+        traceTaperedBrush(context, spec);
+        context.fillStyle = colorWithAlpha(color, spec.opacity * alphaScale);
+        context.fill();
+        context.restore();
+      }
+
+      function buildSky() {
+        const surface = createSurface(state.width, state.height, state.dpr);
+        const sky = surface.context;
+        const base = sky.createLinearGradient(0, 0, state.width * 0.2, state.height);
+        base.addColorStop(0, '#06132d');
+        base.addColorStop(0.28, '#10265a');
+        base.addColorStop(0.57, '#1d467c');
+        base.addColorStop(0.78, '#365f7c');
+        base.addColorStop(1, '#142e49');
+        sky.fillStyle = base;
+        sky.fillRect(0, 0, state.width, state.height);
+
+        const glaze = sky.createRadialGradient(state.width * 0.55, state.height * 0.32, 0, state.width * 0.55, state.height * 0.32, state.width * 0.52);
+        glaze.addColorStop(0, 'rgba(74,112,160,0.3)');
+        glaze.addColorStop(0.5, 'rgba(41,74,133,0.12)');
+        glaze.addColorStop(1, 'rgba(8,24,57,0)');
+        sky.fillStyle = glaze;
+        sky.fillRect(0, 0, state.width, state.height);
+
+        for (let index = 0; index < 38; index += 1) {
+          const y = rand(-state.height * 0.05, state.height * 0.7);
+          const lift = rand(-state.height * 0.12, state.height * 0.12);
+          sky.beginPath();
+          sky.moveTo(-120, y);
+          sky.bezierCurveTo(state.width * 0.24, y + lift, state.width * 0.64, y - lift * 0.7, state.width + 120, y + lift * 0.3);
+          sky.strokeStyle = colorWithAlpha(paintPalette[index % paintPalette.length], rand(0.025, 0.075));
+          sky.lineWidth = rand(18, 76);
+          sky.lineCap = 'round';
+          sky.stroke();
+        }
+
+        centers.forEach((center, centerIndex) => {
+          const maxRadius = centerIndex === 0 ? Math.min(state.width * 0.27, state.height * 0.36) : Math.min(state.width * 0.17, state.height * 0.22);
+          for (let arm = 0; arm < 5; arm += 1) {
+            for (let layer = 0; layer < 2; layer += 1) {
+              sky.beginPath();
+              for (let step = 0; step <= 76; step += 1) {
+                const t = step / 76;
+                const angle = t * TAU * (1.45 + centerIndex * 0.25) + arm * TAU / 5 + centerIndex;
+                const radius = maxRadius * (0.06 + t * 0.94);
+                const x = center.x + Math.cos(angle) * radius;
+                const y = center.y + Math.sin(angle) * radius * center.flatten;
+                if (step === 0) sky.moveTo(x, y);
+                else sky.lineTo(x, y);
+              }
+              sky.strokeStyle = layer === 0 ? 'rgba(75,119,157,0.09)' : 'rgba(174,180,137,0.075)';
+              sky.lineWidth = layer === 0 ? maxRadius * 0.12 : maxRadius * 0.035;
+              sky.lineCap = 'round';
+              sky.lineJoin = 'round';
+              sky.stroke();
+            }
+          }
+        });
+
+        const strokePalette = ['#386a9b', '#5686a7', '#79a0ad', '#a9b394', '#c7bf88'];
+        for (let index = 0; index < 560; index += 1) {
+          const spec = createBrushSpec(random, 18, 88);
+          spec.width = rand(4, 14);
+          spec.opacity = rand(0.06, 0.22);
+          spec.bend = spec.length * rand(-0.075, 0.075);
+          let x;
+          let y;
+          let angle;
+          if (index % 4 !== 0) {
+            const centerIndex = Math.floor(index / 5) % 6 === 0 ? 1 : 0;
+            const center = centers[centerIndex];
+            const arm = index % 5;
+            const ratio = rand(0.08, 1);
+            const maxRadius = centerIndex === 0 ? Math.min(state.width * 0.27, state.height * 0.36) : Math.min(state.width * 0.17, state.height * 0.22);
+            const phase = spiralPhase(ratio, arm, 5, 1.45 + centerIndex * 0.25) + centerIndex;
+            const radius = maxRadius * ratio + rand(-5, 5);
+            x = center.x + Math.cos(phase) * radius;
+            y = center.y + Math.sin(phase) * radius * center.flatten;
+            angle = Math.atan2(Math.cos(phase) * center.flatten, -Math.sin(phase)) + rand(-0.09, 0.09);
+            paintStaticBrush(sky, x, y, angle, spec, strokePalette[(arm + centerIndex) % strokePalette.length]);
+          } else {
+            const lane = index % 4;
+            const phase = lane * 1.35;
+            const frequency = 0.0065 + lane * 0.0007;
+            x = rand(-40, state.width + 40);
+            y = state.height * (0.47 + lane * 0.055) + Math.sin(x * frequency + phase) * (15 + lane * 4) + rand(-9, 9);
+            angle = Math.atan(Math.cos(x * frequency + phase) * (15 + lane * 4) * frequency) + rand(-0.08, 0.08);
+            paintStaticBrush(sky, x, y, angle, spec, strokePalette[(lane + 1) % strokePalette.length]);
+          }
+        }
+        skyBase = surface.canvas;
+      }
+
+      function drawHill(context, base, amplitude, phase, topColor, bottomColor) {
+        traceHill(context, base, amplitude, phase);
+        const gradient = context.createLinearGradient(0, base - amplitude, 0, state.height);
+        gradient.addColorStop(0, topColor);
+        gradient.addColorStop(1, bottomColor);
+        context.fillStyle = gradient;
+        context.fill();
+        for (let index = 0; index < 90; index += 1) {
+          const x = rand(0, state.width);
+          const y = hillY(x, base, amplitude, phase) + rand(2, 24);
+          const spec = createBrushSpec(random, 30, 120);
+          spec.width = rand(2, 7);
+          spec.opacity = rand(0.035, 0.12);
+          paintStaticBrush(context, x, y, rand(-0.14, 0.12), spec, index % 2 ? '#608176' : '#274f58');
+        }
+      }
+
+      function buildVillage(context) {
+        windows.length = 0;
+        const scale = Math.max(0.65, Math.min(1.2, state.width / 1350));
+        const houseColors = ['#102a3a', '#142f3c', '#193744', '#0d2636'];
+        for (let index = 0; index < 30; index += 1) {
+          const x = state.width * 0.19 + index / 30 * state.width * 0.8 + rand(-9, 9);
+          const houseWidth = rand(17, 39) * scale;
+          const houseHeight = rand(14, 34) * scale;
+          const y = state.height * rand(0.85, 0.95);
+          context.fillStyle = houseColors[index % houseColors.length];
+          context.fillRect(x, y - houseHeight, houseWidth, houseHeight);
+          context.beginPath();
+          context.moveTo(x - 3, y - houseHeight);
+          context.lineTo(x + houseWidth * rand(0.4, 0.6), y - houseHeight - houseWidth * rand(0.3, 0.48));
+          context.lineTo(x + houseWidth + 3, y - houseHeight);
+          context.closePath();
+          context.fillStyle = index % 2 ? '#0a2131' : '#122c39';
+          context.fill();
+          if (index % 3 !== 0) {
+            const wx = x + houseWidth * rand(0.28, 0.65);
+            const wy = y - houseHeight * rand(0.48, 0.7);
+            const size = rand(2.2, 3.8) * scale;
+            context.fillStyle = 'rgba(229,180,83,0.68)';
+            context.fillRect(wx, wy, size, size * 1.35);
+            windows.push({ x: wx + size * 0.5, y: wy + size * 0.65, size, phase: rand(0, TAU), frequency: rand(0.045, 0.095) });
+          }
+        }
+        const churchX = state.width * 0.61;
+        const churchY = state.height * 0.93;
+        const churchHeight = state.height * 0.15;
+        context.fillStyle = '#0a2232';
+        context.fillRect(churchX - 13 * scale, churchY - churchHeight * 0.42, 26 * scale, churchHeight * 0.42);
+        context.beginPath();
+        context.moveTo(churchX - 18 * scale, churchY - churchHeight * 0.42);
+        context.lineTo(churchX, churchY - churchHeight * 0.66);
+        context.lineTo(churchX + 18 * scale, churchY - churchHeight * 0.42);
+        context.closePath();
+        context.fill();
+        context.beginPath();
+        context.moveTo(churchX - 4.5 * scale, churchY - churchHeight * 0.61);
+        context.lineTo(churchX, churchY - churchHeight);
+        context.lineTo(churchX + 4.5 * scale, churchY - churchHeight * 0.61);
+        context.closePath();
+        context.fill();
+      }
+
+      function buildLand() {
+        const surface = createSurface(state.width, state.height, state.dpr);
+        const land = surface.context;
+        drawHill(land, state.height * 0.76, state.height * 0.105, 0.25, '#315761', '#173745');
+        drawHill(land, state.height * 0.84, state.height * 0.08, 1.9, '#1b414b', '#0d2938');
+        buildVillage(land);
+        drawHill(land, state.height * 0.96, state.height * 0.035, 3.1, '#0c2733', '#061725');
+        const haze = land.createLinearGradient(0, state.height * 0.74, 0, state.height);
+        haze.addColorStop(0, 'rgba(105,133,125,0.06)');
+        haze.addColorStop(0.45, 'rgba(19,46,59,0)');
+        haze.addColorStop(1, 'rgba(3,15,27,0.32)');
+        land.fillStyle = haze;
+        land.fillRect(0, state.height * 0.7, state.width, state.height * 0.3);
+        landBase = surface.canvas;
+      }
+
+      function buildFlows() {
+        flows.length = 0;
+        const compact = state.width < 700;
+        const count = compact ? 92 : Math.min(190, Math.max(140, Math.floor(state.width * state.height / 7800)));
+        const flowPalette = ['#4c7fa5', '#6e99ad', '#92aca8', '#b8b991', '#d0c58b'];
+        for (let index = 0; index < count; index += 1) {
+          const spiral = index % 4 !== 0;
+          const spec = createBrushSpec(random, compact ? 16 : 20, compact ? 56 : 76);
+          spec.width = rand(3.8, compact ? 6.8 : 11);
+          spec.opacity = rand(0.1, 0.29);
+          spec.bend = spec.length * rand(-0.085, 0.085);
+          spec.highlight = rand(0.035, 0.12);
+          let particle;
+          let colorIndex = index % flowPalette.length;
+          if (spiral) {
+            const arm = index % 5;
+            const centerIndex = Math.floor(index / 5) % 6 === 0 ? 1 : 0;
+            const center = centers[centerIndex];
+            const maxRadius = centerIndex === 0 ? Math.min(state.width * 0.27, state.height * 0.36) : Math.min(state.width * 0.17, state.height * 0.22);
+            const ratio = rand(0.1, 1);
+            particle = {
+              type: 'spiral', center: centerIndex,
+              radius: maxRadius * ratio,
+              angle: spiralPhase(ratio, arm, 5, 1.45 + centerIndex * 0.25) + centerIndex + rand(-0.045, 0.045),
+              speed: (centerIndex === 0 ? 0.022 : -0.018) * rand(0.98, 1.02),
+              flatten: center.flatten, phase: rand(0, TAU), pulse: rand(1.5, 6),
+            };
+            colorIndex = (arm + centerIndex) % flowPalette.length;
+          } else {
+            const lane = index % 4;
+            const phase = lane * 1.35;
+            particle = {
+              type: 'wave', baseX: rand(0, state.width),
+              baseY: state.height * (0.47 + lane * 0.055) + rand(-10, 10),
+              speed: rand(6, 11), amplitude: 15 + lane * 4,
+              frequency: 0.0065 + lane * 0.0007, phase,
+            };
+            colorIndex = (lane + 1) % flowPalette.length;
+          }
+          particle.spec = spec;
+          particle.sprite = createBrushSprite(spec, flowPalette[colorIndex]);
+          particle.position = {};
+          flows.push(particle);
+        }
+      }
+
+      function buildCelestials() {
+        stars.length = 0;
+        const positions = [
+          [0.105, 0.055], [0.23, 0.04], [0.35, 0.052], [0.43, 0.075],
+          [0.62, 0.1], [0.165, 0.19], [0.72, 0.24], [0.33, 0.34],
+          [0.055, 0.45], [0.14, 0.49], [0.36, 0.55],
+        ];
+        positions.forEach((position, index) => {
+          stars.push({
+            x: position[0] * state.width, y: position[1] * state.height,
+            radius: Math.max(6, Math.min(state.width, state.height) * (index % 3 === 0 ? 0.017 : 0.013)),
+            phase: index * 1.73 + 0.4, frequency: 0.055 + (index % 5) * 0.012,
+          });
+        });
+        moon = {
+          x: state.width * 0.9, y: state.height * 0.16,
+          radius: Math.max(24, Math.min(state.width, state.height) * 0.052),
+          phase: 1.2, sprite: null,
+        };
+        moon.sprite = createMoonSprite(moon.radius);
+      }
+
+      function buildLinen() {
+        const surface = createSurface(96, 96);
+        const linen = surface.context;
+        const rng = createSeededRandom(73);
+        for (let index = 0; index < 96; index += 3) {
+          linen.fillStyle = `rgba(239,230,193,${0.025 + rng() * 0.035})`;
+          linen.fillRect(index, 0, 0.55, 96);
+          linen.fillStyle = `rgba(3,15,32,${0.035 + rng() * 0.05})`;
+          linen.fillRect(0, index, 96, 0.55);
+        }
+        for (let index = 0; index < 260; index += 1) {
+          linen.fillStyle = rng() > 0.5 ? 'rgba(255,244,207,0.055)' : 'rgba(2,13,28,0.06)';
+          linen.fillRect(rng() * 96, rng() * 96, 0.7 + rng(), 0.5 + rng() * 0.7);
+        }
+        linenPattern = context.createPattern(surface.canvas, 'repeat');
+      }
+
+      function buildScene() {
+        centers.length = 0;
+        centers.push(
+          { x: state.width * (state.width < 700 ? 0.52 : 0.53), y: state.height * (state.width < 700 ? 0.27 : 0.31), flatten: 0.68 },
+          { x: state.width * 0.73, y: state.height * 0.47, flatten: 0.61 },
+        );
+        buildSky();
+        buildLand();
+        buildFlows();
+        buildCelestials();
+        buildLinen();
+      }
+
+      function drawFlows(offsetX, offsetY) {
+        const activeCount = Math.floor(flows.length * [1, 0.72, 0.46][state.quality]);
+        const opacityScale = state.atmosphere === 'dream' ? 1 : 0.74;
+        context.globalCompositeOperation = 'screen';
+        for (let index = 0; index < activeCount; index += 1) {
+          const particle = flows[index];
+          const position = flowPosition(particle, state.flowTime, centers, state.width, state.height, particle.position);
+          const sprite = particle.sprite;
+          context.save();
+          context.translate(position.x + offsetX, position.y + offsetY);
+          context.rotate(position.angle);
+          context.globalAlpha = particle.spec.opacity * opacityScale;
+          context.drawImage(sprite.canvas, -sprite.width * 0.5, -sprite.height * 0.5, sprite.width, sprite.height);
+          context.restore();
+        }
+        context.globalCompositeOperation = 'source-over';
+        context.globalAlpha = 1;
+      }
+
+      function drawCelestials(offsetX, offsetY) {
+        context.globalCompositeOperation = 'screen';
+        stars.forEach(star => {
+          const breath = breathingValue(state.lightTime, star.phase, star.frequency);
+          const size = star.radius * (7.2 + breath * 0.65);
+          context.globalAlpha = breath * 0.92;
+          context.drawImage(starGlow, star.x + offsetX - size * 0.5, star.y + offsetY - size * 0.5, size, size);
+        });
+        const moonBreath = breathingValue(state.lightTime, moon.phase, 0.045);
+        const glowSize = moon.radius * (6.4 + moonBreath * 0.5);
+        context.globalAlpha = moonBreath * 0.78;
+        context.drawImage(moonGlow, moon.x + offsetX - glowSize * 0.5, moon.y + offsetY - glowSize * 0.5, glowSize, glowSize);
+        context.globalAlpha = 0.94 + moonBreath * 0.06;
+        const spriteSize = moon.sprite.size;
+        context.drawImage(moon.sprite.canvas, moon.x + offsetX - spriteSize * 0.5, moon.y + offsetY - spriteSize * 0.5, spriteSize, spriteSize);
+        context.globalCompositeOperation = 'source-over';
+        context.globalAlpha = 1;
+      }
+
+      function drawWindows(offsetX, offsetY) {
+        context.globalCompositeOperation = 'screen';
+        windows.forEach(windowLight => {
+          const breath = breathingValue(state.lightTime, windowLight.phase, windowLight.frequency);
+          const size = windowLight.size * 7;
+          context.globalAlpha = 0.16 + breath * 0.32;
+          context.drawImage(windowGlow, windowLight.x + offsetX - size * 0.5, windowLight.y + offsetY - size * 0.5, size, size);
+          context.globalAlpha = 0.36 + breath * 0.44;
+          context.fillStyle = '#f5cf78';
+          context.fillRect(windowLight.x + offsetX - windowLight.size * 0.5, windowLight.y + offsetY - windowLight.size * 0.65, windowLight.size, windowLight.size * 1.3);
+        });
+        context.globalCompositeOperation = 'source-over';
+        context.globalAlpha = 1;
+      }
+
+      function draw() {
+        if (!skyBase || !landBase) return;
+        pointer.x += (pointer.targetX - pointer.x) * 0.025;
+        pointer.y += (pointer.targetY - pointer.y) * 0.025;
+        const skyX = state.reduced ? 0 : pointer.x * 4;
+        const skyY = state.reduced ? 0 : pointer.y * 2.5;
+        const landX = state.reduced ? 0 : pointer.x * 0.7;
+        const landY = state.reduced ? 0 : pointer.y * 0.35;
+        context.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+        context.globalCompositeOperation = 'source-over';
+        context.globalAlpha = 1;
+        context.drawImage(skyBase, -7 + skyX, -7 + skyY, state.width + 14, state.height + 14);
+        drawFlows(skyX * 1.3, skyY * 1.3);
+        drawCelestials(skyX * 1.5, skyY * 1.5);
+        context.drawImage(landBase, -4 + landX, -4 + landY, state.width + 8, state.height + 8);
+        drawWindows(landX, landY);
+        if (linenPattern) {
+          context.globalCompositeOperation = 'soft-light';
+          context.globalAlpha = 0.22;
+          context.fillStyle = linenPattern;
+          context.fillRect(0, 0, state.width, state.height);
+          context.globalCompositeOperation = 'source-over';
+          context.globalAlpha = 1;
+        }
+      }
+
+      function resize() {
+        state.width = Math.max(1, canvas.clientWidth);
+        state.height = Math.max(1, canvas.clientHeight);
+        state.dpr = Math.min(window.devicePixelRatio || 1, state.width < 700 ? 1.2 : 1.45);
+        canvas.width = Math.round(state.width * state.dpr);
+        canvas.height = Math.round(state.height * state.dpr);
+        buildScene();
+        draw();
+      }
+
+      function loop(timestamp) {
+        if (!state.running || !state.visible) return;
+        const rawMs = state.lastFrame ? timestamp - state.lastFrame : 16.67;
+        const delta = Math.min(0.05, Math.max(0.001, rawMs / 1000));
+        state.lastFrame = timestamp;
+        if (!state.reduced) {
+          state.flowTime += delta * (state.atmosphere === 'dream' ? 1.25 : 0.52);
+          state.lightTime += delta;
+        }
+        draw();
+        if (state.warmup < 45) state.warmup += 1;
+        else if (rawMs > 0 && rawMs < 100) {
+          state.sampleTotal += rawMs;
+          state.samples += 1;
+          if (state.samples >= 120) {
+            state.averageFrameMs = state.sampleTotal / state.samples;
+            state.quality = qualityLevelFor(state.averageFrameMs, state.quality);
+            state.samples = 0;
+            state.sampleTotal = 0;
+          }
+        }
+        state.raf = requestAnimationFrame(loop);
+      }
+
+      function start() {
+        if (state.running || state.reduced || !state.visible) return;
+        state.running = true;
+        state.lastFrame = 0;
+        state.raf = requestAnimationFrame(loop);
+      }
+
+      function stop() {
+        state.running = false;
+        cancelAnimationFrame(state.raf);
+      }
+
+      function onResize() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(resize, 160);
+      }
+
+      window.addEventListener('resize', onResize);
+      window.addEventListener('pointermove', event => {
+        if (!finePointer.matches || state.reduced) return;
+        pointer.targetX = (event.clientX / state.width - 0.5) * 2;
+        pointer.targetY = (event.clientY / state.height - 0.5) * 2;
+      }, { passive: true });
+      document.documentElement.addEventListener('pointerleave', () => { pointer.targetX = 0; pointer.targetY = 0; });
+      document.addEventListener('visibilitychange', () => {
+        state.visible = !document.hidden;
+        if (state.visible) start();
+        else stop();
+      });
+      motionQuery.addEventListener('change', event => {
+        state.reduced = event.matches;
+        if (state.reduced) { stop(); draw(); }
+        else start();
+      });
+
+      resize();
+      start();
+      return {
+        setAtmosphere(mode) { state.atmosphere = mode === 'dream' ? 'dream' : 'breeze'; },
+        getPerformance() {
+          return {
+            averageFrameMs: state.averageFrameMs,
+            fps: 1000 / state.averageFrameMs,
+            quality: state.quality,
+            activeFlows: Math.floor(flows.length * [1, 0.72, 0.46][state.quality]),
+            dpr: state.dpr,
+            samples: state.samples,
+          };
+        },
+        redraw: draw,
+      };
+    }
+
+    function setupInterface(renderer) {
+      const dialog = document.getElementById('archive-dialog');
+      const pureButton = document.getElementById('enter-pure');
+      const exitButton = document.getElementById('exit-pure');
+      const atmosphereButton = document.getElementById('atmosphere-toggle');
+      let pure = false;
+      let dream = false;
+
+      function setPure(next) {
+        pure = next;
+        document.body.classList.toggle('is-pure', next);
+        exitButton.hidden = !next;
+        document.querySelectorAll('[data-ui]').forEach(element => { element.inert = next; });
+        if (next) exitButton.focus({ preventScroll: true });
+        else pureButton.focus({ preventScroll: true });
+      }
+
+      function openArchive() {
+        if (pure) setPure(false);
+        if (!dialog.open) dialog.showModal();
+      }
+
+      pureButton.addEventListener('click', () => setPure(true));
+      document.getElementById('nav-pure').addEventListener('click', () => setPure(true));
+      exitButton.addEventListener('click', () => setPure(false));
+      document.getElementById('open-archive').addEventListener('click', openArchive);
+      document.getElementById('nav-archive').addEventListener('click', openArchive);
+      document.getElementById('close-archive').addEventListener('click', () => dialog.close());
+      atmosphereButton.addEventListener('click', () => {
+        dream = !dream;
+        atmosphereButton.setAttribute('aria-pressed', String(dream));
+        atmosphereButton.textContent = dream ? '宁静微风' : '梦境旋涡';
+        renderer.setAtmosphere(dream ? 'dream' : 'breeze');
+      });
+      dialog.addEventListener('click', event => {
+        if (event.target !== dialog) return;
+        const bounds = dialog.getBoundingClientRect();
+        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
+      });
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && pure && !dialog.open) setPure(false);
+      });
+    }
+
+    function boot() {
+      const renderer = createNightRenderer(document.getElementById('night-canvas'));
+      setupInterface(renderer);
+      window.__starryNight = renderer;
+    }
+
+    if (typeof document !== 'undefined') boot();
+  </script>
+</body>
+</html>

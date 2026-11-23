@@ -14,12 +14,36 @@ export const SCENES = {
   company:   { label: '公司',   aliases: ['公司', '办公室', '写字楼', 'company', 'office'] },
   classroom: { label: '教室',   aliases: ['教室', '学校', '课堂', '教学楼', 'classroom', 'school'] },
   playground:{ label: '操场',   aliases: ['操场', '球场', '跑道', 'playground', 'field'] },
-  ancient:   { label: '古建筑', aliases: ['古建筑', '古建', '庭院', '宫', '寺', '古塔', '长廊', 'ancient', 'temple'] },
+  palace:    { label: '宫苑',   aliases: ['宫苑', '皇城', '皇宫', '宫殿', '宫门', '画院', 'palace'] },
+  pavilion:  { label: '丹青阁', aliases: ['丹青阁', '画阁', '画室', '藏书阁', '内室', '密室', '阁楼', 'pavilion'] },
+  ancient:   { label: '古建筑', aliases: ['古建筑', '古建', '庭院', '宫', '寺', '神社', '古塔', '长廊', 'ancient', 'temple', 'shrine'] },
+  salon:     { label: '沙龙',   aliases: ['沙龙', '铸造厂', '展厅', '预展', '画廊', 'salon', 'gallery'] },
+  study:     { label: '书房',   aliases: ['书房', '办公室', 'study'] },
+  street:    { label: '巴黎街', aliases: ['街道', '街角', '报亭', '塞纳河', '河岸', '巴黎街', 'street'] },
+  estate:    { label: '庄园',   aliases: ['庄园', '普罗旺斯庄园', '酒庄', '庭院', 'estate', 'manor'] },
+  drawingroom:{ label: '起居室', aliases: ['起居室', '客厅', '会客厅', '门厅', 'drawingroom', 'parlor'] },
+  basement:  { label: '地下室', aliases: ['地下室', '酒窖', '地窖', '档案库', 'basement', 'cellar'] },
+  villa:     { label: '悬崖别墅', aliases: ['别墅', '海岬', '悬崖别墅', '尼斯别墅', 'villa'] },
+  vault:     { label: '画库',   aliases: ['画库', '恒温画库', '收藏库', '金库', 'vault'] },
+  studio:    { label: '修复室', aliases: ['修复室', '工作间', '顶楼修复室', 'studio'] },
+  terrace:   { label: '露台',   aliases: ['露台', '石砌露台', '阳台', 'terrace'] },
+  campus:    { label: '校园',   aliases: ['校园', '林荫道', '文科楼', '老文科楼', '走廊', '校道', 'campus'] },
+  pianoroom: { label: '旧琴房', aliases: ['琴房', '旧琴房', '老琴房', '排练室', '排练房', 'pianoroom'] },
+  musicroom: { label: '音乐社', aliases: ['音乐社', '活动室', '社团活动室', '音乐社活动室', 'musicroom'] },
+  belltower: { label: '钟楼',   aliases: ['钟楼', '古钟楼', '旧钟楼', '后山钟楼', 'belltower'] },
+  theateryard:{ label: '剧院前庭', aliases: ['剧院前庭', '剧院侧院', '剧院庭院', '老剧院外', '剧院外', 'theateryard'] },
+  theater:   { label: '老剧院', aliases: ['剧院', '老剧院', '剧场', '剧院主厅', 'theater'] },
+  office:    { label: '写字楼', aliases: ['办公区', '会议室', '事务所', '高层办公区', '写字楼二十八层', 'office'] },
+  bar:       { label: '清吧',   aliases: ['清吧', '酒吧', '居酒屋', '酒馆', 'bar'] },
+  city:      { label: '陆家嘴', aliases: ['陆家嘴', '外滩', '江畔', '金融区', '城市', 'city'] },
+  lawn:      { label: '草坪',   aliases: ['草坪', '草地', '草地音乐会', '草坪舞台', '舞台', 'lawn'] },
+  track:     { label: '田径场', aliases: ['田径场', '塑胶跑道', '夜间操场', '大学操场', '夜跑操场', 'track'] },
 };
 export const TIMES = {
   dusk:  { label: '黄昏', aliases: ['黄昏', '傍晚', '夕阳', 'dusk', 'sunset'] },
   day:   { label: '白天', aliases: ['白天', '清晨', '正午', '午后', 'day', 'morning'] },
   night: { label: '夜晚', aliases: ['夜晚', '夜', '深夜', 'night'] },
+  fire:  { label: '火夜', aliases: ['火夜', '火光', '战火', '劫火', 'fire'] },
 };
 export const CAMS = {
   wide:  { label: '远景', aliases: ['远景', '全景', 'wide'] },
@@ -52,13 +76,70 @@ export const VIEWS = {
   back:   { label: '背影', aliases: ['背影', '背面', 'back'] },
 };
 
+/* 内置立绘模型：对应 assets/models 下的半身剪影 */
+export const MODELS = {
+  'painter':            { label: '画师少年', aliases: ['画师少年', '画师', '青衫画师', 'painter'] },
+  'colorist':           { label: '调色少女', aliases: ['调色少女', '研色少女', '盲眼少女', 'colorist'] },
+  'pageboy':            { label: '小厮男童', aliases: ['小厮男童', '小厮', '侍童', 'pageboy'] },
+  'maidgirl':           { label: '侍女女童', aliases: ['侍女女童', '侍女', '丫鬟', 'maidgirl'] },
+  'official':           { label: '官袍长者', aliases: ['官袍长者', '官袍', '朝臣', 'official'] },
+  'dowager':            { label: '凤袍太后', aliases: ['凤袍太后', '凤袍', '太后', 'dowager'] },
+  'teen-girl-2':        { label: '少女（2）', aliases: ['少女（2）', '少女(2)', '少女2', 'teen-girl-2'] },
+  'teen-girl':          { label: '少女',     aliases: ['少女', '女高中生', '女学生', '女孩', 'teen-girl'] },
+  'teen-boy':           { label: '少年',     aliases: ['少年', '男高中生', '男学生', '男孩', 'teen-boy'] },
+  'girl-child':         { label: '女儿童',   aliases: ['女儿童', '小女孩', '女童', '幼女', 'girl-child'] },
+  'boy-child':          { label: '男儿童',   aliases: ['男儿童', '小男孩', '男童', '幼童', 'boy-child'] },
+  'middle-age-woman':   { label: '中年女人', aliases: ['中年女人', '中年女性', '母亲', '妈妈', '阿姨', 'middle-age-woman'] },
+  'middle-age-man':     { label: '中年男人', aliases: ['中年男人', '中年男性', '父亲', '爸爸', '叔叔', 'middle-age-man'] },
+  'lucas':     { label: '卢卡斯·范·登·伯格', aliases: ['卢卡斯·范·登·伯格', '卢卡斯', 'lucas'] },
+  'claire':    { label: '克莱尔·温莎', aliases: ['克莱尔·温莎', '克莱尔', 'claire'] },
+  'marguerite':{ label: '玛格丽特·德拉图尔', aliases: ['玛格丽特·德拉图尔', '玛格丽特', 'marguerite'] },
+  'henri':     { label: '亨利·莫罗', aliases: ['亨利·莫罗', '亨利', 'henri'] },
+  'julian':    { label: '朱利安·勒克莱尔', aliases: ['朱利安·勒克莱尔', '朱利安', 'julian'] },
+  'sofia':     { label: '索菲娅·科瓦列夫斯卡娅', aliases: ['索菲娅·科瓦列夫斯卡娅', '索菲娅', 'sofia'] },
+  'etienne':   { label: '艾蒂安·巴尔贝', aliases: ['艾蒂安·巴尔贝', '艾蒂安', 'etienne'] },
+  'elena':     { label: '埃莱娜·罗西', aliases: ['埃莱娜·罗西', '埃莱娜', 'elena'] },
+  'linshen':   { label: '林深', aliases: ['林深', 'linshen'] },
+  'suwan':     { label: '苏晚', aliases: ['苏晚', 'suwan'] },
+  'guyan':     { label: '顾言', aliases: ['顾言', 'guyan'] },
+  'xiaqing':   { label: '夏晴', aliases: ['夏晴', 'xiaqing'] },
+  'chenmo':    { label: '陈默', aliases: ['陈默', 'chenmo'] },
+  'zhoumubai': { label: '周慕白', aliases: ['周慕白', '慕白', 'zhoumubai'] },
+  'yezhiqiu':  { label: '叶知秋', aliases: ['叶知秋', '知秋', 'yezhiqiu'] },
+};
+const MODEL_ORDER = ['middle-age-woman', 'middle-age-man', 'girl-child', 'boy-child', 'teen-girl-2', 'teen-girl', 'teen-boy',
+  'painter', 'colorist', 'pageboy', 'maidgirl', 'official', 'dowager',
+  'lucas', 'claire', 'marguerite', 'henri', 'julian', 'sofia', 'etienne', 'elena',
+  'linshen', 'suwan', 'guyan', 'xiaqing', 'chenmo', 'zhoumubai', 'yezhiqiu'];
+export function matchModel(word) {
+  const t = String(word || '').trim().toLowerCase();
+  if (!t) return '';
+  for (const key of MODEL_ORDER) {
+    if (MODELS[key].aliases.some((a) => a.toLowerCase() === t)) return key;
+  }
+  for (const key of MODEL_ORDER) {
+    if (MODELS[key].aliases.some((a) => t.includes(a.toLowerCase()))) return key;
+  }
+  return '';
+}
+
 function matchKey(table, text, fallback) {
   const t = (text || '').trim().toLowerCase();
   if (!t) return fallback;
-  for (const [key, def] of Object.entries(table)) {
-    if (def.aliases.some((a) => t.includes(a.toLowerCase()))) return key;
+  const entries = Object.entries(table);
+  // 先精确命中，再取最长别名，避免「火夜」被「夜」抢先识别成夜晚
+  for (const [key, def] of entries) {
+    if (def.aliases.some((a) => t === a.toLowerCase())) return key;
   }
-  return fallback;
+  let best = null;
+  let bestLen = 0;
+  for (const [key, def] of entries) {
+    for (const a of def.aliases) {
+      const al = a.toLowerCase();
+      if (al.length > bestLen && t.includes(al)) { best = key; bestLen = al.length; }
+    }
+  }
+  return best || fallback;
 }
 
 /** 舞台指示可带目标角色：【姿态：林夏|难过】；缺省或 * 表示全场 */
@@ -86,7 +167,7 @@ function pickColor(word) {
  * 没写就留空，由 CharacterManager 自动、稳定地分配；
  * 不根据姓名/性别推断长相，也不默认交替性别。
  */
-function makeChar(name, gender, hair, cloth) {
+function makeChar(name, gender, hair, cloth, model) {
   const gRaw = (gender || '').trim().toLowerCase();
   const genderTag = /^(女|女生|女性|female|f|girl)$/.test(gRaw) ? 'f'
     : /^(男|男生|男性|male|m|boy)$/.test(gRaw) ? 'm'
@@ -99,6 +180,7 @@ function makeChar(name, gender, hair, cloth) {
     gender: genderTag,
     hairHint,
     clothColor,
+    model: matchModel(model),
     // 兼容旧存档/旧剧本里的字段；仅作为“已明确写下”的线索
     hair: hairHint,
     cloth: clothColor || '',
@@ -131,7 +213,6 @@ function compileText(text, fileName) {
   const characters = new Map();
   const nodes = [];
   const labels = {};
-  let charIdx = 0;
   let pendingChoices = null;
   let inCharBlock = false;
 
@@ -142,7 +223,7 @@ function compileText(text, fileName) {
 
   const ensureChar = (name) => {
     if (!characters.has(name)) {
-      characters.set(name, makeChar(name, '', '', '', charIdx++));
+      characters.set(name, makeChar(name));
     }
   };
 
@@ -158,10 +239,10 @@ function compileText(text, fileName) {
     if ((m = line.match(/^(?:#\s*)?作者[:：]\s*(.+)$/))) { meta.author = m[1].trim(); inCharBlock = false; continue; }
     if (/^(?:#\s*)?角色[:：]?\s*$/.test(line)) { inCharBlock = true; continue; }
 
-    // 角色定义：名字 | 性别 | 发型 | 衣色
+    // 角色定义：名字 | 性别 | 发型 | 衣色 | 模型（第五列可省略）
     if (inCharBlock && line.includes('|') && !line.startsWith('【')) {
       const parts = line.split('|').map((s) => s.trim());
-      if (parts[0]) characters.set(parts[0], makeChar(parts[0], parts[1], parts[2], parts[3], charIdx++));
+      if (parts[0]) characters.set(parts[0], makeChar(parts[0], parts[1], parts[2], parts[3], parts[4]));
       continue;
     }
     if (inCharBlock && !line.includes('|')) inCharBlock = false;
@@ -171,7 +252,10 @@ function compileText(text, fileName) {
       flushChoices();
       const parts = m[1].split(/[|｜,，\s]+/).filter(Boolean);
       const scene = matchKey(SCENES, parts[0], null);
-      if (!scene) throw fail(`第 ${i + 1} 行：未识别的场景“${parts[0]}”。可用场景：公司 / 教室 / 操场 / 古建筑。`);
+      if (!scene) {
+        const names = Object.values(SCENES).map((s) => s.label).join(' / ');
+        throw fail(`第 ${i + 1} 行：未识别的场景“${parts[0]}”。可用场景：${names}。`);
+      }
       const time = matchKey(TIMES, parts[1], 'dusk');
       const cam = matchKey(CAMS, parts[2], 'mid');
       nodes.push({ t: 'scene', scene, time, cam });
@@ -198,7 +282,16 @@ function compileText(text, fileName) {
       nodes.push({ t: 'view', view: matchKey(VIEWS, m[1], 'normal') });
       continue;
     }
-    // 结束
+    // 出场：【出场：小悠真|小葵】让指定角色先站上舞台（不发言），
+    // 用于“人物先入画、随后旁白描述”的镜头；只接受角色表里已声明的名字。
+    if ((m = line.match(/^【\s*(?:出场|登场)[:：]\s*(.+?)\s*】$/))) {
+      flushChoices();
+      const names = m[1].split(/[|｜、,，]/).map((s) => s.trim()).filter(Boolean);
+      nodes.push({ t: 'enter', names });
+      continue;
+    }
+    // 结束 / 清场
+    if (/^【\s*(?:清场|空场|无人)\s*】$/.test(line)) { flushChoices(); nodes.push({ t: 'clear' }); continue; }
     if (/^【\s*(结束|完)\s*】$/.test(line)) { flushChoices(); nodes.push({ t: 'end' }); continue; }
     // 标签 [xxx]
     if ((m = line.match(/^\[([^\]]+)\]$/))) {
@@ -220,8 +313,11 @@ function compileText(text, fileName) {
     }
 
     // 台词 名字：内容（名字不超过 8 个字，避免把普通句子里的冒号误判）
-    // 行内情绪：名字（开心）：内容 —— 只影响这一句的身体语言
-    if ((m = line.match(/^([^\s:：【】\[\]>]{1,8})[（(]([^)）]{1,6})[)）][:：]\s*(.+)$/))) {
+    // 行内情绪 / 括号描述：名字（开心）：内容 —— 只影响这一句的身体语言
+    // 括号内允许较长描写（如“看着天色，眉头微蹙”），但仅当名字已声明时才生效，
+    // 避免把普通叙述误判成台词；未声明名字仍沿用 6 字以内的旧规则。
+    if ((m = line.match(/^([^\s:：【】\[\]>]{1,8})[（(]([^)）]{1,40})[)）][:：]\s*(.+)$/))
+      && (m[1] === '旁白' || characters.has(m[1]) || m[2].trim().length <= 6)) {
       const poseKey = matchKey(POSES, m[2], null);
       if (poseKey) {
         flushChoices();
@@ -229,6 +325,24 @@ function compileText(text, fileName) {
         else { ensureChar(m[1]); nodes.push({ t: 'say', who: m[1], text: m[3].trim(), pose: poseKey }); }
         continue;
       }
+      // 画外音：名字（录音）/（画外）/（电话）…… 只显示名字，不让人物出场
+      // 允许括号里带语气前缀，如（温柔的声音，画外音）——只取末尾的画外音类型显示
+      const voiceTag = m[2].trim().match(/^(?:[^，,、]*[，,、]\s*)?(录音中|录音|画外音|画外|电话|广播|回忆|心声)$/);
+      if (voiceTag) {
+        flushChoices();
+        const who = m[1] === '旁白' ? '' : m[1];
+        if (who) ensureChar(who);
+        nodes.push({ t: 'say', who, text: m[3].trim(), voice: voiceTag[1] });
+        continue;
+      }
+      // 其他括号（轻声 / 无奈 / 迟疑……）只当作语气备注，不生成假角色
+      flushChoices();
+      {
+        const who = m[1] === '旁白' ? '' : m[1];
+        if (who) ensureChar(who);
+        nodes.push({ t: 'say', who, text: m[3].trim(), note: m[2].trim() });
+      }
+      continue;
     }
     if ((m = line.match(/^([^\s:：【】\[\]>]{1,8})[:：]\s*(.+)$/))) {
       flushChoices();
@@ -256,7 +370,7 @@ function compileJSON(str, fileName) {
   let obj;
   try { obj = JSON.parse(str); } catch (e) { throw fail('JSON 格式有误：' + e.message); }
   const meta = { title: obj.title || '', summary: obj.summary || '', author: obj.author || '' };
-  const characters = (obj.characters || []).map((c, i) => makeChar(c.name, c.gender, c.hair, c.cloth || c.color, i));
+  const characters = (obj.characters || []).map((c) => makeChar(c.name, c.gender, c.hair, c.cloth || c.color, c.model));
   const nodes = [];
   const labels = {};
   for (const n of obj.nodes || []) {
@@ -273,7 +387,7 @@ function compileJSON(str, fileName) {
   }
   for (const n of nodes) {
     if (n.t === 'say' && n.who && !characters.find((c) => c.name === n.who)) {
-      characters.push(makeChar(n.who, '', '', '', characters.length));
+      characters.push(makeChar(n.who));
     }
   }
   return finalize({ meta, characters, nodes, labels }, fileName);
@@ -410,39 +524,38 @@ async function docxToText(buf) {
 }
 
 /* ---------------- 站内展示用的格式说明与示例 ---------------- */
-export const FORMAT_EXAMPLE = `标题：雨后的操场
-简介：一次迟到的告别，发生在放学后的操场。
+export const FORMAT_EXAMPLE = `标题：蝉鸣止于逢魔时（示例）
+简介：放学后的教室，一段没来得及听完的录音。
 角色：
-林夏 | 女 | 长发 | 红
-陈默 | 男 | 短发 | 蓝
+夏目悠真 | 男 | 短发 | 藏青 | 少年
+小葵 | 女 | 双马尾 | 橙 | 少女
+小悠真 | 男 | 短发 | 灰 | 男儿童
 
-【场景：操场 | 黄昏 | 远景】
-【动作：陈默|行走】
-旁白：放学后的操场空了，只剩风吹过跑道。
-【动作：陈默|站立】
-【镜头：中景】
-林夏：你还是来了。
-陈默：我答应过你的。
-林夏（难过）：明天的火车，我已经买好票了。
-【视角：背影】
-旁白：远处的广播忽然响起放学的铃声，又很快静了下去。
-【视角：常规】
-> 递给她一瓶水 -> water
-> 沉默地站在一旁 -> silent
+【场景：教室 | 黄昏 | 远景】
+夕阳把课桌的影子拉得很长，风从半开的窗户钻进来，翻动没人收拾的练习册。
+蝉声在窗外连成一片，像谁把夏天按下了循环播放。
 
-[water]
+【场景：教室 | 黄昏 | 中景】
+夏目悠真：……谁把录音带落在这儿了？
+小葵：悠真哥，你终于来了！
+小葵（录音）：如果明天还能见面，我想把这首歌听完。
+
 【镜头：特写】
-陈默：习惯了。从你第一次忘带水杯开始。
+夏目悠真：磁带上贴着一张便签，字迹被汗水晕开了一点。
+
 【镜头：中景】
-林夏（开心）：谢谢……你总是这么细心。
+> 追问小葵录音的事 -> ask
+> 假装没注意，把磁带放进口袋 -> keep
+
+[ask]
+小葵（难过）：那不是我录的……
 -> ending
 
-[silent]
-【姿态：陈默|难过】
-林夏：你还是什么都不说。
+[keep]
+【清场】
+【场景：操场 | 夜晚 | 远景】
+操场的灯一盏一盏亮起来，蝉鸣却忽然停了。
 -> ending
 
 [ending]
-【场景：操场 | 夜晚 | 远景】
-旁白：夕阳沉下去，故事也停在了这一刻。
 【结束】`;

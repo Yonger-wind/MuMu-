@@ -6,6 +6,7 @@ import { createAudio } from './audio.js';
 import { createSceneRenderer } from './scene.js';
 import { createEngine } from './engine.js';
 import { createCharacterManager } from './character-manager.js';
+import { preloadPortraits } from './portraits.js';
 import { loadBuiltinScripts } from './builtin.js';
 import { loadCustomScripts, addCustomScript, removeCustomScript, loadSaves, upsertSave, removeSave, makeId } from './storage.js';
 import { openLibrary, openSaves, openImport, openHow, closeModal } from './modals.js';
@@ -17,10 +18,21 @@ const audio = createAudio();
 const sunset = createSunset($('sunset'));
 const sceneRenderer = createSceneRenderer($('scene'));
 const castManager = createCharacterManager();
+preloadPortraits();
 const builtins = castManager.decorateAll(loadBuiltinScripts());
 
 const allScripts = () => castManager.decorateAll([...builtins, ...loadCustomScripts()]);
 const findScript = (id) => allScripts().find((s) => s.id === id);
+
+/** 同一曲目里，当前章节的下一章；末章或独立剧本返回 null。 */
+function nextChapterOf(sc) {
+  if (!sc || !sc.series) return null;
+  const chapters = allScripts()
+    .filter((s) => s.series === sc.series && s.chapterNo != null)
+    .sort((a, b) => (a.chapterNo || 0) - (b.chapterNo || 0));
+  const at = chapters.findIndex((s) => s.id === sc.id);
+  return at >= 0 ? chapters[at + 1] || null : null;
+}
 
 let toastTimer = null;
 function toast(text) {
@@ -92,6 +104,13 @@ const engine = createEngine({
     },
   },
   onEnd: () => leaveStage(),
+  endOptions: (sc) => {
+    const options = [];
+    const next = nextChapterOf(sc);
+    if (next) options.push({ label: '继续下一章', run: () => play(next) });
+    options.push({ label: '换一个剧本', run: () => { leaveStage(); showLibrary(); } });
+    return options;
+  },
 });
 
 function play(script, snapshot = null) {
@@ -161,10 +180,10 @@ function showImport() {
 $('btn-library').addEventListener('click', showLibrary);
 $('btn-import').addEventListener('click', showImport);
 $('btn-saves').addEventListener('click', showSaves);
-$('btn-start').addEventListener('click', () => play(builtins[0]));
+$('btn-start').addEventListener('click', showLibrary);
 $('btn-how').addEventListener('click', openHow);
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
 // 对外暴露，便于调试
-window.__mumu = { engine, audio, sunset, castManager };
+window.__mumu = { engine, audio, sunset, castManager, sceneRenderer };

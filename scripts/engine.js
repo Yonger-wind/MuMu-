@@ -4,7 +4,7 @@
    存档只保存：剧本 id、当前节点下标、场景/镜头状态、在场角色、历史选择
    ============================================================ */
 
-export function createEngine({ renderer, ui, onEnd }) {
+export function createEngine({ renderer, ui, onEnd, endOptions }) {
   let script = null;
   let idx = 0;
   let cast = [];                 // 在场角色名
@@ -24,8 +24,7 @@ export function createEngine({ renderer, ui, onEnd }) {
   }
 
   function pushCast(name) {
-    if (!name) return;
-    cast = cast.filter((n) => n !== name);
+    if (!name || cast.includes(name)) return;
     cast.push(name);
     if (cast.length > 3) cast.shift();
   }
@@ -88,6 +87,7 @@ export function createEngine({ renderer, ui, onEnd }) {
         // 换场景时清场，让新场景更干净；舞台指示一并复位
         cast = [];
         actState = { poses: {}, actions: {}, view: 'normal' };
+        lastProp = '';
         syncRenderer();
         ui.flash();                       // 分镜：淡入淡出闪切
         idx++;
@@ -119,16 +119,40 @@ export function createEngine({ renderer, ui, onEnd }) {
         idx++;
         continue;
       }
+      if (n.t === 'enter') {
+        // 出场：人物先站上舞台，但不发言（台词仍由后续 say 节点触发）
+        (n.names || []).forEach((name) => { if (charOf(name)) pushCast(name); });
+        syncRenderer(lastSpeaker, null, lastProp);
+        idx++;
+        continue;
+      }
+      if (n.t === 'clear') {
+        // 清场：只留场景，用于纯环境描写的段落
+        cast = [];
+        actState = { poses: {}, actions: {}, view: 'normal' };
+        lastSpeaker = '';
+        syncRenderer();
+        idx++;
+        continue;
+      }
       if (n.t === 'jump') {
         idx = script.labels[n.to];
         continue;
       }
       if (n.t === 'say') {
-        pushCast(n.who);
-        lastSpeaker = n.who;
-        lastProp = n.text;
-        syncRenderer(n.who, n.pose || null, n.text);
-        ui.setName(n.who);
+        // 画外音（录音 / 电话 / 回忆）只显示名字，不让人物出场；
+        // 也不改写特写道具，避免录音台词把镜头里的物件换掉
+        if (n.voice) {
+          lastSpeaker = '';
+          syncRenderer('', null, lastProp);
+          ui.setName(`${n.who || '画外'}（${n.voice}）`);
+        } else {
+          pushCast(n.who);
+          lastSpeaker = n.who;
+          lastProp = n.text;
+          syncRenderer(n.who, n.pose || null, n.text);
+          ui.setName(n.who);
+        }
         ui.setChoices([]);
         idx++;
         typeText(n.text, () => { waiting = true; ui.showHint(true); });
@@ -152,9 +176,16 @@ export function createEngine({ renderer, ui, onEnd }) {
         ui.setName('');
         ui.setText('—— 故事暂时落幕 ——');
         ui.showHint(false);
-        ui.setChoices(['返回首页', '重新开始'], (i) => {
-          if (i === 0) onEnd && onEnd();
-          else start(script);
+        // 章节结束时：先给外部追加的动作（继续下一章 / 换一个剧本），再接通用动作
+        const extra = (typeof endOptions === 'function' && endOptions(script)) || [];
+        const options = [
+          ...extra,
+          { label: '重新开始', run: () => start(script) },
+          { label: '返回首页', run: () => onEnd && onEnd() },
+        ];
+        ui.setChoices(options.map((o) => o.label), (i) => {
+          const opt = options[i];
+          if (opt) opt.run();
         });
         return;
       }

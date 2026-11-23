@@ -1,0 +1,141 @@
+/* ============================================================
+   暮幕 · 人物立绘
+   半身剪影（无五官、侧脸、透明底），作为唯一的人物模型。
+   渲染时只做：左右站位 / 镜像 / 呼吸 / 暖色边缘光 / 底部渐隐。
+   ============================================================ */
+
+export const PORTRAITS = {
+  'painter':          { label: '画师少年', src: './assets/models/painter.cut.png' },
+  'colorist':         { label: '调色少女', src: './assets/models/colorist.cut.png' },
+  'pageboy':          { label: '小厮男童', src: './assets/models/pageboy.cut.png' },
+  'maidgirl':         { label: '侍女女童', src: './assets/models/maidgirl.cut.png' },
+  'official':         { label: '官袍长者', src: './assets/models/official.cut.png' },
+  'dowager':          { label: '凤袍太后', src: './assets/models/dowager.cut.png' },
+  'teen-girl-2':      { label: '少女（2）', src: './assets/models/teen-girl-2.cut.png' },
+  'teen-girl':        { label: '少女',     src: './assets/models/teen-girl.cut.png' },
+  'teen-boy':         { label: '少年',     src: './assets/models/teen-boy.cut.png' },
+  'girl-child':       { label: '女儿童',   src: './assets/models/girl-child.cut.png' },
+  'boy-child':        { label: '男儿童',   src: './assets/models/boy-child.cut.png' },
+  'middle-age-woman': { label: '中年女人', src: './assets/models/middle-age-woman.cut.png' },
+  'middle-age-man':   { label: '中年男人', src: './assets/models/middle-age-man.cut.png' },
+  'lucas':            { label: '卢卡斯·范·登·伯格', src: './assets/models/lucas.cut.png' },
+  'claire':           { label: '克莱尔·温莎', src: './assets/models/claire.cut.png' },
+  'marguerite':       { label: '玛格丽特·德拉图尔', src: './assets/models/marguerite.cut.png' },
+  'henri':            { label: '亨利·莫罗', src: './assets/models/henri.cut.png' },
+  'julian':           { label: '朱利安·勒克莱尔', src: './assets/models/julian.cut.png' },
+  'sofia':            { label: '索菲娅·科瓦列夫斯卡娅', src: './assets/models/sofia.cut.png' },
+  'etienne':          { label: '艾蒂安·巴尔贝', src: './assets/models/etienne.cut.png' },
+  'elena':            { label: '埃莱娜·罗西', src: './assets/models/elena.cut.png' },
+  'linshen':          { label: '林深', src: './assets/models/linshen.cut.png' },
+  'suwan':            { label: '苏晚', src: './assets/models/suwan.cut.png' },
+  'guyan':            { label: '顾言', src: './assets/models/guyan.cut.png' },
+  'xiaqing':          { label: '夏晴', src: './assets/models/xiaqing.cut.png' },
+  'chenmo':           { label: '陈默', src: './assets/models/chenmo.cut.png' },
+  'zhoumubai':        { label: '周慕白', src: './assets/models/zhoumubai.cut.png' },
+  'yezhiqiu':         { label: '叶知秋', src: './assets/models/yezhiqiu.cut.png' },
+};
+
+const images = new Map();
+
+function makeFaded(key, img) {
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  // 底部 28% 渐隐，半身立绘不会在胸口出现生硬的裁切线
+  const top = c.height * 0.72;
+  g.globalCompositeOperation = 'destination-in';
+  // 注意：destination-in 的源必须覆盖整张画布，
+  // 否则未覆盖的上半部分会被当成透明源整块擦掉（立绘只剩肩膀）。
+  const fade = g.createLinearGradient(0, 0, 0, c.height);
+  fade.addColorStop(0, 'rgba(0,0,0,1)');
+  fade.addColorStop(top / c.height, 'rgba(0,0,0,1)');
+  fade.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = fade;
+  g.fillRect(0, 0, c.width, c.height);
+  const entry = images.get(key);
+  if (entry) { entry.faded = c; entry.ready = true; }
+}
+
+export function preloadPortraits() {
+  for (const key of Object.keys(PORTRAITS)) {
+    const img = new Image();
+    img.decoding = 'async';
+    const entry = { img, faded: null, ready: false };
+    images.set(key, entry);
+    img.onload = () => makeFaded(key, img);
+    img.onerror = () => console.error('立绘加载失败', PORTRAITS[key].src);
+    img.src = PORTRAITS[key].src;
+  }
+}
+
+export function portraitOf(key) {
+  return PORTRAITS[key] ? key : 'teen-girl';
+}
+
+export function portraitImage(key) {
+  return images.get(portraitOf(key)) || null;
+}
+
+function hexA(hex, a) {
+  const h = String(hex || '#ffcf94').replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+/**
+ * 画一张半身立绘。
+ * x: 水平中心；bottom: 画面下沿；height: 立绘高度；
+ * facing: 1 朝右，-1 朝左
+ */
+export function drawPortrait(ctx, key, o = {}) {
+  const {
+    x, bottom, height, facing = 1, alpha = 1, time = 0, phase = 0,
+    glow = '#ffcf94', depth = 0, speaking = false,
+  } = o;
+  const entry = portraitImage(key);
+  if (!entry || !entry.ready) return;
+  const src = entry.faded || entry.img;
+  if (!src) return;
+
+  const ratio = src.width / src.height;
+  const w = height * ratio;
+  const bob = Math.sin(time * 0.75 + phase) * height * 0.004;
+  const sway = Math.sin(time * 0.42 + phase * 1.7) * height * 0.0022;
+  const scale = speaking ? 1.012 : 1;
+  const h = height * scale;
+  const top = bottom - h + bob;
+
+  // 1) 身后的空气光：让剪影从暮色里透出来
+  ctx.save();
+  ctx.translate(x + sway, top);
+  ctx.scale(facing, 1);
+  const halo = ctx.createRadialGradient(0, h * 0.42, h * 0.04, 0, h * 0.42, h * 0.8);
+  halo.addColorStop(0, hexA(glow, 0.1 * (1 - depth)));
+  halo.addColorStop(1, hexA(glow, 0));
+  ctx.fillStyle = halo;
+  ctx.fillRect(-w * 1.1, -h * 0.5, w * 2.2, h * 1.7);
+  ctx.restore();
+
+  // 2) 立绘本体 + 暖色边缘光（阴影沿光的方向勾边）
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x + sway, top);
+  ctx.scale(facing, 1);
+  ctx.shadowColor = hexA(glow, 0.5);
+  ctx.shadowBlur = Math.max(6, h * 0.026);
+  ctx.shadowOffsetX = facing * h * 0.006;
+  ctx.shadowOffsetY = -h * 0.004;
+  ctx.drawImage(src, -w / 2, 0, w, h);
+  ctx.restore();
+
+  // 3) 一层极轻的加法微光，只提亮内部的浅色线条
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.14 * (1 - depth * 0.6);
+  ctx.translate(x + sway + facing * h * 0.003, top);
+  ctx.scale(facing, 1);
+  ctx.drawImage(src, -w / 2, 0, w, h);
+  ctx.restore();
+}

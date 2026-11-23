@@ -309,6 +309,69 @@ html, body {
 }
 .script-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
 
+/* 曲目卡：多章合订，横向铺满整行 */
+.series-card {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(170px, 250px) 1fr;
+}
+.series-card .script-thumb { position: relative; height: auto; min-height: 148px; }
+.series-card .script-body { display: flex; flex-direction: column; justify-content: center; padding: 18px 22px; }
+.series-card .script-tag { align-self: flex-start; }
+.series-badge {
+  position:absolute; left:10px; bottom:10px; font-size:11px; letter-spacing:.08em;
+  padding:3px 9px; border-radius:999px; background:rgba(20,12,32,0.6);
+  border:1px solid rgba(255,244,230,0.24); color:#ffe9cf;
+}
+.chapter-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.chapter-chip {
+  font-size:10.5px; padding:2px 8px; border-radius:999px;
+  background:rgba(255,244,230,0.07); border:1px solid rgba(255,244,230,0.14);
+  color:rgba(255,236,214,0.72);
+}
+
+/* 章节选择 */
+.chapter-head {
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  margin-bottom:16px;
+}
+.chapter-count { font-size:12.5px; color:rgba(255,244,230,0.55); letter-spacing:0.04em; }
+.chapter-list { display:flex; flex-direction:column; gap:10px; }
+.chapter-item {
+  display:flex; align-items:center; gap:16px; width:100%; text-align:left; cursor:pointer;
+  padding:15px 18px; border-radius:14px; font-family:inherit;
+  background:rgba(255,244,230,0.05); border:1px solid rgba(255,244,230,0.14);
+  color:var(--cream);
+  transition: background .2s, border-color .2s, transform .2s;
+}
+.chapter-item:hover {
+  background:rgba(255,157,87,0.12); border-color:rgba(255,157,87,0.5);
+  transform:translateX(3px);
+}
+.chapter-no {
+  font-family:var(--serif); font-size:22px; color:#ffcf9a; opacity:0.85;
+  min-width:34px; text-align:center;
+}
+.chapter-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.chapter-name { font-family:var(--serif); font-size:16px; color:#fff4e6; }
+.chapter-brief {
+  font-size:12px; line-height:1.6; color:rgba(255,244,230,0.55);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.chapter-go { font-size:12.5px; color:#ffcf9a; opacity:0.75; white-space:nowrap; }
+.chapter-item:hover .chapter-go { opacity:1; }
+@media (max-width: 560px) {
+  .series-card { grid-template-columns: 1fr; }
+  .series-card .script-thumb { min-height: 96px; }
+  .series-card .script-body { padding: 14px 16px 16px; }
+  .chapter-item { gap:12px; padding:13px 14px; }
+  .chapter-go { display:none; }
+  .chapter-brief {
+    white-space:normal; display:-webkit-box;
+    -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  }
+}
+
 /* 存档列表 */
 .save-list { display: flex; flex-direction: column; gap: 12px; }
 .save-item {
