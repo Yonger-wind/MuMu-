@@ -37,3 +37,10 @@ test('非 ZIP 数据报错且带 userFacing 标记', async () => {
     (e) => e.userFacing === true,
   );
 });
+
+test('大文本压缩后读回一致（走 deflate 压缩路径）', async () => {
+  const text = '暮幕作品包正文。'.repeat(200);
+  const bytes = await writeZip([{ name: 'chapters/long.txt', data: text }]);
+  const entries = await readZipEntries(ab(bytes));
+  assert.equal(new TextDecoder().decode(entries.get('chapters/long.txt')), text);
+});
