@@ -59,3 +59,10 @@ test('removeSave 从 v2 中删除存档', async () => {
   assert.equal(saves.length, 1);
   assert.equal(saves[0].id, 'save_b');
 });
+
+test('旧存档没有 time 字段时时间显示不出现 NaN', async () => {
+  const { fmtTime } = await import('../scripts/storage.js');
+  assert.equal(fmtTime(undefined), '时间未知');
+  assert.equal(fmtTime('not-a-date'), '时间未知');
+  assert.match(fmtTime(1700000000000), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+});

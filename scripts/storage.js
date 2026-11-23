@@ -73,6 +73,8 @@ export function makeId(prefix = 's') {
 
 export function fmtTime(ts) {
   const d = new Date(ts);
+  // 旧存档没有 time 字段时不要显示 NaN
+  if (!ts || Number.isNaN(d.getTime())) return '时间未知';
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
