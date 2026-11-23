@@ -36,22 +36,32 @@ export async function unzipEntries(buf) {
     if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
   }
   if (eocd < 0) throw zipFail('无法识别该压缩包，请确认它是标准 .zip 文件。');
-  const count = dv.getUint16(eocd + 10, true);
-  let p = dv.getUint32(eocd + 16, true);
-  const entries = [];
   const dec = new TextDecoder('utf-8');
+  const entries = [];
+  let count, p;
+  try {
+    count = dv.getUint16(eocd + 10, true);
+    p = dv.getUint32(eocd + 16, true);
+  } catch (err) {
+    throw zipFail('压缩包结构已损坏，请重新导出后再试。');
+  }
   for (let i = 0; i < count; i++) {
-    if (dv.getUint32(p, true) !== 0x02014b50) break;
-    const flag = dv.getUint16(p + 8, true);
-    const method = dv.getUint16(p + 10, true);
-    const csize = dv.getUint32(p + 20, true);
-    const nameLen = dv.getUint16(p + 28, true);
-    const extraLen = dv.getUint16(p + 30, true);
-    const cmtLen = dv.getUint16(p + 32, true);
-    const localOff = dv.getUint32(p + 42, true);
-    const name = dec.decode(u8.subarray(p + 46, p + 46 + nameLen));
-    entries.push({ name, method, csize, localOff, flag });
-    p += 46 + nameLen + extraLen + cmtLen;
+    try {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const flag = dv.getUint16(p + 8, true);
+      const method = dv.getUint16(p + 10, true);
+      const csize = dv.getUint32(p + 20, true);
+      const nameLen = dv.getUint16(p + 28, true);
+      const extraLen = dv.getUint16(p + 30, true);
+      const cmtLen = dv.getUint16(p + 32, true);
+      const localOff = dv.getUint32(p + 42, true);
+      const name = dec.decode(u8.subarray(p + 46, p + 46 + nameLen));
+      entries.push({ name, method, csize, localOff, flag });
+      p += 46 + nameLen + extraLen + cmtLen;
+    } catch (err) {
+      if (err && err.userFacing) throw err;
+      throw zipFail('压缩包结构已损坏，请重新导出后再试。');
+    }
   }
   return { entries, dv, u8 };
 }
@@ -67,9 +77,20 @@ export async function extractEntry({ dv, u8 }, e) {
     if (typeof DecompressionStream === 'undefined') {
       throw zipFail('当前浏览器不支持解压 zip，请升级到较新的浏览器，或直接导入 .txt 文件。');
     }
-    const ds = new DecompressionStream('deflate-raw');
-    const stream = new Blob([data]).stream().pipeThrough(ds);
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+    let ds;
+    try {
+      ds = new DecompressionStream('deflate-raw');
+    } catch (err) {
+      // 老浏览器（如旧版 Safari）认识 DecompressionStream 但不支持 'deflate-raw'，构造时抛 TypeError
+      throw zipFail('当前浏览器不支持解压 zip，请升级到较新的浏览器，或直接导入 .txt 文件。');
+    }
+    try {
+      const stream = new Blob([data]).stream().pipeThrough(ds);
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    } catch (err) {
+      if (err && err.userFacing) throw err;
+      throw zipFail('压缩包内容已损坏，请重新导出后再试。');
+    }
   }
   throw zipFail('压缩包使用了不支持的压缩方式。');
 }
