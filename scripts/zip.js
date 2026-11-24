@@ -10,6 +10,17 @@ export function zipFail(msg) {
   return e;
 }
 
+/**
+ * 解压后体积超限的错误。
+ * 额外挂 `unpackedLimit = true`，供上层区分「超限」与「结构损坏」：
+ * 上层要把超限收敛成自己的文案，结构损坏则收敛成「不是有效的作品包」。
+ */
+function unpackLimitFail() {
+  const e = zipFail('压缩包解压后的内容超过 64MB，请缩减内容后再导入。');
+  e.unpackedLimit = true;
+  return e;
+}
+
 /* ---------- CRC-32 ---------- */
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -51,12 +62,13 @@ export async function unzipEntries(buf) {
       const flag = dv.getUint16(p + 8, true);
       const method = dv.getUint16(p + 10, true);
       const csize = dv.getUint32(p + 20, true);
+      const usize = dv.getUint32(p + 24, true);
       const nameLen = dv.getUint16(p + 28, true);
       const extraLen = dv.getUint16(p + 30, true);
       const cmtLen = dv.getUint16(p + 32, true);
       const localOff = dv.getUint32(p + 42, true);
       const name = dec.decode(u8.subarray(p + 46, p + 46 + nameLen));
-      entries.push({ name, method, csize, localOff, flag });
+      entries.push({ name, method, csize, usize, localOff, flag });
       p += 46 + nameLen + extraLen + cmtLen;
     } catch (err) {
       if (err && err.userFacing) throw err;
@@ -66,13 +78,28 @@ export async function unzipEntries(buf) {
   return { entries, dv, u8 };
 }
 
-export async function extractEntry({ dv, u8 }, e) {
+/**
+ * 解出单条条目。
+ * budget（可选）：{ limit, used }
+ *   - limit：解压后累计字节上限（省略 = 不限）
+ *   - used ：跨条目累计计数，就地累加
+ * 超限时**立刻中断解压**并抛出带 userFacing 的错误（不会把整包先解压进内存）。
+ */
+export async function extractEntry({ dv, u8 }, e, budget) {
+  const limit = budget && Number.isFinite(budget.limit) ? budget.limit : null;
+  const used = () => (budget && Number.isFinite(budget.used) ? budget.used : 0);
+  const addUsed = (n) => { if (budget) budget.used = used() + n; };
   const p = e.localOff;
   const nameLen = dv.getUint16(p + 26, true);
   const extraLen = dv.getUint16(p + 28, true);
   const start = p + 30 + nameLen + extraLen;
   const data = u8.subarray(start, start + e.csize);
-  if (e.method === 0) return data;
+  if (e.method === 0) {
+    // stored：条目的实际长度就是解压后长度，返回前先比对上限
+    if (limit != null && used() + data.length > limit) throw unpackLimitFail();
+    addUsed(data.length);
+    return data;
+  }
   if (e.method === 8) {
     if (typeof DecompressionStream === 'undefined') {
       throw zipFail('当前浏览器不支持解压 zip，请升级到较新的浏览器，或直接导入 .txt 文件。');
@@ -86,7 +113,26 @@ export async function extractEntry({ dv, u8 }, e) {
     }
     try {
       const stream = new Blob([data]).stream().pipeThrough(ds);
-      return new Uint8Array(await new Response(stream).arrayBuffer());
+      const reader = stream.getReader();
+      const chunks = [];
+      let total = 0;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value || !value.length) continue;
+        total += value.length;
+        addUsed(value.length);
+        // 边读边计数：超限就中断解压，不让整包先落进内存
+        if (limit != null && used() > limit) {
+          try { await reader.cancel(); } catch (err) { /* 取消失败不影响报错 */ }
+          throw unpackLimitFail();
+        }
+        chunks.push(value);
+      }
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      return out;
     } catch (err) {
       if (err && err.userFacing) throw err;
       throw zipFail('压缩包内容已损坏，请重新导出后再试。');
@@ -95,13 +141,29 @@ export async function extractEntry({ dv, u8 }, e) {
   throw zipFail('压缩包使用了不支持的压缩方式。');
 }
 
-/** 读出全部条目：Map<条目名, 字节> */
-export async function readZipEntries(buf) {
+/**
+ * 读出全部条目：Map<条目名, 字节>
+ * opts.maxUnpackedBytes（可选）：解压后总量上限。
+ *   - 快速拒绝：先按中央目录声明的未压缩大小求和，超限直接抛错，不解压
+ *     （声明值可被伪造，所以这只是快速筛）
+ *   - 硬保证：解压过程中累计实际产出字节，超限立刻中断并抛错
+ */
+export async function readZipEntries(buf, opts = {}) {
+  const o = opts && typeof opts === 'object' ? opts : {};
+  const limit = Number.isFinite(o.maxUnpackedBytes) && o.maxUnpackedBytes > 0
+    ? o.maxUnpackedBytes
+    : null;
   const z = await unzipEntries(buf);
+  if (limit != null) {
+    let declared = 0;
+    for (const e of z.entries) declared += (Number(e.usize) || 0);
+    if (declared > limit) throw unpackLimitFail();
+  }
+  const budget = { limit, used: 0 };
   const out = new Map();
   for (const e of z.entries) {
     if (e.name.endsWith('/')) continue;
-    out.set(e.name, await extractEntry(z, e));
+    out.set(e.name, await extractEntry(z, e, budget));
   }
   return out;
 }

@@ -9,7 +9,7 @@ import { createCharacterManager } from './character-manager.js';
 import { preloadPortraits } from './portraits.js';
 import { loadBuiltinScripts } from './builtin.js';
 import { loadCustomScripts, addCustomScript, removeCustomScript, loadSaves, upsertSave, removeSave, makeId } from './storage.js';
-import { exportPackage, downloadPackage, importPackage } from './package.js';
+import { exportPackage, downloadPackage, importPackage, safeFileName } from './package.js';
 import { openLibrary, openSaves, openImport, openHow, closeModal } from './modals.js';
 
 const $ = (id) => document.getElementById(id);
@@ -155,33 +155,13 @@ $('stage-save').addEventListener('click', () => {
 });
 
 /* ---------------- 首页按钮 ---------------- */
-/** 同一包内的章序必须连续且唯一：优先用作品自带章序，缺失或非法时按顺序补位；
- *  多作品时只要章序不是 1..N（重复或有缺口）就整体重排，免得 README 里出现「2. 甲 / 2. 乙」或「1. 甲 / 3. 乙」；
- *  单作品（哪怕自带第二章的章序）保留它自己的章序。 */
-function chapterNosOf(works) {
-  const nums = works.map((w, i) => {
-    const n = Number(w.chapterNo);
-    return Number.isInteger(n) && n > 0 ? n : i + 1;
-  });
-  if (works.length < 2) return nums;
-  const contiguous = nums.every((n, i) => n === i + 1);
-  return contiguous ? nums : works.map((_, i) => i + 1);
-}
-
-/** 文件名安全化：去掉 Windows 非法字符与结尾的点/空格 */
-function safeFileBase(name) {
-  let s = String(name || '').trim().replace(/[\\/:*?"<>|]/g, '_');
-  s = s.replace(/[. ]+$/g, '').slice(0, 80).replace(/[. ]+$/g, '');
-  return s;
-}
-
 /** Windows 保留设备名（CON / PRN / AUX / NUL / COM1…）不能直接当文件名 */
 const RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
 /** 单章导出：下载文件名带上章节标识，免得和整本包撞名（浏览器会存成「名字(1).mumu」）。
  *  只改文件名，包里的 title 仍是作品原标题（导入后的卡片标题不会被改写）。 */
 function workDownloadName(baseName, work, chapterNo) {
-  const base = safeFileBase(baseName);
+  const base = safeFileName(baseName);
   const rawTag = String((work && work.tag) || '').trim();
   const tag = rawTag.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40).replace(/[. ]+$/g, '')
     || `第${chapterNo || 1}章`;
@@ -195,8 +175,8 @@ async function handleExport({ kind, script, scripts } = {}) {
     const isSeries = kind === 'series';
     const works = (isSeries ? (scripts || []) : (script ? [script] : [])).filter(Boolean);
     if (!works.length) { toast('没有可导出的作品。'); return; }
-    const chapterNos = chapterNosOf(works);
-    const { bytes, filename, warnings } = await exportPackage({
+    // 章序由 exportPackage 统一整理（整本连续化 1..N，单章保留自身章序）
+    const { bytes, filename, warnings, chapterNos } = await exportPackage({
       kind,
       // 整本导出时 id 就是曲目 id，series 恒为 null；单章导出时 id 是作品 id
       id: isSeries ? (works[0].series || works[0].id) : works[0].id,
@@ -208,15 +188,15 @@ async function handleExport({ kind, script, scripts } = {}) {
         : (works[0].series ? { id: works[0].series, title: works[0].seriesTitle || works[0].title } : null),
       license: null,
       coverImage: works[0].coverImage || null,
-      works: works.map((w, i) => ({
-        id: w.id, title: w.title, tag: w.tag || '', chapterNo: chapterNos[i],
+      works: works.map((w) => ({
+        id: w.id, title: w.title, tag: w.tag || '', chapterNo: w.chapterNo,
         source: w.source || null, script: w,
       })),
     });
     // 单章导出的文件名带上章节标识（整本导出的文件名保持不变）
     const downloadName = isSeries
       ? filename
-      : workDownloadName(works[0].seriesTitle || works[0].title, works[0], chapterNos[0]);
+      : workDownloadName(works[0].seriesTitle || works[0].title, works[0], (chapterNos && chapterNos[0]) || works[0].chapterNo);
     downloadPackage(bytes, downloadName);
     toast(`已导出《${downloadName}》`);
     // 早期导入的剧本没有保留原文，导出走的是重建文本，要如实告诉用户
@@ -289,11 +269,28 @@ function showImport() {
         setTimeout(showLibrary, 500);
         return;
       }
-      toast(`已导入《${res.title}》，共 ${res.works.length} 章`);
+      // 提示文案按冲突结论选（spec §5.3）：更新 / 改名另存 / 与已有曲目同名
+      toast(importSummary(res));
       for (const w of res.warnings) toast(w);
       setTimeout(showLibrary, 500);
     },
   });
+}
+
+/** 导入结果 → 面向用户的一句话提示（spec §5.3 的三条冲突文案） */
+function importSummary(res) {
+  const conflicts = res.conflicts || {};
+  const actions = Array.isArray(conflicts.workActions) ? conflicts.workActions : [];
+  const title = res.title || '';
+  if (conflicts.seriesAction === 'renamed') {
+    const base = String(conflicts.seriesTitle || title).replace(/（导入）$/, '');
+    return `与已有曲目同名，已另存为《${base}（导入）》`;
+  }
+  if (conflicts.seriesAction === 'update') return `已更新《${title}》`;
+  // 混合情况取最显著的那一条：renamed > updated > new
+  if (actions.includes('renamed')) return `已另存为《${title}》`;
+  if (actions.includes('update')) return `已更新《${title}》`;
+  return `已导入《${title}》，共 ${res.works.length} 章`;
 }
 
 $('btn-library').addEventListener('click', showLibrary);

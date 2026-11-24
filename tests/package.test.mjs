@@ -1263,7 +1263,7 @@ test('B4：封面条目无法处理时记一条警告而不是静默跳过', asy
    修补轮 fix-r1：B5 包级 summary 优先
    ============================================================ */
 
-test('B5：包级 manifest.summary 优先于剧本内的简介', async () => {
+test('B5：本章自带简介时优先于包级 summary', async () => {
   const manifest = {
     format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
     id: 'w1', title: '测试剧', summary: '包级简介',
@@ -1272,7 +1272,7 @@ test('B5：包级 manifest.summary 优先于剧本内的简介', async () => {
   };
   const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: SAMPLE }]);
   const res = await importPackage(ab(bytes), { existing: [] });
-  assert.equal(res.works[0].summary, '包级简介');
+  assert.equal(res.works[0].summary, '一段用于测试的短剧。');
 });
 
 test('B5：包级没有 summary 时回落到剧本内的简介', async () => {

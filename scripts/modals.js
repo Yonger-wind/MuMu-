@@ -279,7 +279,7 @@ export function openImport({ onImported, onPackage }) {
       <span class="di">✦</span>
       <div class="dt">拖入剧本文件，或点击选择</div>
       <div class="dh">支持 .txt / .md / .json / .docx / .zip，或暮幕作品包 .mumu<br/>
-        字数 ${LIMITS.minChars}–${LIMITS.maxChars.toLocaleString()} 字 · 文件不超过 5MB</div>
+        字数 ${LIMITS.minChars}–${LIMITS.maxChars.toLocaleString()} 字 · 文本剧本不超过 5MB · 作品包不超过 32MB</div>
       <input id="file-in" type="file" accept=".txt,.md,.json,.docx,.zip,.mumu" hidden />
     </div>
     <div id="import-msg" class="dh" style="margin-top:14px;min-height:20px;font-size:13px"></div>

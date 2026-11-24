@@ -441,6 +441,9 @@ function finalize({ meta, characters, nodes, labels }, fileName) {
   return {
     title,
     summary: meta.summary || (firstSay ? firstSay.text.slice(0, 40) + '…' : ''),
+    // summaryAuto：true = 这句简介是解析器兜底生成的（剧本没写「简介：」行）；
+    // false = 剧本里写了「简介：」行。作品包导入端据此决定用本章简介还是包级简介。
+    summaryAuto: !meta.summary,
     author: meta.author,
     characters,
     nodes,
@@ -486,14 +489,27 @@ export function isJSONSource(text) {
 }
 
 /* ---------------- ZIP 读取（实现见 scripts/zip.js） ---------------- */
+
+/** ZIP 剧本导入的解压后体积上限（与作品包一致：64MB） */
+const MAX_ZIP_UNPACKED_BYTES = 64 * 1024 * 1024;
+
+/** 解压超限：中文 + userFacing（与作品包导入同一口径） */
+function zipLimitFail() {
+  return fail('压缩包解压后的内容超过 64MB，请缩减内容后再导入。');
+}
+
 async function readFromZip(buf) {
   const z = await unzipEntries(buf);
+  // 快速拒绝：中央目录声明的未压缩大小之和已超限 → 不用解压
+  const declared = z.entries.reduce((n, e) => n + (Number(e.usize) || 0), 0);
+  if (declared > MAX_ZIP_UNPACKED_BYTES) throw zipLimitFail();
   const usable = z.entries
     .filter((e) => !e.name.endsWith('/') && !/(^|\/)(__MACOSX|\.)/.test(e.name))
     .filter((e) => /\.(txt|md|json|docx)$/i.test(e.name));
   if (!usable.length) throw fail('压缩包内没有找到 .txt / .md / .json / .docx 剧本文档。');
   const e = usable[0];
-  const bytes = await extractEntry(z, e);
+  // 硬保证：解压过程中累计实际字节，超限立刻中断
+  const bytes = await extractEntry(z, e, { limit: MAX_ZIP_UNPACKED_BYTES, used: 0 });
   if (/\.docx$/i.test(e.name)) return docxToText(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
   return new TextDecoder('utf-8').decode(bytes);
 }
@@ -502,7 +518,9 @@ async function docxToText(buf) {
   const z = await unzipEntries(buf);
   const doc = z.entries.find((e) => e.name === 'word/document.xml');
   if (!doc) throw fail('这个 .docx 文件似乎已损坏。');
-  const xml = new TextDecoder('utf-8').decode(await extractEntry(z, doc));
+  const xml = new TextDecoder('utf-8').decode(
+    await extractEntry(z, doc, { limit: MAX_ZIP_UNPACKED_BYTES, used: 0 }),
+  );
   const paras = xml.split(/<\/w:p>/).map((p) => {
     const pieces = [...p.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]);
     return pieces.join('')

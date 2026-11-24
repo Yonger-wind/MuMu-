@@ -264,15 +264,17 @@ const COVER_EXT = {
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
 /**
- * 生成安全的下载文件名（不含扩展名）。
- * - 首尾空白裁掉；全空时用「未命名作品」兜底
+ * 生成安全的下载文件名主干（不含扩展名）。
+ * - 首尾空白裁掉；Windows 非法字符换成下划线
  * - 结尾的点与空格去掉（Windows 不允许）
  * - 命中 Windows 保留名（忽略扩展名部分）时加下划线前缀
+ * 全空时返回**空串**（调用方自己决定兜底名）。
+ * scripts/main.js 复用这一份实现，别再写第二份。
  */
-function safeFileName(name) {
+export function safeFileName(name) {
   let s = String(name || '').trim().replace(/[\\/:*?"<>|]/g, '_');
   s = s.replace(/[. ]+$/g, '').slice(0, 80).replace(/[. ]+$/g, '');
-  if (!s) return '未命名作品';
+  if (!s) return '';
   if (WINDOWS_RESERVED.test(s.split('.')[0])) s = '_' + s;
   return s;
 }
@@ -327,6 +329,11 @@ export async function exportPackage(opts) {
   // 章节按 chapterNo 稳定升序：文件序号与 manifest.works 顺序保持一致，
   // 调用方传乱序章节也不会让包内章节错位
   const ordered = sortByChapterNo(works);
+  // 章序连续化（spec §3.2「包内章序连续且唯一」）：
+  // 整本包重排为连续的 1..N；单章包保留该作品自己的有效章序（不改变章节身份）
+  const chapterNos = kind === 'series'
+    ? ordered.map((_, i) => i + 1)
+    : ordered.map((d, i) => effectiveChapterNo(d.work, i));
   const texts = [];
   const entries = ordered.map((d, i) => {
     const text = workText(d.work);
@@ -341,7 +348,7 @@ export async function exportPackage(opts) {
       id: d.work.id,
       title: d.work.title || '',
       tag: d.work.tag || '',
-      chapterNo: d.chapterNo,
+      chapterNo: chapterNos[i],
       file: kind === 'series' ? `chapters/${String(i + 1).padStart(2, '0')}.txt` : 'script.txt',
       chars,
     };
@@ -416,7 +423,12 @@ export async function exportPackage(opts) {
   const writer = typeof o.zipWriter === 'function' ? o.zipWriter : writeZip;
   const bytes = await writer(files);
   checkPackageSize(bytes);
-  return { bytes, filename: `${safeFileName(manifest.title)}.mumu`, warnings };
+  return {
+    bytes,
+    filename: `${safeFileName(manifest.title) || '未命名作品'}.mumu`,
+    warnings,
+    chapterNos,
+  };
 }
 
 /** 浏览器端触发下载（DOM 只出现在这个函数体内） */
@@ -487,10 +499,23 @@ function toArrayBuffer(input) {
 }
 
 /**
+ * 本章简介取值（spec §9.3）。
+ * 1. 本章自带简介（剧本里写了「简介：」行，summaryAuto === false）→ 用本章的；
+ * 2. 否则用包级 manifest.summary；
+ * 3. 都没有 → 用解析器兜底生成的那句 script.summary。
+ */
+function chapterSummaryOf(script, manifestSummary) {
+  if (script && script.summaryAuto === false && script.summary) return script.summary;
+  if (manifestSummary) return manifestSummary;
+  return (script && script.summary) || '';
+}
+
+/**
  * 导入作品包（**纯函数**：不写 localStorage、不碰 window、不弹窗）。
  *
  * opts.existing：本地已有作品 [{ id, series, builtin }]，用于判断 id / series 冲突。
- * 返回 { manifest, kind, title, seriesId, seriesTitle, works, warnings }
+ * 返回 { manifest, kind, title, seriesId, seriesTitle, works, warnings, conflicts }
+ *  - conflicts：本次导入的冲突结论（spec §5.3），UI 据此选提示文案
  *  - kind='work'   → 每章都是独立卡片，series 恒为 null
  *  - kind='series' → 整本成为一张曲目卡，works[].series = seriesId
  * 任何一步失败都抛出带 userFacing 标记的中文错误，调用方据此提示且不落库。
@@ -508,12 +533,15 @@ export async function importPackage(buffer, opts = {}) {
 
   let entries;
   try {
-    entries = await readZipEntries(buf);
+    // 解压上限前置：ZIP 层边解压边计数，超限立刻中断（zip bomb 防护）
+    entries = await readZipEntries(buf, { maxUnpackedBytes: MAX_UNPACKED_BYTES });
   } catch (e) {
+    // 解压超限有自己的文案；其余 ZIP 层错误统一收敛成「不是有效的作品包」
+    if (e && e.unpackedLimit) throw pkgFail('作品包解压后的内容超过 64MB，请缩减内容后再导入。');
     throw pkgFail('这个文件不是有效的暮幕作品包（ZIP 结构无法读取）。');
   }
 
-  // 解压后总量上限：压缩包本身不大不代表解压后不大（zip bomb）
+  // 解压后总量上限：第二道网（ZIP 层已前置拦截，这里理论上不再触发）
   let unpacked = 0;
   for (const bytes of entries.values()) unpacked += bytes && bytes.length ? bytes.length : 0;
   if (unpacked > MAX_UNPACKED_BYTES) {
@@ -574,6 +602,9 @@ export async function importPackage(buffer, opts = {}) {
   // 2. 否则原始曲目 id 已被本地占用 → 加 user: 前缀（已是 user: 前缀则视为同曲目）。
   let seriesId = null;
   let seriesTitle = '';
+  // 曲目冲突动作：'new'（全新）| 'update'（同一曲目更新）| 'renamed'（加前缀另存）
+  let seriesAction = 'new';
+  let seriesRenamed = false;
   if (manifest.kind === 'series') {
     const pkgSeries = manifest.series && typeof manifest.series === 'object' ? manifest.series : null;
     const rawSeriesId = String((pkgSeries && pkgSeries.id) || manifest.id || '');
@@ -599,6 +630,7 @@ export async function importPackage(buffer, opts = {}) {
 
     if (isUpdate) {
       seriesId = localSeries;                        // 同一曲目的更新：保持已有 id
+      seriesAction = 'update';
     } else if (!rawSeriesId || rawSeriesId.startsWith('user:')) {
       seriesId = rawSeriesId;                        // 已是 user: 前缀 → 视为同曲目
     } else if (seriesOccupied(rawSeriesId)) {
@@ -606,8 +638,17 @@ export async function importPackage(buffer, opts = {}) {
       let i = 2;
       while (takenSeries.has(next)) { next = `user:${rawSeriesId}_${i}`; i += 1; }
       seriesId = next;
+      seriesAction = 'renamed';
+      seriesRenamed = true;
     } else {
       seriesId = rawSeriesId;
+    }
+
+    // 曲目与已有曲目同名时，新曲目卡标题带「（导入）」后缀，
+    // 免得库里出现两张完全同名、只能靠徽标区分的卡片
+    if (seriesRenamed) {
+      const base = seriesTitle || manifest.title || '未命名作品';
+      seriesTitle = `${base}（导入）`;
     }
   }
 
@@ -639,6 +680,7 @@ export async function importPackage(buffer, opts = {}) {
   }
 
   const works = [];
+  const workActions = [];   // 与 works 同序：'new' | 'update' | 'renamed'
   const usedIds = new Set(); // 本次导入已用掉的 id（包内重名时用来避让）
   const targetSeries = manifest.kind === 'series' ? seriesId : null;
   for (let i = 0; i < manifest.works.length; i++) {
@@ -673,6 +715,7 @@ export async function importPackage(buffer, opts = {}) {
     //   · 归属别的曲目 → 不得覆盖，改名为 user:<id>
     const taken = new Set([...localIds, ...usedIds]);
     let id = typeof w.id === 'string' && w.id ? w.id : `chapter_${i + 1}`;
+    const origId = id;
     if (usedIds.has(id)) {
       id = uniqueId(id, taken);
     } else if (builtinIds.has(id) || id.startsWith('builtin_')) {
@@ -685,12 +728,18 @@ export async function importPackage(buffer, opts = {}) {
     }
     usedIds.add(id);
 
+    // 冲突动作：id 被改过 → renamed；id 未变且本地已有同 id 记录 → update；其余 → new
+    let action = 'new';
+    if (id !== origId) action = 'renamed';
+    else if (localById.has(origId)) action = 'update';
+    workActions.push(action);
+
     works.push({
       id,
       title: script.title || w.title || id,
-      // 包级摘要优先于剧本内的简介：解析器对缺「简介」的剧本会兜底出一句摘要，
-      // 不然包级 manifest.summary 永远用不上
-      summary: manifest.summary || script.summary || '',
+      // 本章简介取值：本章自带（剧本写了「简介：」行）优先，
+      // 否则用包级 manifest.summary，都没有才用解析器兜底那句
+      summary: chapterSummaryOf(script, manifest.summary),
       author: script.author || manifest.author || '',
       characters: script.characters,
       nodes: script.nodes,
@@ -721,13 +770,28 @@ export async function importPackage(buffer, opts = {}) {
     });
   }
 
+  const renamedCount = workActions.filter((a) => a === 'renamed').length;
+  const updatedCount = workActions.filter((a) => a === 'update').length;
+  const conflicts = {
+    seriesAction,
+    seriesRenamed,
+    seriesTitle: manifest.kind === 'series' ? seriesTitle : '',
+    workActions,
+    renamed: renamedCount,
+    updated: updatedCount,
+    newCount: workActions.length - renamedCount - updatedCount,
+  };
+
   return {
     manifest,
     kind: manifest.kind,
-    title: manifest.title || (works[0] && works[0].title) || '未命名作品',
+    title: manifest.kind === 'series' && seriesRenamed
+      ? seriesTitle
+      : (manifest.title || (works[0] && works[0].title) || '未命名作品'),
     seriesId,
     seriesTitle,
     works,
     warnings,
+    conflicts,
   };
 }
