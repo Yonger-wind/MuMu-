@@ -86,6 +86,14 @@ const DIR_TAGS = new Set([
 ]);
 
 /**
+ * 必须带值的标签：解析器只匹配「【key：value】」这种形式，
+ * 写成「【key】」时整行会退化成旁白（实测解析器产出 {"t":"say","who":"","text":"【场景】"}）。
+ */
+const DIR_TAGS_NEED_VALUE = new Set([
+  '场景', '分镜', '镜头', '姿态', '情绪', '动作', '视角', '机位', '出场', '登场',
+]);
+
+/**
  * 舞台指示的 key（【xxx：…】里的 xxx）；未知 key 由规则 E101 报出。
  * 无值形式（【结束】/【完】/【清场】）也要认得出 key，
  * 否则每一条【结束】都会被当成未知标签误报。
@@ -151,9 +159,11 @@ export function scanText(text) {
     }
     if (/^【.*】$/.test(t)) {
       const key = dirKey(t);
-      if (key === '场景' || key === '分镜') sawScene = true;
-      if (key === '结束' || key === '完') sawEnd = true;
       const value = dirValue(t);
+      // 只有「场景/分镜」且带值才算真正的场景指示：
+      // 【场景】（缺值）解析器不认，会退化成旁白，不能用来抑制 W107。
+      if ((key === '场景' || key === '分镜') && value) sawScene = true;
+      if (key === '结束' || key === '完') sawEnd = true;
       lines.push({
         line, kind: 'dir', text: t, name: key, value,
         parts: value ? value.split(/[|｜,，\s]+/).filter(Boolean) : [],
@@ -189,12 +199,18 @@ function issue(severity, code, line, message, hint) {
   return hint ? { severity, code, line, message, hint } : { severity, code, line, message };
 }
 
-const SCENE_LIST = Object.values(SCENES).map((s) => s.label).join(' / ');
-const TIME_LIST = '黄昏 / 白天 / 夜晚 / 火夜';
-const CAM_LIST = '远景 / 中景 / 近景 / 特写';
-const POSE_LIST = '自然 / 开心 / 难过 / 生气 / 惊讶 / 疲惫 / 沉思';
-const ACT_LIST = '站立 / 行走 / 坐下 / 转身 / 低头 / 抬头';
-const VIEW_LIST = '常规 / 过肩 / 背影';
+/**
+ * 可用值清单一律从词表派生（scripts/parser.js 是唯一事实来源）。
+ * 手写清单会跟解析器脱节：例如 POSE_LIST 曾写「疲惫」，而解析器的 POSES 里
+ * 只有「害羞 / 思考」——作者照着提示写【姿态：疲惫】，工具自己就报 W101。
+ */
+const listOf = (table) => Object.values(table).map((v) => v.label).join(' / ');
+const SCENE_LIST = listOf(SCENES);
+const TIME_LIST = listOf(TIMES);
+const CAM_LIST = listOf(CAMS);
+const POSE_LIST = listOf(POSES);
+const ACT_LIST = listOf(ACTS);
+const VIEW_LIST = listOf(VIEWS);
 
 /**
  * 12 条文本级规则：E101-E105、W101-W105、W107、W108。
@@ -227,6 +243,13 @@ function applyTextRules(scan) {
         continue;
       }
       const value = rec.value || '';
+      // 已知标签但缺必需值：解析器匹配不到任何分支，整行退化成旁白
+      if (DIR_TAGS_NEED_VALUE.has(key) && !value) {
+        issues.push(issue('error', 'E101', rec.line,
+          `舞台指示「${rec.text}」缺少值，解析器不认识这一行，它会被当成旁白。`,
+          `这一类标签必须带值（例如【${key}：…】）；补上值之后这一行才会作为舞台指示生效。`));
+        continue;
+      }
       // 词表类判定：matchTable 认不出的才报；文案用 resolveTable 说清「解析器实际会当成什么」
       const vocab = (table, val, kind, available, fallback) => {
         if (!val || matchTable(table, val)) return;
@@ -253,15 +276,23 @@ function applyTextRules(scan) {
         if (parts[2]) vocab(CAMS, parts[2], '镜头', CAM_LIST, '中景');
       }
       if (key === '镜头') vocab(CAMS, value, '镜头', CAM_LIST, '中景');
-      if (key === '姿态' || key === '情绪') {
-        const parts = value.split(/[|｜]/).map((x) => x.trim()).filter(Boolean);
-        const pose = parts.length > 1 ? parts[1] : parts[0];
-        vocab(POSES, pose, '姿态', POSE_LIST, '自然');
-      }
-      if (key === '动作') {
-        const parts = value.split(/[|｜]/).map((x) => x.trim()).filter(Boolean);
-        const act = parts.length > 1 ? parts[1] : parts[0];
-        vocab(ACTS, act, '动作', ACT_LIST, '站立');
+      // 姿态 / 动作：解析器的 splitDir 只按半角 | 切分，全角 ｜ 会把目标角色丢掉
+      if (key === '姿态' || key === '情绪' || key === '动作') {
+        const isPose = key !== '动作';
+        const table = isPose ? POSES : ACTS;
+        const kind = isPose ? '姿态' : '动作';
+        const available = isPose ? POSE_LIST : ACT_LIST;
+        const fallback = isPose ? '自然' : '站立';
+        if (value.includes('｜')) {
+          issues.push(issue('warning', 'W101', rec.line,
+            `舞台指示「${rec.text}」里用了全角「｜」，解析器只认半角「|」，作用对象会变成全场。`,
+            '请把全角「｜」改成半角「|」（例如【姿态：角色|难过】）。'));
+        } else {
+          const parts = value.split('|').map((x) => x.trim()).filter(Boolean);
+          const val = parts.length > 1 ? parts[1] : parts[0];
+          // * 是项目文档化的「全场」写法，解析器专门判过，不做词表判定
+          if (val && val !== '*') vocab(table, val, kind, available, fallback);
+        }
       }
       if (key === '视角' || key === '机位') vocab(VIEWS, value, '视角', VIEW_LIST, '常规');
       if (key === '出场' || key === '登场') {
@@ -277,8 +308,8 @@ function applyTextRules(scan) {
     }
 
     if (rec.kind === 'charRow') {
-      const rec2 = scan.chars.get(rec.text.split('|')[0].trim());
-      const cols = rec2 ? rec2.cols : rec.text.split('|').map((x) => x.trim());
+      // 取当前行原文切列：scan.chars 是「同名后写覆盖」，查它会把重名角色的先写行判错
+      const cols = rec.text.split('|').map((x) => x.trim());
       if (cols.length !== 5) {
         issues.push(issue('warning', 'W105', rec.line,
           `角色行有 ${cols.length} 列，规范是 5 列（名字 | 性别 | 发型 | 衣色 | 模型）。`,
@@ -318,13 +349,19 @@ function applyTextRules(scan) {
 
     if (rec.kind === 'say') {
       // 与解析器的两种台词形态对齐：「名字（情绪）：内容」与「名字：内容」
-      const dm = rec.text.match(/^([^\s:：【】\[\]>]{1,8})[（(][^）)]{1,40}[)）][:：]/);
+      const dm = rec.text.match(/^([^\s:：【】\[\]>]{1,8})[（(]([^)）]{1,40})[)）][:：]/);
       const dm2 = dm ? null : rec.text.match(/^([^\s:：【】\[\]>]{1,8})[:：]/);
       const who = dm ? dm[1].trim() : (dm2 ? dm2[1].trim() : null);
       if (who && who !== '旁白' && !scan.chars.has(who)) {
-        issues.push(issue('warning', 'W103', rec.line,
-          `说话人「${who}」未在角色表中声明。`,
-          '若这是错别字请改正；若确实要临时出场，也建议在角色表里补上。'));
+        // 括号形态复刻解析器的守卫：只有「名字是旁白 / 名字已声明 / 括号内容 ≤ 6 字」
+        // 之一成立时，解析器才把这行当台词；三者都不成立时整行按旁白处理，
+        // 例如「他（看着天色，眉头微蹙）：说了一句。」是纯旁白，不该报说话人未声明。
+        const isDialogue = !dm || dm[2].trim().length <= 6;
+        if (isDialogue) {
+          issues.push(issue('warning', 'W103', rec.line,
+            `说话人「${who}」未在角色表中声明。`,
+            '若这是错别字请改正；若确实要临时出场，也建议在角色表里补上。'));
+        }
       }
       continue;
     }

@@ -110,7 +110,6 @@ test('scanText 不拆舞台指示的值', () => {
    Task 2：12 条文本级规则
    ============================================================ */
 
-const scanOf = (src) => scanText(src);
 const lint = (src, name = 'x.txt') => lintText(src, name);
 
 test('E101 未知舞台指示标签', () => {
@@ -205,12 +204,111 @@ test('干净样本零 issue', () => {
   assert.deepEqual(r.issues.map((i) => `${i.code}@${i.line}:${i.message}`), []);
 });
 
-test('坏文本样本：各条文本级规则都能落到对应行号', () => {
+test('坏文本样本：产生精确的 5 条 issue（E101@9、W105@6、W101@12、E105@13、E103@14）', () => {
   const src = readFileSync(new URL('./fixtures/lint/bad-text-level.txt', import.meta.url), 'utf8');
   const r = lint(src, 'bad-text-level.txt');
-  const at = (code) => r.issues.filter((i) => i.code === code).map((i) => i.line);
-  assert.ok(at('E101').includes(9), 'E101 应落在第 9 行的未知标签上');
-  assert.ok(at('W105').includes(6), 'W105 应落在第 6 行的角色表行上');
-  assert.ok(at('E105').includes(13), 'E105 应落在第 13 行的缺落点选项上');
-  assert.ok(at('E103').includes(14), 'E103 应落在第 14 行的跳转上');
+  const got = r.issues.map((i) => `${i.code}@${i.line}`).sort();
+  assert.deepEqual(got, ['E101@9', 'E103@14', 'E105@13', 'W101@12', 'W105@6']);
+});
+
+/* ============================================================
+   修复轮 R=1：词表派生、角色行取当前行、E101 缺值、W103 守卫
+   ============================================================ */
+
+test('W101 文案按解析器真实行为分两种口径', () => {
+  // 模糊命中：解析器会把它当成「特写」
+  const r1 = lint('标题：x\n【镜头：超特写】');
+  const it1 = r1.issues.find((i) => i.code === 'W101');
+  assert.ok(it1, '未知镜头应报 W101');
+  assert.match(it1.message, /当成「特写」/);
+  // 完全认不出：解析器会回落到默认镜头 / 时段
+  const r2 = lint('标题：x\n【场景：教室 | 凌晨 | 远景】');
+  const it2 = r2.issues.find((i) => i.code === 'W101');
+  assert.ok(it2, '未知时段应报 W101');
+  assert.match(it2.message, /回落到「黄昏」/);
+});
+
+test('E102 只在完全认不出场景时报，模糊命中降级为 W101', () => {
+  const r = lint('标题：x\n【场景：的教室 | 黄昏 | 远景】');
+  assert.equal(r.issues.filter((i) => i.code === 'E102').length, 0);
+  assert.ok(r.issues.find((i) => i.code === 'W101'), '模糊命中应降级为 W101');
+});
+
+test('可用值清单一律从词表派生：提示里只有词表真有的值', () => {
+  // 解析器的 POSES 里没有「疲惫」，有「害羞 / 思考」——清单必须跟着词表走
+  const r = lint('标题：x\n【姿态：疲惫】');
+  const it = r.issues.find((i) => i.code === 'W101');
+  assert.ok(it, '「疲惫」不在词表里，应报 W101');
+  assert.match(it.hint, /害羞/);
+  assert.match(it.hint, /思考/);
+  assert.doesNotMatch(it.hint, /疲惫/);
+});
+
+test('E102 的可用场景清单来自词表（包含全部场景 label）', () => {
+  const r = lint('标题：x\n【场景：不存在的地方 | 黄昏 | 远景】');
+  const it = r.issues.find((i) => i.code === 'E102');
+  assert.ok(it);
+  for (const def of Object.values(SCENES)) {
+    assert.ok(it.message.includes(def.label), `可用场景清单应包含「${def.label}」`);
+  }
+});
+
+test('E101 已知标签缺必需值：报 E101 并说明会被当成旁白', () => {
+  const r = lint('标题：x\n【场景】');
+  const it = r.issues.find((i) => i.code === 'E101');
+  assert.ok(it, '缺值的【场景】应报 E101');
+  assert.equal(it.severity, 'error');
+  assert.equal(it.line, 2);
+  assert.match(it.message, /缺少值/);
+  assert.match(it.message, /旁白/);
+  assert.ok(it.hint, '应给出改法提示');
+});
+
+test('缺值【场景】不再抑制 W107；同份样本补上有效场景后 W107 消失', () => {
+  const only = lint('标题：x\n【场景】');
+  assert.ok(only.issues.find((i) => i.code === 'W107'), '缺值【场景】不算场景指示，应报 W107');
+  const both = lint('标题：x\n【场景】\n【场景：教室 | 黄昏 | 远景】');
+  assert.equal(both.issues.filter((i) => i.code === 'W107').length, 0, '有有效场景时不该报 W107');
+  assert.equal(both.issues.filter((i) => i.code === 'E101').length, 1, '缺值那一行仍应报 E101');
+});
+
+test('【姿态：*】/【动作：*】是「全场」写法，不报 W101', () => {
+  const r = lint([
+    '标题：x', '角色：', '阿蓝 | 男 | 短发 | 白 | 少年', '',
+    '【场景：教室 | 黄昏 | 远景】', '【姿态：*】', '【动作：*】', '【姿态：阿蓝|*】',
+  ].join('\n'));
+  assert.equal(r.issues.filter((i) => i.code === 'W101').length, 0);
+});
+
+test('纯旁白的长括号行不报 W103（复刻解析器守卫）', () => {
+  const r = lint([
+    '标题：x', '角色：', '阿蓝 | 男 | 短发 | 白 | 少年', '',
+    '【场景：教室 | 黄昏 | 远景】', '他（看着天色，眉头微蹙）：说了一句。',
+  ].join('\n'));
+  assert.equal(r.issues.filter((i) => i.code === 'W103').length, 0, '长括号 + 未声明名字 = 纯旁白');
+  // 括号内容 ≤ 6 字时解析器确实当台词，仍要报 W103
+  const r2 = lint([
+    '标题：x', '角色：', '阿蓝 | 男 | 短发 | 白 | 少年', '',
+    '【场景：教室 | 黄昏 | 远景】', '小葵（轻声）：你好。',
+  ].join('\n'));
+  assert.ok(r2.issues.find((i) => i.code === 'W103'), '短括号的未声明说话人应报 W103');
+});
+
+test('重名角色行按当前行原文判定列数与模型', () => {
+  const cols = lint([
+    '标题：x', '角色：',
+    '阿蓝 | 男 | 短发 | 白 | 少年',
+    '阿蓝 | 女 | 长发',
+    '', '【场景：教室 | 黄昏 | 远景】', '阿蓝：你好。',
+  ].join('\n'));
+  assert.deepEqual(cols.issues.filter((i) => i.code === 'W105').map((i) => i.line), [4],
+    '只有 3 列的第 4 行报 W105，第 3 行不报');
+  const model = lint([
+    '标题：x', '角色：',
+    '阿蓝 | 男 | 短发 | 白 | 不存在的模型',
+    '阿蓝 | 男 | 短发 | 白 | 少年',
+    '', '【场景：教室 | 黄昏 | 远景】', '阿蓝：你好。',
+  ].join('\n'));
+  assert.deepEqual(model.issues.filter((i) => i.code === 'W102').map((i) => i.line), [3],
+    '第 3 行的坏模型要报 W102，不被后写的同名行覆盖');
 });
