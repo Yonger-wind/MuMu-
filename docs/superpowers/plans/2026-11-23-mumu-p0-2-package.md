@@ -45,7 +45,7 @@
   - `export async function readZipEntries(buf: ArrayBuffer): Promise<Map<string, Uint8Array>>` —— 全部条目 → Map。
   - `export async function writeZip(files: Array<{name: string, data: Uint8Array | string}>): Promise<Uint8Array>` —— 写出 ZIP 字节。
 
-- [ ] **Step 1: 写失败测试 `tests/zip.test.mjs`**
+- [x] **Step 1: 写失败测试 `tests/zip.test.mjs`**
 
 ```javascript
 import test from 'node:test';
@@ -89,12 +89,12 @@ test('非 ZIP 数据报错且带 userFacing 标记', async () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `node --test tests/zip.test.mjs`
 Expected: FAIL —— `Cannot find module '../scripts/zip.js'`。
 
-- [ ] **Step 3: 实现 `scripts/zip.js`**
+- [x] **Step 3: 实现 `scripts/zip.js`**
 
 ```javascript
 /* ============================================================
@@ -282,7 +282,7 @@ export async function writeZip(files) {
 }
 ```
 
-- [ ] **Step 4: 让 `scripts/parser.js` 改用 `zip.js`（行为不变）**
+- [x] **Step 4: 让 `scripts/parser.js` 改用 `zip.js`（行为不变）**
 
 在 `scripts/parser.js` 顶部 import 区加：
 
@@ -294,7 +294,7 @@ import { unzipEntries, extractEntry } from './zip.js';
 
 > 注意：`parser.js` 的 `fail()` 产生的错误带 `userFacing`，`zip.js` 的 `zipFail()` 同样带 `userFacing`，导入弹窗的错误显示逻辑（`e.userFacing ? e.message : ...`）不受影响。
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `node --test tests/zip.test.mjs`
 Expected: PASS —— 5 个用例全绿。
@@ -302,7 +302,7 @@ Expected: PASS —— 5 个用例全绿。
 Run: `node --test`
 Expected: PASS —— 原有 23 个用例仍然全绿（解析器行为未变）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add scripts/zip.js scripts/parser.js tests/zip.test.mjs
@@ -332,7 +332,7 @@ git commit -m "feat(P0-2): 抽出零依赖 ZIP 读写模块（CRC-32 + deflate-r
   - `export function migrateManifest(manifest): object` —— 循环应用 `MIGRATIONS` 直到 `schemaVersion` 收敛；不认识的版本号原样返回（由 `validateManifest` 拒绝）；缺少 `schemaVersion` 时按 v1 处理。
   - `export function validateManifest(manifest): object` —— 校验并回填缺省字段；失败抛 `userFacing` 错误。
 
-- [ ] **Step 1: 写失败测试 `tests/package.test.mjs`（本任务部分）**
+- [x] **Step 1: 写失败测试 `tests/package.test.mjs`（本任务部分）**
 
 ```javascript
 import test from 'node:test';
@@ -598,12 +598,12 @@ test('works 条目缺 file 时报错', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `node --test tests/package.test.mjs`
 Expected: FAIL —— `Cannot find module '../scripts/package.js'`。
 
-- [ ] **Step 3: 实现 `scripts/package.js`（本任务部分）**
+- [x] **Step 3: 实现 `scripts/package.js`（本任务部分）**
 
 ```javascript
 /* ============================================================
@@ -793,12 +793,12 @@ export function validateManifest(input) {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `node --test tests/package.test.mjs`
 Expected: PASS —— 26 个用例全绿。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add scripts/package.js tests/package.test.mjs
@@ -818,7 +818,7 @@ git commit -m "feat(P0-2): 作品包 manifest 构造、校验与 v1→v2 schema 
 - Consumes: `scripts/parser.js` 导出的 `SCENES / TIMES / CAMS / POSES / ACTS / VIEWS / MODELS`。
 - Produces: `export function serializeScript(script): string` —— 把解析结果还原成暮幕 DSL 文本。
 
-- [ ] **Step 1: 写失败测试 `tests/serialize.test.mjs`**
+- [x] **Step 1: 写失败测试 `tests/serialize.test.mjs`**
 
 ```javascript
 import test from 'node:test';
@@ -911,12 +911,12 @@ test('往返后标签仍指向正确的台词（以台词开头的剧本）', ()
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `node --test tests/serialize.test.mjs`
 Expected: FAIL —— `Cannot find module '../scripts/serialize.js'`（且「剧本以台词开头时标签指向正确的台词」在修复前也会失败）。
 
-- [ ] **Step 3: 实现 `scripts/serialize.js`**
+- [x] **Step 3: 实现 `scripts/serialize.js`**
 
 ```javascript
 /* ============================================================
@@ -1022,7 +1022,7 @@ export function serializeScript(script) {
 }
 ```
 
-- [ ] **Step 4: 修复 `scripts/parser.js` 的标签下标错位**
+- [x] **Step 4: 修复 `scripts/parser.js` 的标签下标错位**
 
 在 `scripts/parser.js` 的 `finalize()` 中，把
 
@@ -1042,7 +1042,7 @@ export function serializeScript(script) {
   }
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `node --test tests/serialize.test.mjs`
 Expected: PASS —— 5 个用例全绿。
@@ -1050,7 +1050,7 @@ Expected: PASS —— 5 个用例全绿。
 Run: `node --test`
 Expected: PASS —— 原有 23 个 + Task 1/2 新增用例全绿（解析器行为对既有剧本不变：内置剧本首节点即场景，不会触发 unshift 分支）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add scripts/serialize.js scripts/parser.js tests/serialize.test.mjs
@@ -1076,7 +1076,7 @@ git commit -m "feat(P0-2): 新增 nodes→DSL 序列化兜底，并修正补场�
     - `opts = { kind: 'work' | 'series', id, title, summary, author, series: {id,title}|null, license: object|null, works: Array<{ id, title, tag, chapterNo, source: string|null, script: object }>, coverImage: string|null }`
   - `export function downloadPackage(bytes: Uint8Array, filename: string): void` —— 浏览器端触发下载。
 
-- [ ] **Step 1: 追加失败测试到 `tests/package.test.mjs`**
+- [x] **Step 1: 追加失败测试到 `tests/package.test.mjs`**
 
 在文件顶部 import 里补上 `parseScriptText` / `countChars` / `exportPackage` / `dataUrlToBytes` / `bytesToDataUrl`，并追加用例：
 
@@ -1187,12 +1187,12 @@ import { parseScriptText, countChars } from '../scripts/parser.js';
 const ab = (u8) => u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `node --test tests/package.test.mjs`
 Expected: FAIL —— `exportPackage` / `dataUrlToBytes` / `bytesToDataUrl` 尚未导出（`SyntaxError: The requested module does not provide an export named ...`）。
 
-- [ ] **Step 3: 在 `scripts/package.js` 追加导出实现**
+- [x] **Step 3: 在 `scripts/package.js` 追加导出实现**
 
 ```javascript
 import { parseScriptText, countChars } from './parser.js';
@@ -1339,7 +1339,7 @@ export function downloadPackage(bytes, filename) {
 }
 ```
 
-- [ ] **Step 4: 让剧本保留原文**
+- [x] **Step 4: 让剧本保留原文**
 
 `scripts/parser.js` 的 `readFileToScript()` 末尾改为：
 
@@ -1356,7 +1356,7 @@ export function downloadPackage(bytes, filename) {
       sc.source = s.text;   // 保留原文，供作品包导出使用
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `node --test tests/package.test.mjs`
 Expected: PASS —— 13 个用例全绿。
@@ -1364,7 +1364,7 @@ Expected: PASS —— 13 个用例全绿。
 Run: `node --test`
 Expected: PASS —— 全量用例通过。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add scripts/package.js scripts/parser.js scripts/builtin.js tests/package.test.mjs
@@ -1387,7 +1387,7 @@ git commit -m "feat(P0-2): 支持单章与整本作品包导出，导入与内�
     - 返回的每个 work：`{ id, title, summary, author, characters, nodes, labels, cover, tag, chapterNo, series, seriesTitle, source, coverImage, manifest, builtin: false }`
     - **纯函数**：不写 localStorage，存储由调用方（`main.js`）负责。
 
-- [ ] **Step 1: 追加失败测试到 `tests/package.test.mjs`**
+- [x] **Step 1: 追加失败测试到 `tests/package.test.mjs`**
 
 追加 import：`importPackage` / `buildCoverDataUrl`。追加用例：
 
@@ -1504,12 +1504,12 @@ test('剧本语法错误时报错并指出章序', async () => {
 
 （`writeZip` 需要加进 `from '../scripts/zip.js'` 的 import 列表。）
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `node --test tests/package.test.mjs`
 Expected: FAIL —— `importPackage` 尚未导出。
 
-- [ ] **Step 3: 在 `scripts/package.js` 追加导入实现**
+- [x] **Step 3: 在 `scripts/package.js` 追加导入实现**
 
 追加到文件末尾：
 
@@ -1659,7 +1659,7 @@ export async function importPackage(buffer, opts = {}) {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `node --test tests/package.test.mjs`
 Expected: PASS —— 21 个用例全绿。
@@ -1667,7 +1667,7 @@ Expected: PASS —— 21 个用例全绿。
 Run: `node --test`
 Expected: PASS —— 全量用例通过。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add scripts/package.js tests/package.test.mjs
@@ -1691,7 +1691,7 @@ git commit -m "feat(P0-2): 作品包导入链路（校验、迁移、解析、�
   - `openChapters(group, onPlay, onBack, onExport)` —— `onExport({ kind: 'work', script })`。
   - `openImport({ onImported, onPackage })` —— `onPackage(file)` 负责导入 `.mumu`；抛错时由弹窗显示中文原因。
 
-- [ ] **Step 1: `scripts/modals.js` —— 卡片与章节行加导出按钮**
+- [x] **Step 1: `scripts/modals.js` —— 卡片与章节行加导出按钮**
 
 先在 `scripts/modals.js` 里 `THUMB` 常量之后加一个安全的封面样式helper（只接受 base64 图片 data URL，避免把任意字符串塞进 style 属性）：
 
@@ -1828,7 +1828,7 @@ export function openLibrary({ scripts, onPlay, onDelete, onExport }) {
 }
 ```
 
-- [ ] **Step 2: `scripts/modals.js` —— 导入弹窗支持 `.mumu`**
+- [x] **Step 2: `scripts/modals.js` —— 导入弹窗支持 `.mumu`**
 
 把 `openImport` 的函数签名与提示文案改成：
 
@@ -1871,7 +1871,7 @@ export function openImport({ onImported, onPackage }) {
   };
 ```
 
-- [ ] **Step 3: `scripts/main.js` —— 接线导出与作品包导入**
+- [x] **Step 3: `scripts/main.js` —— 接线导出与作品包导入**
 
 在 import 区加：
 
@@ -1947,7 +1947,7 @@ function showImport() {
 }
 ```
 
-- [ ] **Step 4: `styles/main.css` —— 章节行排版**
+- [x] **Step 4: `styles/main.css` —— 章节行排版**
 
 在 `.chapter-item` 规则之前追加：
 
@@ -1959,7 +1959,7 @@ function showImport() {
 
 > 封面图的铺满效果由 Task 6 Step 1 的 `coverStyle()` 内联完成（内联 `background-image` 会覆盖样式表里的 `background` 简写，所以不要在 CSS 里写 `.script-thumb { background-size: cover }` 来实现它）。
 
-- [ ] **Step 5: 浏览器回归（`node serve.js` + 浏览器）**
+- [x] **Step 5: 浏览器回归（`node serve.js` + 浏览器）**
 
 Run: `node serve.js`（后台启动），打开 `http://localhost:5173`。
 
@@ -1972,7 +1972,7 @@ Run: `node serve.js`（后台启动），打开 `http://localhost:5173`。
 5. 导入一个把 `manifest.json` 删掉的坏包 → 弹窗红字「作品包缺少 manifest.json。」，作品库无新增。
 6. 浏览器控制台无错误、无 404。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add scripts/modals.js scripts/main.js styles/main.css
@@ -1993,11 +1993,11 @@ git commit -m "feat(P0-2): 剧本库接入作品包导出按钮与 .mumu 导入�
 - Consumes: 无新代码接口。
 - Produces: 面向作者的《暮幕作品包说明书》；`README.md` 与 `AGENTS.md` 的目录结构、速查表、自检清单同步。
 
-- [ ] **Step 1: 写 `docs/mumu-package-spec.md`**
+- [x] **Step 1: 写 `docs/mumu-package-spec.md`**
 
 内容包含：作品包是什么、ZIP 内部结构（单章 / 整本两种布局）、manifest 字段表、schema 版本与迁移规则、如何写一个能被暮幕导入的剧本（DSL 速查）、许可证字段含义与二创规则、导出的文件命名与体积限额、常见报错与处理。字段表必须与 `scripts/package.js` 的 `makeManifest` 完全一致。
 
-- [ ] **Step 2: 更新 `README.md`**
+- [x] **Step 2: 更新 `README.md`**
 
 在目录结构里补三行：
 
@@ -2009,7 +2009,7 @@ git commit -m "feat(P0-2): 剧本库接入作品包导出按钮与 .mumu 导入�
 
 在「剧本格式速查」之后新增一节「作品包 .mumu」，说明：内置曲目卡有「导出整本」，章节行与独立卡有「导出」，导入支持 `.mumu`，包内结构为 `manifest.json + 剧本文本 + 可选封面`。
 
-- [ ] **Step 3: 更新 `AGENTS.md`**
+- [x] **Step 3: 更新 `AGENTS.md`**
 
 在「修改速查表」新增一行：
 
@@ -2020,15 +2020,15 @@ git commit -m "feat(P0-2): 剧本库接入作品包导出按钮与 .mumu 导入�
 在「交付前自检清单」新增一条：
 
 ```
-- [ ] 导出内置曲目为 .mumu → 再导入 → 可正常播放；坏包导入有中文报错且不污染作品库。
+- [x] 导出内置曲目为 .mumu → 再导入 → 可正常播放；坏包导入有中文报错且不污染作品库。
 ```
 
-- [ ] **Step 4: 全量单测**
+- [x] **Step 4: 全量单测**
 
 Run: `node --test`
 Expected: PASS —— 全部用例通过（原有 23 个 + 本计划新增用例）。
 
-- [ ] **Step 5: 全量浏览器回归**
+- [x] **Step 5: 全量浏览器回归**
 
 Run: `node serve.js`（后台），`http://localhost:5173`。逐条确认：
 
@@ -2039,14 +2039,14 @@ Run: `node serve.js`（后台），`http://localhost:5173`。逐条确认：
 - 弹窗：剧本库 / 存档 / 导入 / 玩法。
 - 控制台无错误、无 404。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add README.md AGENTS.md docs/mumu-package-spec.md
 git commit -m "docs(P0-2): 作品包说明书、README 与 AGENTS 速查表同步"
 ```
 
-- [ ] **Step 7: 回填计划表完成定义**
+- [x] **Step 7: 回填计划表完成定义**
 
 编辑 `docs/superpowers/specs/2026-11-23-mumu-local-creation-platform-roadmap.md` 的 P0-2 行，把「导出的包可在另一台浏览器导入并原样播放；schema 版本可迁移」勾选为已完成，并把状态改为「已完成」，追加一行变更记录：
 
@@ -2063,13 +2063,13 @@ git commit -m "docs(P0-2): 回填计划表完成定义与变更记录"
 
 ## 验收清单（全部任务完成后逐条核对）
 
-- [ ] `node --test` 全绿，且用例数 ≥ 44（原 23 + 新增）。
-- [ ] 单章包与整本包都能导出（浏览器下载 `.mumu`）并能导入播放。
-- [ ] 导入的包播放结果与导出前逐节点一致。
-- [ ] v1 manifest 迁移到 v2 有可执行实现与单测。
-- [ ] 坏包（缺 manifest / 缺章节 / 语法错 / 非 ZIP）都有中文报错，且不写入任何数据。
-- [ ] 与内置曲目同名时导入为新卡片，不覆盖内置剧本。
-- [ ] 既有十五章、存档、旧档兼容、文本导入、弹窗全部无回归，控制台无错误。
+- [x] `node --test` 全绿，且用例数 ≥ 44（原 23 + 新增）。
+- [x] 单章包与整本包都能导出（浏览器下载 `.mumu`）并能导入播放。
+- [x] 导入的包播放结果与导出前逐节点一致。
+- [x] v1 manifest 迁移到 v2 有可执行实现与单测。
+- [x] 坏包（缺 manifest / 缺章节 / 语法错 / 非 ZIP）都有中文报错，且不写入任何数据。
+- [x] 与内置曲目同名时导入为新卡片，不覆盖内置剧本。
+- [x] 既有十五章、存档、旧档兼容、文本导入、弹窗全部无回归，控制台无错误。
 
 ## 风险与预案
 

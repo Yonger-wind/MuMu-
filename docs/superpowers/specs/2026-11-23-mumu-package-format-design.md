@@ -229,6 +229,23 @@ export const MIGRATIONS = {
 
 导入的作品**绝不覆盖内置剧本**：内置 id 一律为 `builtin_*`。若包内作品 id 与内置 id 相同，一律加 `user:` 前缀作为新 id 落库；只有当 id 与**本地已导入**的作品相同时，才视为更新并覆盖。
 
+实现上，`importPackage()` 返回一个 `conflicts` 结构，UI 据此选提示文案：
+
+```js
+conflicts: {
+  seriesAction: 'update' | 'renamed' | 'new',   // 整本包才有意义；单章包恒为 'new'
+  seriesRenamed: boolean,
+  seriesTitle: string,                            // 冲突时曲目卡实际使用的标题
+  workActions: ['update' | 'renamed' | 'new', …], // 与 works 同序
+  renamed: number, updated: number, newCount: number,
+}
+```
+
+- `seriesAction === 'renamed'`（曲目 id 被加 `user:` 前缀）时，曲目卡标题变成
+  `<原标题>（导入）`，并写进每一章的 `seriesTitle` 与返回值的 `seriesTitle` / `title`。
+- 混合情况按 `renamed > updated > new` 取最显著的那一条文案；没有任何冲突时是
+  「已导入《xxx》，共 N 章」。
+
 ### 5.4 本地作品记录结构
 
 在既有解析结果（`title / summary / author / characters / nodes / labels / cover`）上追加：
@@ -300,6 +317,7 @@ export const MIGRATIONS = {
 | 环境不支持 deflate-raw | 「当前浏览器不支持解压 zip，请升级到较新的浏览器，或直接导入 .txt 文件。」 |
 | 内容损坏 | 「压缩包内容已损坏，请重新导出后再试。」 |
 | 不支持的压缩方式 | 「压缩包使用了不支持的压缩方式。」 |
+| 解压后体积超过 64MB | 「压缩包解压后的内容超过 64MB，请缩减内容后再导入。」（作品包导入路径收敛成「作品包解压后的内容超过 64MB，请缩减内容后再导入。」） |
 
 **警告（warnings，不等于失败）**：`exportPackage()` 与 `importPackage()` 都返回
 `warnings: string[]`，UI 以 toast 逐条提示，不静默吞掉。
