@@ -35,7 +35,8 @@
   --mumu-radius-lg: 16px;
   --mumu-radius-pill: 999px;
 
-  /* 层级：对齐 main.css 现有档位（modal-mask 60 / boot 90 / toast 100） */
+  /* 层级：对齐 main.css 现有档位（modal-mask 60 / boot 90 / toast 100）；
+     overlay 在 modal 之上、boot 与 toast 之下（详见 docs/extension-contracts.md） */
   --mumu-z-modal: 60;
   --mumu-z-overlay: 70;
   --mumu-z-boot: 90;

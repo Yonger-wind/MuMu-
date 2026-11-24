@@ -158,11 +158,77 @@ test('扩展样式：只出现在 .mumu-* 命名空间', () => {
   }
 });
 
-test('运行时隔离：除 cards/ 自身外没有模块引用 cards/loader', () => {
+test('运行时隔离：除 cards/ 自身外没有模块引用 cards/loader（含 index.html）', () => {
   const files = readdirSync(`${ROOT}scripts`, { recursive: true })
     .filter((f) => typeof f === 'string' && f.endsWith('.js'))
     .map((f) => f.replace(/\\/g, '/'))
     .filter((f) => !f.startsWith('cards/'));
   const offenders = files.filter((f) => readFileSync(`${ROOT}scripts/${f}`, 'utf8').includes('cards/loader'));
   assert.deepEqual(offenders, []);
+  // 页面本身也不得直接接线 cards 加载器（最容易发生的误接入方式）。
+  const html = readFileSync(`${ROOT}index.html`, 'utf8');
+  assert.ok(!html.includes('cards/loader'), 'index.html 不应引用 cards/loader');
+});
+
+test('令牌：z 序关系 modal < overlay < boot < toast', () => {
+  const css = readFileSync(`${ROOT}styles/tokens.css`, 'utf8');
+  const readZ = (name) => {
+    const m = new RegExp(`--mumu-z-${name}\\s*:\\s*(\\d+)\\s*;`).exec(css);
+    assert.ok(m, `缺少 --mumu-z-${name}`);
+    return Number(m[1]);
+  };
+  const z = { modal: readZ('modal'), overlay: readZ('overlay'), boot: readZ('boot'), toast: readZ('toast') };
+  assert.ok(z.modal < z.overlay, `modal(${z.modal}) 应低于 overlay(${z.overlay})`);
+  assert.ok(z.overlay < z.boot, `overlay(${z.overlay}) 应低于 boot(${z.boot})`);
+  assert.ok(z.boot < z.toast, `boot(${z.boot}) 应低于 toast(${z.toast})`);
+});
+
+test('index.html：#ui-layer 是带 mumu-ui-layer 类的空层且在 #modal-root 之前', () => {
+  const html = readFileSync(`${ROOT}index.html`, 'utf8');
+  const tag = /<div id="ui-layer"([^>]*)><\/div>/.exec(html);
+  assert.ok(tag, '#ui-layer 应为 <div id="ui-layer" …></div> 形式的空元素');
+  assert.match(tag[1], /class="mumu-ui-layer"/, '#ui-layer 必须带 class="mumu-ui-layer"');
+  assert.match(tag[1], /data-slot="overlay"/, '#ui-layer 必须带 data-slot="overlay"');
+  const layerAt = html.indexOf('id="ui-layer"');
+  const modalAt = html.indexOf('id="modal-root"');
+  assert.ok(layerAt >= 0 && modalAt >= 0, '缺少 #ui-layer 或 #modal-root');
+  assert.ok(layerAt < modalAt, '#ui-layer 必须在 #modal-root 之前');
+});
+
+test('index.html：样式链接恰为 main → tokens → extensions 三条', () => {
+  const html = readFileSync(`${ROOT}index.html`, 'utf8');
+  const links = [...html.matchAll(/href="\.\/styles\/([\w-]+\.css)"/g)].map((m) => m[1]);
+  assert.deepEqual(links, ['main.css', 'tokens.css', 'extensions.css']);
+});
+
+test('令牌：12 个颜色 / 字体令牌齐全且兜底非空', () => {
+  const css = readFileSync(`${ROOT}styles/tokens.css`, 'utf8');
+  const colors = ['ink', 'cream', 'amber', 'rose', 'plum', 'dusk', 'night', 'glass', 'glass-border', 'text-soft'];
+  const fonts = ['serif', 'sans'];
+  const names = [
+    ...colors.map((n) => `--mumu-color-${n}`),
+    ...fonts.map((n) => `--mumu-font-${n}`),
+  ];
+  for (const name of names) {
+    const m = new RegExp(`${name}\\s*:\\s*var\\(([^;]*)\\);`).exec(css);
+    assert.ok(m, `缺少令牌 ${name}`);
+    const body = m[1];
+    const commaAt = body.indexOf(',');
+    assert.ok(commaAt >= 0, `${name} 应写成 var(--x, 兜底) 形式`);
+    const fallback = body.slice(commaAt + 1).replace(/\)+$/, '').trim();
+    assert.ok(fallback.length > 0, `${name} 的 var() 兜底不能为空`);
+  }
+});
+
+test('悬浮层：定位与层级声明齐全', () => {
+  const css = readFileSync(`${ROOT}styles/extensions.css`, 'utf8');
+  const block = /\.mumu-ui-layer\s*\{([^}]*)\}/.exec(css);
+  assert.ok(block, '缺少 .mumu-ui-layer 规则');
+  assert.match(block[1], /position:\s*fixed\s*;/, '悬浮层必须是 position: fixed');
+  assert.match(block[1], /inset:\s*0\s*;/, '悬浮层必须铺满视口（inset: 0）');
+  assert.match(
+    block[1],
+    /z-index:\s*var\(--mumu-z-overlay,\s*70\)\s*;/,
+    '悬浮层层级必须取 --mumu-z-overlay 并带 70 兜底'
+  );
 });
