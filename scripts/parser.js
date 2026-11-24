@@ -208,6 +208,18 @@ export function countChars(text) {
 
 function fail(msg) { const e = new Error(msg); e.userFacing = true; return e; }
 
+/**
+ * 是否是「角色定义行」：名字 | 性别 | 发型 | 衣色 | 模型
+ * 三个条件：含 |、不是舞台指示（【…】）、第一个 | 之前的那段不含冒号。
+ * 最后一条是关键——角色名不含冒号，而台词行「阿蓝：这个 | 那个」的前半段含冒号，
+ * 不能被当成角色定义行，否则台词会被吞掉并造出幽灵角色。
+ */
+function isCharRow(line) {
+  if (!line.includes('|') || line.startsWith('【')) return false;
+  const head = line.split('|')[0];
+  return !head.includes('：') && !head.includes(':');
+}
+
 /* ---------------- 文本格式 ---------------- */
 function compileText(text, fileName) {
   const lines = text.split('\n');
@@ -242,12 +254,17 @@ function compileText(text, fileName) {
     if (/^(?:#\s*)?角色[:：]?\s*$/.test(line)) { inCharBlock = true; continue; }
 
     // 角色定义：名字 | 性别 | 发型 | 衣色 | 模型（第五列可省略）
-    if (inCharBlock && line.includes('|') && !line.startsWith('【')) {
+    // 判定不能只看「含 |」：台词行（如「阿蓝：这个 | 那个」）也会含 |，
+    // 若被当成角色定义行，该句台词会凭空消失并造出名为「阿蓝：这个」的幽灵角色。
+    // 角色名里不会有冒号，所以第一个 | 之前的那段含冒号 → 判定为台词行，不进角色块。
+    if (inCharBlock && isCharRow(line)) {
       const parts = line.split('|').map((s) => s.trim());
       if (parts[0]) characters.set(parts[0], makeChar(parts[0], parts[1], parts[2], parts[3], parts[4]));
       continue;
     }
-    if (inCharBlock && !line.includes('|')) inCharBlock = false;
+    // 角色块遇到任何非角色行都结束（含 | 的台词行、舞台指示行都算），
+    // 否则角色块之后的第一句台词会被继续当成角色行
+    if (inCharBlock) inCharBlock = false;
 
     // 场景切换：【场景：教室 | 黄昏】 / 【场景：教室｜黄昏｜特写】
     if ((m = line.match(/^【\s*(?:场景|分镜)[:：]\s*(.+?)\s*】$/))) {

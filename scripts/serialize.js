@@ -8,6 +8,8 @@ import { SCENES, TIMES, CAMS, POSES, ACTS, VIEWS, MODELS } from './parser.js';
 const GENDER = { f: '女', m: '男' };
 const HAIR = { long: '长发', short: '短发' };
 
+function fail(msg) { const e = new Error(msg); e.userFacing = true; return e; }
+
 function labelOf(table, key, fallback = '') {
   if (!key) return fallback;
   return table[key] ? table[key].label : fallback;
@@ -29,14 +31,18 @@ export function serializeScript(script) {
     lines.push('角色：');
     for (const c of chars) {
       const model = c.model && MODELS[c.model] ? MODELS[c.model].label : '';
-      const parts = [
+      const cells = [
         c.name || '',
         GENDER[c.gender] || '',
         HAIR[c.hairHint] || '',
         c.clothColor || '',
         model,
       ];
-      lines.push(parts.join(' | '));
+      // 去掉尾部空列，导出文本更干净；只去尾部，避免打乱「性别/发型/衣色/模型」的位置对应。
+      // 只剩名字时保留「名字 |」的分隔形式：解析器靠 | 认出角色行，写成「名字」会被当成台词/旁白。
+      while (cells.length > 1 && !cells[cells.length - 1]) cells.pop();
+      if (cells.length === 1) cells.push('');
+      lines.push(cells.join(' | ').replace(/\s+$/, ''));
     }
   }
 
@@ -90,7 +96,8 @@ export function serializeScript(script) {
         lines.push(n.ending ? `【结束：${n.ending}】` : '【结束】');
         break;
       default:
-        break;
+        // 将来解析器若新增节点类型，这里必须报错而不是静默丢弃
+        throw fail(`未知的节点类型“${n && n.t}”，无法导出为剧本文本。`);
     }
   });
 
