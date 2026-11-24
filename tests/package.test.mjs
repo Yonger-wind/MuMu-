@@ -1119,6 +1119,21 @@ test('B1：曲目 id 撞名且章节 id 撞名时曲目与章节都改名，本�
   assert.equal(res.works[0].series, 'user:s1');
 });
 
+test('B1：本地只有同前缀的无关作品时曲目 id 不应被加 user: 前缀', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'series',
+    id: 's1', title: '曲目',
+    works: [{ id: 'zz_01', title: '曲目', file: 'chapters/01.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [
+    { name: 'chapters/01.txt', data: SAMPLE },
+  ]);
+  const res = await importPackage(ab(bytes), { existing: [{ id: 's1_extra', series: 'other' }] });
+  assert.equal(res.seriesId, 's1');
+  assert.equal(res.works[0].id, 'zz_01');
+});
+
 test('B1：单章作品的 id 与别的曲目下的本地作品撞名时改名', async () => {
   const manifest = {
     format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',

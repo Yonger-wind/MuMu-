@@ -539,12 +539,19 @@ export async function importPackage(buffer, opts = {}) {
   /** 曲目归属桶：undefined / null / '' 视为同一个「无曲目」桶 */
   const seriesBucket = (v) => (typeof v === 'string' && v) ? v : null;
 
-  /** 原始曲目 id 是否已被本地占用（含章节 id 形如 <曲目id>_<序号> 的情况） */
+  /** 原始曲目 id 是否已被本地占用。
+   *  判定依据是「曲目槽位真的被占」：本地已有同 id 的曲目，或包内某章的 id 在本地存在
+   *  且归属的是别的曲目。刻意不采用「本地 id 形如 <曲目id>_<序号>」的前缀启发式——
+   *  那种写法会让只是恰好同前缀的本地作品平白多出一个 user: 前缀。 */
   const seriesOccupied = (sid) => {
     if (!sid) return false;
     if (takenSeries.has(sid)) return true;
     for (const id of localIds) {
-      if (id === sid || id.startsWith(`${sid}_`)) return true;
+      if (id === sid) return true;
+    }
+    for (const w of manifest.works) {
+      const loc = localById.get(w.id);
+      if (loc && seriesBucket(loc.series) !== sid) return true;
     }
     return false;
   };
