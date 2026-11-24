@@ -32,6 +32,63 @@ function fakeRoot(map) {
   };
 }
 
+/* ---------------- extensions.css 命名空间校验（纯函数，便于自测） ---------------- */
+
+/** 返回与 css[i]（'{'）配对的那个 '}' 的下标；不配对返回 -1。 */
+function matchingBrace(css, i) {
+  let depth = 0;
+  for (let j = i; j < css.length; j += 1) {
+    if (css[j] === '{') depth += 1;
+    else if (css[j] === '}') {
+      depth -= 1;
+      if (depth === 0) return j;
+    }
+  }
+  return -1;
+}
+
+/**
+ * 收集 CSS 里所有「不以 .mumu- 开头」的选择器片段。
+ * 规则：先剥注释；以 `@` 开头的块是 at-rule（@media / @supports / @keyframes…），
+ * 其花括号内部按同样规则再校验一层（一层足够覆盖 media/keyframes/supports）；
+ * `@keyframes` 内部的 `from` / `to` / `0%` 是帧标签不是选择器，整块跳过。
+ */
+function collectBadSelectors(css, out = []) {
+  const src = String(css).replace(/\/\*[\s\S]*?\*\//g, '');
+  let prelude = '';
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    if (ch === '}') {
+      prelude = ''; // 顶层多余的右括号：丢弃累积，不当作选择器
+      continue;
+    }
+    if (ch !== '{') {
+      prelude += ch;
+      continue;
+    }
+    const selector = prelude.trim();
+    prelude = '';
+    const end = matchingBrace(src, i);
+    const body = src.slice(i + 1, end < 0 ? src.length : end);
+    if (selector.startsWith('@')) {
+      const at = selector.split(/[\s(]/)[0].toLowerCase();
+      const isKeyframes = at === '@keyframes' || at === '@-webkit-keyframes';
+      if (!isKeyframes) collectBadSelectors(body, out);
+    } else {
+      for (const one of selector.split(',')) {
+        const s = one.trim();
+        if (s && !s.startsWith('.mumu-')) out.push(s);
+      }
+    }
+    if (end < 0) break;
+    i = end;
+  }
+  return out;
+}
+
+/** 未来图鉴容器（P4-5）是 loader 的唯一预期消费者；约定路径如下，当前均不存在。 */
+const ALLOWED_LOADER_CONSUMERS = ['gallery.js', 'ui/gallery.js'];
+
 test('槽位：名单冻结且为四个命名槽', () => {
   assert.ok(Object.isFrozen(SLOT_NAMES));
   assert.deepEqual(SLOT_NAMES, ['home', 'stage', 'modal', 'overlay']);
@@ -146,25 +203,43 @@ test('悬浮层：空层不拦截点击，子元素默认恢复可交互', () =>
 
 test('扩展样式：只出现在 .mumu-* 命名空间', () => {
   const css = readFileSync(`${ROOT}styles/extensions.css`, 'utf8');
-  const selectors = css
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('}')
-    .map((chunk) => chunk.split('{')[0].trim())
-    .filter(Boolean);
-  for (const selector of selectors) {
-    for (const one of selector.split(',')) {
-      assert.match(one.trim(), /^\.mumu-/, `越界选择器：${one.trim()}`);
-    }
-  }
+  const bad = collectBadSelectors(css);
+  assert.deepEqual(bad, [], `越界选择器：${bad.join(' / ')}`);
 });
 
-test('运行时隔离：除 cards/ 自身外没有模块引用 cards/loader（含 index.html）', () => {
+test('扩展样式校验器自测：@media / @keyframes 包装不误判越界', () => {
+  assert.deepEqual(
+    collectBadSelectors('@media (max-width: 600px) { .mumu-panel { color: red; } }'),
+    [],
+    '@media 内的 .mumu-* 规则不应判为越界'
+  );
+  assert.deepEqual(
+    collectBadSelectors('@keyframes mumu-fade { from { opacity: 0; } to { opacity: 1; } }'),
+    [],
+    '@keyframes 的 from / to 帧标签不应判为越界'
+  );
+});
+
+test('扩展样式校验器自测：顶层与 @media 内的越界选择器都能抓到', () => {
+  assert.deepEqual(collectBadSelectors('.other { color: red; }'), ['.other']);
+  assert.deepEqual(collectBadSelectors('@media x { .other { color: red; } }'), ['.other']);
+});
+
+test('运行时隔离：除 cards/ 自身与白名单外没有模块引用 cards/loader（含 index.html）', () => {
   const files = readdirSync(`${ROOT}scripts`, { recursive: true })
     .filter((f) => typeof f === 'string' && f.endsWith('.js'))
     .map((f) => f.replace(/\\/g, '/'))
-    .filter((f) => !f.startsWith('cards/'));
+    .filter((f) => !f.startsWith('cards/'))
+    // 白名单只放未来图鉴容器（P4-5）；其余任何引用都要先移除，而不是放宽这条护栏。
+    .filter((f) => !ALLOWED_LOADER_CONSUMERS.includes(f));
   const offenders = files.filter((f) => readFileSync(`${ROOT}scripts/${f}`, 'utf8').includes('cards/loader'));
-  assert.deepEqual(offenders, []);
+  assert.deepEqual(
+    offenders,
+    [],
+    `这些模块引用了 cards/loader：${offenders.join(' / ')}。` +
+      '若非 P4-5 图鉴接入，请移除对该模块的引用；' +
+      '若是图鉴接入，请把模块加入 ALLOWED_LOADER_CONSUMERS。'
+  );
   // 页面本身也不得直接接线 cards 加载器（最容易发生的误接入方式）。
   const html = readFileSync(`${ROOT}index.html`, 'utf8');
   assert.ok(!html.includes('cards/loader'), 'index.html 不应引用 cards/loader');

@@ -106,7 +106,9 @@ API：
 
 ```js
 export function parseCardManifest(input);   // → 校验后的 entries[]；任何问题抛中文 Error（带第 N 张卡的定位）
-export async function applyCardManifest(manifest, { loadModule, registry = cardInspections });
+export async function applyCardManifest(manifest, opts = {});  // opts = { loadModule?, registry? }
+// 注入按「键是否存在」判定（hasOwnProperty）：不写该键 → 用默认实现（动态 import / 默认注册表 cardInspections）；
+// 写了该键（哪怕 null / 0 / false）→ 按给定值使用，不合法立刻抛中文错，绝不静默回落默认。
 // 逐条 await loadModule(entry.module)：默认实现按站点根解析（new URL(path, document.baseURI)）
 // 后动态 import，避免相对 loader.js 解析；取模块的具名导出 inspect 并注册；
 // 模块缺少 inspect → 中文 Error；返回已注册的 key 数组

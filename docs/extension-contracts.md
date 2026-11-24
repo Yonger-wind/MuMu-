@@ -141,7 +141,25 @@ import {
 - 归一后的条目只有四个可能的键：`key`、`module`、以及可选的 `title`、`image`。
 - 返回顺序 = 清单顺序；重复 `key` 报错并指出是第几张。
 
-### 3.3 路径怎么解析
+### 3.3 清单校验文案（逐字）
+
+所有清单问题都由 `parseCardManifest` 抛出，统一前缀 `卡牌清单无效：`，共 7 条：
+
+| 触发情形 | 完整文案 |
+| --- | --- |
+| 入参不是普通对象（`null` / 数组 / 标量） | `卡牌清单无效：清单必须是一个对象。` |
+| `version` 不是数字 `1` | `卡牌清单无效：不支持的清单版本「<v>」；当前只支持 1。` |
+| `cards` 不是数组（含缺失） | `卡牌清单无效：cards 必须是数组。` |
+| 第 N 项不是对象（`null` / 数组 / 标量） | `卡牌清单无效：第 N 张卡不是对象。` |
+| `key` 未通过 `validateCardKey` | `卡牌清单无效：第 N 张卡的 key 不合法：<原因>`（`<原因>` 即 §1.3 的中文报错正文） |
+| `module` 缺失 / `trim()` 后为空 / 不以 `.js` 结尾 | `卡牌清单无效：第 N 张卡（<key>）的 module 必须是以 .js 结尾的非空路径。` |
+| `key` 与前面某条重复 | `卡牌清单无效：第 N 张卡的 key「<key>」与前面的条目重复。` |
+
+`N` 从 1 开始（「第 1 张卡」）。条目级问题在第 N 项被检查到时立刻抛出，
+因此一张卡可能同时有多个问题，但一次只报最靠前的那条。同一张卡内的检查顺序是：
+是否对象 → `key` 合法性 → `key` 是否重复 → `module` 合法性 → 归一 `title` / `image`。
+
+### 3.4 路径怎么解析
 
 `module` 由加载器解析，`image` 只是字符串路径、约定用同一套规则（消费方按站点根取用）：
 
@@ -152,7 +170,7 @@ import {
 所以清单里写 `scripts/cards/example.js`、`assets/cards/example.png` 这种「从站点根算起」的路径，
 不要写 `./example.js` 这种相对 `loader.js` 的路径，也不要写绝对 URL。
 
-### 3.4 可抄的示例模块
+### 3.5 可抄的示例模块
 
 ```js
 // scripts/cards/example.js —— 一张卡的检视实现（示例，不参与运行时）
@@ -176,7 +194,7 @@ export function inspect(host, { cardKey, card }) {
   `scripts/cards/example.js` 引用 `scripts/modals.js` 要写 `../modals.js`；
 - 检视模块不要 `import` `loader.js` 去反向触发加载（清单加载由调用方统一负责）。
 
-### 3.5 仓库清单现状：空清单
+### 3.6 仓库清单现状：空清单
 
 `assets/cards/manifest.json` 当前就是：
 
@@ -258,9 +276,11 @@ import {
 ### 4.5 它默认不被任何页面加载
 
 `main.js` 与 `index.html` 都不引用 `cards/loader*`：**没有图鉴容器时清单不加载，运行时零开销**。
-`tests/ui-slots.test.mjs` 有一条测试锁住这件事（除 `scripts/cards/` 自身外，任何模块引用
-`cards/loader` 都会失败）。当 P4 真的做出图鉴容器时，由那个容器模块调用
-`loadCardManifest('./assets/cards/manifest.json')`，而不是在 `main.js` 里全局加载。
+`tests/ui-slots.test.mjs` 有一条测试锁住这件事（除 `scripts/cards/` 自身，以及白名单
+`ALLOWED_LOADER_CONSUMERS = ['gallery.js', 'ui/gallery.js']` 这两个尚未存在的图鉴容器约定路径外，
+任何模块引用 `cards/loader` 都会失败）。当 P4 真的做出图鉴容器时，由那个容器模块调用
+`loadCardManifest('./assets/cards/manifest.json')`，而不是在 `main.js` 里全局加载；
+同时要把它的路径登记进上面那个白名单，否则测试会拦下它。
 
 ---
 
@@ -332,6 +352,35 @@ mountTo('overlay', panel);
 
 `mountTo` 不负责不重复挂载：调用两次会挂两个节点。需要「只挂一次」请在模块里自己记状态，
 或先 `remove()` 再挂。
+
+### 5.4 新 UI 模块如何被加载（没有自动发现）
+
+**当前没有任何自动发现机制**：放进 `scripts/ui/` 的文件不会被自动执行，也没有目录扫描或约定式入口。
+新增模块必须由**页面或某个已被加载的模块显式 `import`**，两种写法任选其一：
+
+1. **在 `index.html` 的 module 脚本（或其入口模块）里加一行 import**，让该文件在加载时自行 `mountTo`：
+
+   ```js
+   // index.html 的 module 脚本 / 入口模块里
+   import './scripts/ui/<name>.js';   // 该文件在 mount 时自己调用 mountTo
+   ```
+
+   `index.html` 当前只有一个 module 入口 `<script type="module" src="./scripts/main.js">`，
+   所以这一行通常写在 `main.js` 的 import 区，或加在 `index.html` 的内联 module 里（路径按站点根写）。
+
+2. **由一个已被加载的模块 import 它**（例如你的 `scripts/ui/panel.js` 里 `import './gallery-panel.js';`），
+   路径按**引用方自身位置**解析。
+
+两条约束：
+
+- 模块的顶层副作用就是「建节点 + `mountTo`」，不要依赖别处调用它的 `init()`——没人会调；
+- 只允许挂 §5.1 表格里的四个槽名，挂 `stage` 记得 `stopPropagation()`，挂 `modal` 要接受被清空。
+
+**P4-5 首次接入图鉴时的约定**：图鉴容器模块（约定路径 `scripts/ui/gallery.js` 或 `scripts/gallery.js`）
+应成为 `scripts/cards/loader.js` 的**第一个运行时消费者**——由它自己调
+`loadCardManifest('./assets/cards/manifest.json')`，而不是在 `main.js` 里全局加载；
+同时把该模块路径登记进 `tests/ui-slots.test.mjs` 的 `ALLOWED_LOADER_CONSUMERS`，
+否则「除 cards/ 外无人引用 loader」那条护栏会失败。
 
 ---
 
@@ -426,7 +475,8 @@ main.css → tokens.css → extensions.css
 不要绕过它。
 
 `styles/extensions.css` 只允许 `.mumu-*` 命名空间下的规则，不得覆盖 `main.css` 的既有类
-（另有一条测试逐条校验选择器）。
+（另有一条测试逐条校验选择器）。校验会先剥掉注释；`@media` / `@supports` 这类 at-rule 的花括号内部
+按同一规则继续校验，`@keyframes` 里的 `from` / `to` / `0%` 是帧标签、不算选择器，整块跳过。
 
 ---
 
@@ -471,7 +521,7 @@ main.css → tokens.css → extensions.css
 新增任何上述文件后，在仓库根跑：
 
 ```bash
-node --test tests/*.test.mjs   # 分支全量用例；当前基线 299 个全通过
+node --test tests/*.test.mjs   # 分支全量用例；当前基线 302 个全通过
 node tools/lint.js --builtin   # 期望：通过：内置 15 章 未发现问题。
 ```
 

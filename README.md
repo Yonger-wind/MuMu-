@@ -58,7 +58,8 @@ UI = 新增模块 + `mountTo('<slot>', node)`；视觉只使用 `styles/tokens.c
 index.html          首页（动态夕阳 + 塔）与剧情舞台两个屏幕
 starry-night.html   独立《星月夜》氛围页（单文件视觉实验，不参与主流程）
 serve.js            零依赖本地静态服务器（node serve.js）
-styles/main.css     全部样式（保留现有视觉，勿整体重构）
+styles/main.css     基础样式：页面布局、舞台、立绘框与弹窗（保留现有视觉，勿整体重构；
+                    令牌与扩展样式见下两行）
 styles/tokens.css   设计令牌语义层（--mumu-*，带兜底；第三方 UI 只依赖这里）
 styles/extensions.css 扩展样式（只含 .mumu-* 命名空间；悬浮层挂载宿主）
 assets/models/      二十八张半身立绘（透明 PNG）：七张现代人物 + 六张国风人物 +

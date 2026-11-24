@@ -70,6 +70,8 @@ test('注册表：工厂实例互相隔离', () => {
 });
 
 test('注册表：默认实例与便捷函数共用一份', () => {
+  // 注意：'default-instance' 会常驻默认注册表，且注册表没有 unregister，无法撤销。
+  // 后续若新增「默认表为空」这类断言，必须绕开该键（或改用 createInspectionRegistry() 工厂实例）。
   const fn = () => {};
   assert.equal(registerCardInspection('default-instance', fn), fn);
   assert.equal(getCardInspection('default-instance'), fn);
@@ -278,6 +280,21 @@ test('清单加载：网络异常 / HTTP 非 2xx / 坏 JSON 均中文报错', as
       json: async () => { throw new SyntaxError('bad json'); },
     });
     await assert.rejects(loadCardManifest('./broken.json'), /无法解析为 JSON/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('清单加载：成功路径返回已注册的 key 数组', async () => {
+  // 现有用例只覆盖 fetch 的三条失败分支，这里补成功路径（空清单 → 不加载任何模块）。
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: 1, cards: [] }),
+    });
+    assert.deepEqual(await loadCardManifest('./empty.json'), []);
   } finally {
     globalThis.fetch = originalFetch;
   }
