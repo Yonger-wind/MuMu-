@@ -156,7 +156,7 @@ $('stage-save').addEventListener('click', () => {
 
 /* ---------------- 首页按钮 ---------------- */
 /** 同一包内的章序必须连续且唯一：优先用作品自带章序，缺失或非法时按顺序补位；
- *  只有「多作品 + 章序重复」才整体重排，免得 README 里出现「2. 甲 / 2. 乙」；
+ *  多作品时只要章序不是 1..N（重复或有缺口）就整体重排，免得 README 里出现「2. 甲 / 2. 乙」或「1. 甲 / 3. 乙」；
  *  单作品（哪怕自带第二章的章序）保留它自己的章序。 */
 function chapterNosOf(works) {
   const nums = works.map((w, i) => {
@@ -164,8 +164,8 @@ function chapterNosOf(works) {
     return Number.isInteger(n) && n > 0 ? n : i + 1;
   });
   if (works.length < 2) return nums;
-  const duplicated = new Set(nums).size !== nums.length;
-  return duplicated ? works.map((_, i) => i + 1) : nums;
+  const contiguous = nums.every((n, i) => n === i + 1);
+  return contiguous ? nums : works.map((_, i) => i + 1);
 }
 
 /** 文件名安全化：去掉 Windows 非法字符与结尾的点/空格 */
@@ -175,15 +175,18 @@ function safeFileBase(name) {
   return s;
 }
 
+/** Windows 保留设备名（CON / PRN / AUX / NUL / COM1…）不能直接当文件名 */
+const RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+
 /** 单章导出：下载文件名带上章节标识，免得和整本包撞名（浏览器会存成「名字(1).mumu」）。
  *  只改文件名，包里的 title 仍是作品原标题（导入后的卡片标题不会被改写）。 */
 function workDownloadName(baseName, work, chapterNo) {
   const base = safeFileBase(baseName);
   const rawTag = String((work && work.tag) || '').trim();
-  const tag = rawTag.replace(/[\\/:*?"<>|]/g, '_') || `第${chapterNo || 1}章`;
-  if (!base) return `${tag}.mumu`;
-  if (tag === base) return `${base}.mumu`;
-  return `${base} · ${tag}.mumu`;
+  const tag = rawTag.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40).replace(/[. ]+$/g, '')
+    || `第${chapterNo || 1}章`;
+  const stem = base ? (tag === base ? base : `${base} · ${tag}`) : tag;
+  return `${RESERVED_NAME.test(stem) ? '_' + stem : stem}.mumu`;
 }
 
 /** 导出作品包：kind='work' 导单章，kind='series' 导整本。 */
