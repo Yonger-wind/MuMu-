@@ -208,6 +208,59 @@ export function countChars(text) {
 
 function fail(msg) { const e = new Error(msg); e.userFacing = true; return e; }
 
+/* ---------- 选择有后果：选项旗标与条件行 ---------- */
+/** 旗标键名：字母开头，可含数字与下划线，最长 32 个字符 */
+export const FLAG_KEY_RE = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
+/** 条件行：`?? key | 内容` / `?? !key | 内容`（只按第一个 | 切分） */
+export const COND_RE = /^\?\?\s*(!?)\s*([^\s|]+)\s*\|([\s\S]*)$/;
+
+/**
+ * 把选项文字末尾的 `@a,b` 注解拆出来（纯函数，lint 复用同一口径）。
+ * 返回 { text, set, bad }：bad 是第一个非法键名（没有则 ''，`'@'` 表示注解为空）。
+ *
+ * 判定注解的边界：
+ * - `@` 前必须是行首或非「字母/数字/点/下划线/连字符/@」的字符，
+ *   所以 `a@b`（邮箱形态）与「发邮件到 a@b.com 询问」不会被当成注解；
+ * - 中文正文后不带空格的 `追问她@asked` 仍算注解；
+ * - 整段只有 `@a`（没有正文）时按普通文字处理，旧剧本零变化。
+ */
+export function splitOptionFlags(text) {
+  const raw = String(text == null ? '' : text);
+  if (/(^|[^A-Za-z0-9._@-])@$/.test(raw)) {
+    return { text: raw.replace(/\s*@$/, '').trim(), set: [], bad: '@' };
+  }
+  const m = raw.match(/(^|[^A-Za-z0-9._@-])@(\S+)$/);
+  if (!m) return { text: raw.trim(), set: [], bad: '' };
+  const at = raw.length - m[2].length - 1;
+  const head = raw.slice(0, at).trim();
+  if (!head) return { text: raw.trim(), set: [], bad: '' };
+  const keys = m[2].split(',').map((s) => s.trim()).filter(Boolean);
+  if (!keys.length) return { text: head, set: [], bad: '@' };
+  const bad = keys.find((k) => !FLAG_KEY_RE.test(k)) || '';
+  return { text: head, set: [...new Set(keys)], bad };
+}
+
+/** 拆条件行前缀；写法不对直接抛中文错误（带行号）。 */
+function takeCondPrefix(line, lineNo) {
+  const m = String(line).match(COND_RE);
+  if (!m) {
+    throw fail(`第 ${lineNo} 行：条件行写法不对，应为「?? 旗标 | 内容」或「?? !旗标 | 内容」。`);
+  }
+  const key = m[2].trim();
+  if (!FLAG_KEY_RE.test(key)) {
+    throw fail(`第 ${lineNo} 行：旗标名「${key}」不合法，只能用字母开头、字母/数字/下划线，最长 32 个字符。`);
+  }
+  const body = m[3].trim();
+  if (!body) throw fail(`第 ${lineNo} 行：条件行的「|」后面没有内容。`);
+  if (body.startsWith('??')) throw fail(`第 ${lineNo} 行：条件行不能再套一层条件行。`);
+  return { cond: { key, neg: m[1] === '!' }, body };
+}
+
+/** 条件用在不允许的行上：中文报错并列出允许范围。 */
+function condForbidden(lineNo, where) {
+  return fail(`第 ${lineNo} 行：条件行不能用在${where}上。允许条件的是台词/旁白与这些舞台指示：场景/分镜、镜头、姿态/情绪、动作、视角/机位、出场/登场、清场/空场/无人。`);
+}
+
 /**
  * 是否是「角色定义行」：名字 | 性别 | 发型 | 衣色 | 模型
  * 三个条件：含 |、不是舞台指示（【…】）、第一个 | 之前的那段不含冒号。
@@ -228,11 +281,19 @@ function compileText(text, fileName) {
   const nodes = [];
   const labels = {};
   let pendingChoices = null;
+  let pendingCond = null;
   let inCharBlock = false;
 
   const flushChoices = () => {
     if (pendingChoices && pendingChoices.options.length) nodes.push(pendingChoices);
     pendingChoices = null;
+  };
+
+  /** 入队节点；当前行带条件时把 cond 挂到节点上。 */
+  const emit = (node) => {
+    if (pendingCond) node.cond = pendingCond;
+    nodes.push(node);
+    return node;
   };
 
   const ensureChar = (name) => {
@@ -242,22 +303,44 @@ function compileText(text, fileName) {
   };
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+    let line = lines[i].trim();
     if (!line) continue;
     if (/^(\/\/|<!--)/.test(line)) continue;
 
+    pendingCond = null;
+    if (line.startsWith('??')) {
+      // 条件行不能出现在角色表里：作者的意图是“角色行”，不是台词
+      if (inCharBlock) throw condForbidden(i + 1, '角色表');
+      const parsed = takeCondPrefix(line, i + 1);
+      pendingCond = parsed.cond;
+      line = parsed.body;
+    }
+
     // 元信息
     let m;
-    if ((m = line.match(/^(?:#\s*)?标题[:：]\s*(.+)$/))) { meta.title = m[1].trim(); inCharBlock = false; continue; }
-    if ((m = line.match(/^(?:#\s*)?简介[:：]\s*(.+)$/))) { meta.summary = m[1].trim(); inCharBlock = false; continue; }
-    if ((m = line.match(/^(?:#\s*)?作者[:：]\s*(.+)$/))) { meta.author = m[1].trim(); inCharBlock = false; continue; }
-    if (/^(?:#\s*)?角色[:：]?\s*$/.test(line)) { inCharBlock = true; continue; }
+    if ((m = line.match(/^(?:#\s*)?标题[:：]\s*(.+)$/))) {
+      if (pendingCond) throw condForbidden(i + 1, '标题、简介或作者行');
+      meta.title = m[1].trim(); inCharBlock = false; continue;
+    }
+    if ((m = line.match(/^(?:#\s*)?简介[:：]\s*(.+)$/))) {
+      if (pendingCond) throw condForbidden(i + 1, '标题、简介或作者行');
+      meta.summary = m[1].trim(); inCharBlock = false; continue;
+    }
+    if ((m = line.match(/^(?:#\s*)?作者[:：]\s*(.+)$/))) {
+      if (pendingCond) throw condForbidden(i + 1, '标题、简介或作者行');
+      meta.author = m[1].trim(); inCharBlock = false; continue;
+    }
+    if (/^(?:#\s*)?角色[:：]?\s*$/.test(line)) {
+      if (pendingCond) throw condForbidden(i + 1, '角色表');
+      inCharBlock = true; continue;
+    }
 
     // 角色定义：名字 | 性别 | 发型 | 衣色 | 模型（第五列可省略）
     // 判定不能只看「含 |」：台词行（如「阿蓝：这个 | 那个」）也会含 |，
     // 若被当成角色定义行，该句台词会凭空消失并造出名为「阿蓝：这个」的幽灵角色。
     // 角色名里不会有冒号，所以第一个 | 之前的那段含冒号 → 判定为台词行，不进角色块。
     if (inCharBlock && isCharRow(line)) {
+      if (pendingCond) throw condForbidden(i + 1, '角色表');
       const parts = line.split('|').map((s) => s.trim());
       if (parts[0]) characters.set(parts[0], makeChar(parts[0], parts[1], parts[2], parts[3], parts[4]));
       continue;
@@ -277,28 +360,28 @@ function compileText(text, fileName) {
       }
       const time = matchKey(TIMES, parts[1], 'dusk');
       const cam = matchKey(CAMS, parts[2], 'mid');
-      nodes.push({ t: 'scene', scene, time, cam });
+      emit({ t: 'scene', scene, time, cam });
       continue;
     }
     // 单独指定镜头：【镜头：特写】
     if ((m = line.match(/^【\s*镜头[:：]\s*(.+?)\s*】$/))) {
       flushChoices();
-      nodes.push({ t: 'cam', cam: matchKey(CAMS, m[1], 'mid') });
+      emit({ t: 'cam', cam: matchKey(CAMS, m[1], 'mid') });
       continue;
     }
     // 舞台指示：【姿态：难过】 / 【姿态：林夏|难过】 / 【动作：坐下】 / 【视角：过肩】
     if ((m = line.match(/^【\s*(?:姿态|情绪)[:：]\s*(.+?)\s*】$/))) {
       const d = splitDir(m[1]);
-      nodes.push({ t: 'pose', who: d.who, pose: matchKey(POSES, d.val, 'neutral') });
+      emit({ t: 'pose', who: d.who, pose: matchKey(POSES, d.val, 'neutral') });
       continue;
     }
     if ((m = line.match(/^【\s*动作[:：]\s*(.+?)\s*】$/))) {
       const d = splitDir(m[1]);
-      nodes.push({ t: 'action', who: d.who, action: matchKey(ACTS, d.val, 'stand') });
+      emit({ t: 'action', who: d.who, action: matchKey(ACTS, d.val, 'stand') });
       continue;
     }
     if ((m = line.match(/^【\s*(?:视角|机位)[:：]\s*(.+?)\s*】$/))) {
-      nodes.push({ t: 'view', view: matchKey(VIEWS, m[1], 'normal') });
+      emit({ t: 'view', view: matchKey(VIEWS, m[1], 'normal') });
       continue;
     }
     // 出场：【出场：小悠真|小葵】让指定角色先站上舞台（不发言），
@@ -306,28 +389,44 @@ function compileText(text, fileName) {
     if ((m = line.match(/^【\s*(?:出场|登场)[:：]\s*(.+?)\s*】$/))) {
       flushChoices();
       const names = m[1].split(/[|｜、,，]/).map((s) => s.trim()).filter(Boolean);
-      nodes.push({ t: 'enter', names });
+      emit({ t: 'enter', names });
       continue;
     }
     // 结束 / 清场
-    if (/^【\s*(?:清场|空场|无人)\s*】$/.test(line)) { flushChoices(); nodes.push({ t: 'clear' }); continue; }
-    if ((m = line.match(/^【\s*(?:结束|完)\s*(?:[:：]\s*(.+?)\s*)?】$/))) { flushChoices(); nodes.push({ t: 'end', ending: (m[1] || '').trim() }); continue; }
+    if (/^【\s*(?:清场|空场|无人)\s*】$/.test(line)) { flushChoices(); emit({ t: 'clear' }); continue; }
+    if ((m = line.match(/^【\s*(?:结束|完)\s*(?:[:：]\s*(.+?)\s*)?】$/))) {
+      if (pendingCond) throw condForbidden(i + 1, '结束行');
+      flushChoices();
+      emit({ t: 'end', ending: (m[1] || '').trim() });
+      continue;
+    }
     // 标签 [xxx]
     if ((m = line.match(/^\[([^\]]+)\]$/))) {
+      if (pendingCond) throw condForbidden(i + 1, '标签行');
       flushChoices();
       labels[m[1].trim()] = nodes.length;
       continue;
     }
     // 跳转 -> xxx
     if ((m = line.match(/^->\s*(.+)$/))) {
+      if (pendingCond) throw condForbidden(i + 1, '跳转行');
       flushChoices();
-      nodes.push({ t: 'jump', to: m[1].trim() });
+      emit({ t: 'jump', to: m[1].trim() });
       continue;
     }
-    // 选项 > 文本 -> 标签
+    // 选项 > 文本 @flag_a,flag_b -> 标签
     if ((m = line.match(/^>\s*(.+?)\s*->\s*(.+)$/))) {
+      if (pendingCond) throw condForbidden(i + 1, '选项行');
+      const split = splitOptionFlags(m[1]);
+      if (split.bad) {
+        throw fail(split.bad === '@'
+          ? `第 ${i + 1} 行：选项末尾的「@」后面没有旗标名。`
+          : `第 ${i + 1} 行：选项旗标「${split.bad}」不合法，只能用字母开头、字母/数字/下划线，最长 32 个字符。`);
+      }
       if (!pendingChoices) pendingChoices = { t: 'choice', options: [] };
-      pendingChoices.options.push({ text: m[1].trim(), to: m[2].trim() });
+      const opt = { text: split.text, to: m[2].trim() };
+      if (split.set.length) opt.set = split.set;
+      pendingChoices.options.push(opt);
       continue;
     }
 
@@ -347,14 +446,14 @@ function compileText(text, fileName) {
         flushChoices();
         const who = m[1] === '旁白' ? '' : m[1];
         if (who) ensureChar(who);
-        nodes.push({ t: 'say', who, text: m[3].trim(), voice: voiceTag[1] });
+        emit({ t: 'say', who, text: m[3].trim(), voice: voiceTag[1] });
         continue;
       }
       const poseKey = matchKey(POSES, m[2], null);
       if (poseKey) {
         flushChoices();
-        if (m[1] === '旁白') nodes.push({ t: 'say', who: '', text: m[3].trim() });
-        else { ensureChar(m[1]); nodes.push({ t: 'say', who: m[1], text: m[3].trim(), pose: poseKey }); }
+        if (m[1] === '旁白') emit({ t: 'say', who: '', text: m[3].trim() });
+        else { ensureChar(m[1]); emit({ t: 'say', who: m[1], text: m[3].trim(), pose: poseKey }); }
         continue;
       }
       // 其他括号（轻声 / 无奈 / 迟疑……）只当作语气备注，不生成假角色
@@ -362,7 +461,7 @@ function compileText(text, fileName) {
       {
         const who = m[1] === '旁白' ? '' : m[1];
         if (who) ensureChar(who);
-        nodes.push({ t: 'say', who, text: m[3].trim(), note: m[2].trim() });
+        emit({ t: 'say', who, text: m[3].trim(), note: m[2].trim() });
       }
       continue;
     }
@@ -370,17 +469,17 @@ function compileText(text, fileName) {
       flushChoices();
       const name = m[1];
       if (name === '旁白') {
-        nodes.push({ t: 'say', who: '', text: m[2].trim() });
+        emit({ t: 'say', who: '', text: m[2].trim() });
       } else {
         ensureChar(name);
-        nodes.push({ t: 'say', who: name, text: m[2].trim() });
+        emit({ t: 'say', who: name, text: m[2].trim() });
       }
       continue;
     }
 
     // 其他：旁白
     flushChoices();
-    nodes.push({ t: 'say', who: '', text: line });
+    emit({ t: 'say', who: '', text: line });
   }
   flushChoices();
 

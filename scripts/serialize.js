@@ -56,44 +56,51 @@ export function serializeScript(script) {
   const nodes = script.nodes || [];
   nodes.forEach((n, i) => {
     for (const name of labelsAt.get(i) || []) lines.push(`[${name}]`);
+    /** 带条件的节点输出 ?? 前缀；标签行不加。 */
+    const emit = (text) => lines.push(
+      n.cond ? `?? ${n.cond.neg ? '!' : ''}${n.cond.key} | ${text}` : text,
+    );
     switch (n.t) {
       case 'scene':
-        lines.push(`【场景：${sceneLabel(n.scene)} | ${labelOf(TIMES, n.time, '黄昏')} | ${labelOf(CAMS, n.cam, '中景')}】`);
+        emit(`【场景：${sceneLabel(n.scene)} | ${labelOf(TIMES, n.time, '黄昏')} | ${labelOf(CAMS, n.cam, '中景')}】`);
         break;
       case 'cam':
-        lines.push(`【镜头：${labelOf(CAMS, n.cam, '中景')}】`);
+        emit(`【镜头：${labelOf(CAMS, n.cam, '中景')}】`);
         break;
       case 'pose':
-        lines.push(`【姿态：${n.who ? `${n.who}|` : ''}${labelOf(POSES, n.pose, '自然')}】`);
+        emit(`【姿态：${n.who ? `${n.who}|` : ''}${labelOf(POSES, n.pose, '自然')}】`);
         break;
       case 'action':
-        lines.push(`【动作：${n.who ? `${n.who}|` : ''}${labelOf(ACTS, n.action, '站立')}】`);
+        emit(`【动作：${n.who ? `${n.who}|` : ''}${labelOf(ACTS, n.action, '站立')}】`);
         break;
       case 'view':
-        lines.push(`【视角：${labelOf(VIEWS, n.view, '常规')}】`);
+        emit(`【视角：${labelOf(VIEWS, n.view, '常规')}】`);
         break;
       case 'enter':
-        lines.push(`【出场：${(n.names || []).join('|')}】`);
+        emit(`【出场：${(n.names || []).join('|')}】`);
         break;
       case 'clear':
-        lines.push('【清场】');
+        emit('【清场】');
         break;
       case 'say': {
         const who = n.who || '旁白';
-        if (n.pose) lines.push(`${who}（${labelOf(POSES, n.pose, '自然')}）：${n.text}`);
-        else if (n.voice) lines.push(`${who}（${n.voice}）：${n.text}`);
-        else if (n.note) lines.push(`${who}（${n.note}）：${n.text}`);
-        else lines.push(`${who}：${n.text}`);
+        if (n.pose) emit(`${who}（${labelOf(POSES, n.pose, '自然')}）：${n.text}`);
+        else if (n.voice) emit(`${who}（${n.voice}）：${n.text}`);
+        else if (n.note) emit(`${who}（${n.note}）：${n.text}`);
+        else emit(`${who}：${n.text}`);
         break;
       }
       case 'choice':
-        for (const o of n.options || []) lines.push(`> ${o.text} -> ${o.to}`);
+        for (const o of n.options || []) {
+          const flags = Array.isArray(o.set) && o.set.length ? ` @${o.set.join(',')}` : '';
+          emit(`> ${o.text}${flags} -> ${o.to}`);
+        }
         break;
       case 'jump':
-        lines.push(`-> ${n.to}`);
+        emit(`-> ${n.to}`);
         break;
       case 'end':
-        lines.push(n.ending ? `【结束：${n.ending}】` : '【结束】');
+        emit(n.ending ? `【结束：${n.ending}】` : '【结束】');
         break;
       default:
         // 将来解析器若新增节点类型，这里必须报错而不是静默丢弃
