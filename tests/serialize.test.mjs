@@ -171,6 +171,9 @@ const FULL_SAMPLE = `标题：全类型
 test('全部节点类型的往返一致', () => {
   const sc = parseScriptText(FULL_SAMPLE, 'full.txt');
   const again = parseScriptText(serializeScript(sc), 'full.txt');
+  // 显式锁定 11 种节点类型齐备：将来 parser 丢掉某种类型时本用例会失败，而不是静默通过
+  const TYPES = ['scene', 'cam', 'say', 'pose', 'action', 'view', 'enter', 'clear', 'choice', 'jump', 'end'];
+  assert.deepEqual([...new Set(sc.nodes.map((n) => n.t))].sort(), [...TYPES].sort());
   assert.deepEqual(again.nodes.map((n) => n.t), sc.nodes.map((n) => n.t));
   assert.deepEqual(again.nodes, sc.nodes);
   assert.deepEqual(again.labels, sc.labels);
