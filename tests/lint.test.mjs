@@ -27,6 +27,7 @@ test('matchTable 对陌生词返回 null', () => {
 test('matchTable 复刻解析器的最长子串口径：火夜 不能被 夜 抢先', () => {
   assert.equal(matchTable(TIMES, '火夜'), 'fire');
   assert.equal(matchTable(TIMES, '夜晚'), 'night');
+  assert.equal(matchTable(TIMES, '夜晚的教室'), 'night');   // 前缀口径：带修饰语也认得
 });
 
 test('resolveTable 复刻解析器口径：能说出解析器实际会当成什么', () => {
@@ -81,4 +82,24 @@ test('lintText 目前返回空 issue 列表（占位，Task 2 填充）', () => 
   const r = lintText('标题：x\n角色：\n阿蓝 | 男 | 短发 | 白 | 少年\n\n【场景：教室 | 黄昏 | 远景】\n阿蓝：你好。', 'x.txt');
   assert.deepEqual(r.issues, []);
   assert.equal(r.summary.errors, 0);
+});
+
+test('scanText 跳过注释行', () => {
+  const s = scanText('标题：x\n// 这是注释\n<!-- 这也是注释 -->\n甲：说话');
+  assert.equal(s.lines.filter((l) => l.kind === 'say').length, 1);
+});
+
+test('scanText 认得无冒号的舞台指示', () => {
+  const s = scanText('标题：x\n【结束】');
+  const dir = s.lines.find((l) => l.kind === 'dir');
+  assert.equal(dir.name, '结束');
+  assert.equal(dir.value, '');
+  assert.equal(s.sawEnd, true);
+});
+
+test('scanText 不拆舞台指示的值', () => {
+  const s = scanText('标题：x\n【场景：教室 | 黄昏 | 远景】');
+  const dir = s.lines.find((l) => l.kind === 'dir');
+  assert.equal(dir.value, '教室 | 黄昏 | 远景');
+  assert.equal(s.sawScene, true);
 });
