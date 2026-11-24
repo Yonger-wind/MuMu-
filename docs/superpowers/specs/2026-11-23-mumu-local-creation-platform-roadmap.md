@@ -1,6 +1,6 @@
 # 暮幕 MuMU · 本地创作平台推进计划表
 
-- 版本：v1.6
+- 版本：v1.7
 - 日期：2026-11-24
 - 状态：评审通过，执行中（P0-1、P0-2、P0-3、P0-4、P0-5 已完成；本表为后续唯一推进依据）
 - 适用范围：暮幕主仓库 `C:\Users\Wind\Desktop\Qoder`
@@ -143,6 +143,7 @@ P0 完成后可并行推进，用于尽早拿到可见反馈：
 | 评论 / 排行榜 / 社交关系 | 暂不做 | 需要后端与审核；先做作品包、策展、二创 |
 | AI 续写 / 润色 / 生成图片 | 不做 | 保持作者创作主线；不引入生成内容混入作品 |
 | 整体 UI 重构 | 不做 | 违反项目红线；UI 以增量接入方式升级 |
+| 读档恢复特写道具（detailProp） | 延后（已知问题，非 P0-5 引入） | 引擎快照只存 `sceneState / actState`，读档后特写道具不恢复；P0-5 回归实测观察到，后续单独修复 |
 
 ---
 
@@ -211,5 +212,6 @@ P0 完成后可并行推进，用于尽早拿到可见反馈：
 | v1.4 | 2026-11-24 | P0-3 完成：`tools/lint.js` 合入 main（文本级扫描器，17 条规则码，`--builtin` 零 issue，全仓 254 用例）；回填 P0-3 状态与完成定义 |
 | v1.5 | 2026-11-24 | P0-4 完成：扩展点契约落地 —— 卡牌检视注册表（`scripts/cards/registry.js`）+ 清单加载器（`loader.js` + 空清单）+ 四个 UI 命名槽位（`scripts/ui/slots.js`，`data-slot` = home/stage/modal/overlay）+ 设计令牌（`styles/tokens.css`）+ 悬浮层（`styles/extensions.css` 与 `#ui-layer`）+ 素材目录与 `.mumu` role 约定 + 接口文档 `docs/extension-contracts.md`；分支 `feature/p0-4-extension-contracts`（`95118ff` 起，10+ commits，见分支），运行时页面视觉零变化、零依赖零构建不变；全仓 302 用例通过，`node tools/lint.js --builtin` 15 章通过；§9 夜幕模型位置同步为 `assets/night/`；回填 P0-4 状态与完成定义 |
 | v1.6 | 2026-11-24 | P0-5 完成：首屏性能基线落地 —— `tools/perf-baseline.cjs`（headless Edge + CDP，首屏可交互 / 请求数 / 体积 / 首页与舞台 FPS，3 次中位数）+ `docs/perf-baseline.md` 前后对比；立绘改为首页空闲后分批预加载、失败有限重试，四张场景大图改为首次交互后按需加载；首屏可交互 383 → 247 ms、首屏体积 5806 → 1280 KB、首屏图片请求 32 → 0，FPS 持平；scene.js 按场景拆分延后；全仓 311 用例通过，`node tools/lint.js --builtin` 15 章通过；回填 P0-5 状态与完成定义 |
+| v1.7 | 2026-11-24 | P0-5 收尾：按最终评审修正 `docs/perf-baseline.md` 口径（慢网下场景图先降级后重绘、场景图无会话内重试的已知限制、FPS 单轮区间归属、舞台 FPS 遮罩采样说明）；采集器补 `--runs` 校验与 CDP 命令超时；§6 记录读档不恢复特写道具的既有问题 |
 
 计划表变更需经确认后更新本文件并递增版本号；后续所有实现以最新版本为准。

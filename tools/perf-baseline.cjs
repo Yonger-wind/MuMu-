@@ -12,7 +12,12 @@ const PROFILE = path.join(process.cwd(), '.tmp-perf-edge');
 
 const argv = process.argv.slice(2);
 const url = argv.find((a) => /^https?:\/\//.test(a)) || 'http://localhost:5199/';
-const runs = Number((argv.find((a) => a.startsWith('--runs=')) || '--runs=3').split('=')[1]) || 3;
+const runsArg = (argv.find((a) => a.startsWith('--runs=')) || '--runs=3').split('=')[1];
+const runs = /^\d+$/.test(runsArg) ? Number(runsArg) : NaN;
+if (!Number.isInteger(runs) || runs < 1) {
+  console.error('--runs 需要 ≥ 1 的整数（例如 --runs=3）');
+  process.exit(1);
+}
 const withStage = argv.includes('--stage');
 const outFile = (argv.find((a) => a.startsWith('--out=')) || '').split('=')[1] || '';
 
@@ -86,7 +91,14 @@ function client(wsUrl) {
       send(method, params = {}) {
         return new Promise((res, rej) => {
           const n = ++id;
-          pending.set(n, { res, rej });
+          const timer = setTimeout(() => {
+            pending.delete(n);
+            rej(new Error('CDP 命令超时：' + method));
+          }, 15000);
+          pending.set(n, {
+            res: (v) => { clearTimeout(timer); res(v); },
+            rej: (e) => { clearTimeout(timer); rej(e); },
+          });
           ws.send(JSON.stringify({ id: n, method, params }));
         });
       },
