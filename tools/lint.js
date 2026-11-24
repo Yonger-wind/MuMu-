@@ -688,7 +688,9 @@ function applyFlowRules(scan) {
       for (const l of (n.lines || [n.line])) cur.lines.push(l);
     }
     for (const run of runs) {
-      const ls = run.lines;
+      // 节点顺序 ≠ 源行序：选项组延迟 push，姿态 / 动作 / 视角类指示会插到它前面。
+      // 列举与 it.line 都按**源行号**升序，否则文案会出现「第 13、12、14 行」这种倒序。
+      const ls = run.lines.slice().sort((a, b) => a - b);
       const first = ls[0];
       // 行号区间只覆盖真正不可达的行：中间夹着标签行 / meta 行时不并成一个区间
       let contiguous = true;
