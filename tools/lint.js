@@ -5,7 +5,7 @@
    ============================================================ */
 import {
   SCENES, TIMES, CAMS, POSES, ACTS, VIEWS, MODELS,
-  matchModel, parseScriptText,
+  matchModel, parseScriptText, FLAG_KEY_RE, COND_RE, splitOptionFlags,
 } from '../scripts/parser.js';
 import { loadBuiltinScripts } from '../scripts/builtin.js';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -202,7 +202,10 @@ function blankValueMessage(key, text) {
  * - choice：> 开头
  * - jump：-> 开头
  * - say：其余非空行
+ * - condError：`??` 开头的条件行写法不合法（或缺内容、或出现在角色表里）
  * 注释行（// 与 <!-- 开头）跟解析器一样直接忽略，不算内容。
+ * 条件前缀（`?? flag | `）在分类**之前**剥离：行记录带 cond，text 是剥离后的正文，
+ * 于是「这一行在解析器眼里是什么」与「它挂了哪个条件」两件事互不干扰。
  */
 export function scanText(text) {
   const raw = String(text || '').replace(/\r\n?/g, '\n').replace(/^\uFEFF/, '');
@@ -217,27 +220,55 @@ export function scanText(text) {
 
   for (let i = 0; i < srcLines.length; i++) {
     const line = i + 1;
-    const t = srcLines[i].trim();
+    let t = srcLines[i].trim();
     if (!t) continue;
     if (/^(\/\/|<!--)/.test(t)) continue;
 
+    let cond = null;
+    if (t.startsWith('??')) {
+      if (inCharBlock) {
+        lines.push({ line, kind: 'condError', text: t, error: '条件行不能用在角色表上。' });
+        continue;
+      }
+      const cm = t.match(COND_RE);
+      if (!cm) {
+        lines.push({ line, kind: 'condError', text: t, error: '条件行写法不对，应为「?? 旗标 | 内容」或「?? !旗标 | 内容」。' });
+        continue;
+      }
+      if (!FLAG_KEY_RE.test(cm[2])) {
+        lines.push({ line, kind: 'condError', text: t, error: `旗标名「${cm[2]}」不合法，只能用字母开头、字母/数字/下划线，最长 32 个字符。` });
+        continue;
+      }
+      const body = cm[3].trim();
+      if (!body) {
+        lines.push({ line, kind: 'condError', text: t, error: '条件行的「|」后面没有内容。' });
+        continue;
+      }
+      if (body.startsWith('??')) {
+        lines.push({ line, kind: 'condError', text: t, error: '条件行不能再套一层条件行。' });
+        continue;
+      }
+      cond = { key: cm[2], neg: cm[1] === '!' };
+      t = body;
+    }
+
     let m;
-    if ((m = t.match(/^(?:#\s*)?标题[:：]\s*(.+)$/))) { meta.title = m[1].trim(); inCharBlock = false; lines.push({ line, kind: 'meta', text: t }); continue; }
-    if ((m = t.match(/^(?:#\s*)?简介[:：]\s*(.+)$/))) { meta.summary = m[1].trim(); inCharBlock = false; lines.push({ line, kind: 'meta', text: t }); continue; }
-    if ((m = t.match(/^(?:#\s*)?作者[:：]\s*(.+)$/))) { meta.author = m[1].trim(); inCharBlock = false; lines.push({ line, kind: 'meta', text: t }); continue; }
+    if ((m = t.match(/^(?:#\s*)?标题[:：]\s*(.+)$/))) { meta.title = m[1].trim(); inCharBlock = false; lines.push({ line, kind: 'meta', text: t, cond }); continue; }
+    if ((m = t.match(/^(?:#\s*)?简介[:：]\s*(.+)$/))) { meta.summary = m[1].trim(); inCharBlock = false; lines.push({ line, kind: 'meta', text: t, cond }); continue; }
+    if ((m = t.match(/^(?:#\s*)?作者[:：]\s*(.+)$/))) { meta.author = m[1].trim(); inCharBlock = false; lines.push({ line, kind: 'meta', text: t, cond }); continue; }
     if (/^(?:#\s*)?角色[:：]?\s*$/.test(t)) { inCharBlock = true; continue; }
 
     if (inCharBlock && t.includes('|') && !t.startsWith('【') && !t.split('|')[0].includes('：') && !t.split('|')[0].includes(':')) {
       const cols = t.split('|').map((x) => x.trim());
       if (cols[0]) chars.set(cols[0], { name: cols[0], cols, model: cols[4] || '', line });
-      lines.push({ line, kind: 'charRow', text: t, name: cols[0] });
+      lines.push({ line, kind: 'charRow', text: t, name: cols[0], cond });
       continue;
     }
     if (inCharBlock) inCharBlock = false;
 
     if ((m = t.match(/^\[([^\]]+)\]$/))) {
       labels.push({ name: m[1].trim(), line, targetLine: null });
-      lines.push({ line, kind: 'label', text: t, name: m[1].trim() });
+      lines.push({ line, kind: 'label', text: t, name: m[1].trim(), cond });
       continue;
     }
     if (/^【.*】$/.test(t)) {
@@ -249,22 +280,30 @@ export function scanText(text) {
       if ((key === '场景' || key === '分镜') && value && parserDirBranch(t)) sawScene = true;
       if (key === '结束' || key === '完') sawEnd = true;
       lines.push({
-        line, kind: 'dir', text: t, name: key, value, raw,
+        line, kind: 'dir', text: t, name: key, value, raw, cond,
         parts: value ? value.split(/[|｜,，\s]+/).filter(Boolean) : [],
       });
       continue;
     }
     if (t.startsWith('>')) {
       const cm = t.match(/^>\s*(.+?)\s*->\s*(.+)$/);
-      lines.push({ line, kind: 'choice', text: t, name: cm ? cm[1].trim() : null, value: cm ? cm[2].trim() : null });
+      const rawText = cm ? cm[1].trim() : null;
+      const split = rawText ? splitOptionFlags(rawText) : { text: rawText, set: [], bad: '' };
+      lines.push({
+        line, kind: 'choice', text: t, cond,
+        name: split.text,
+        value: cm ? cm[2].trim() : null,
+        flags: split.set,
+        flagError: split.bad,
+      });
       continue;
     }
     if (t.startsWith('->')) {
       const jm = t.match(/^->\s*(.+)$/);
-      lines.push({ line, kind: 'jump', text: t, value: jm ? jm[1].trim() : null });
+      lines.push({ line, kind: 'jump', text: t, value: jm ? jm[1].trim() : null, cond });
       continue;
     }
-    lines.push({ line, kind: 'say', text: t });
+    lines.push({ line, kind: 'say', text: t, cond });
   }
 
   // 标签 → 其后第一个故事行（标签行本身不产生内容）
@@ -300,7 +339,7 @@ const ACT_LIST = listOf(ACTS);
 const VIEW_LIST = listOf(VIEWS);
 
 /**
- * 12 条文本级规则：E101-E105、W101-W105、W107、W108。
+ * 14 条文本级规则：E101-E105、E109、E110、W101-W105、W107、W108。
  *
  * 判定口径：
  * - 「要不要报」用 matchTable（作者口径：精确别名 → 最长前缀）；
@@ -309,6 +348,7 @@ const VIEW_LIST = listOf(VIEWS);
  */
 function applyTextRules(scan) {
   const issues = [];
+  const COND_HINT = '允许条件的是台词/旁白与这些舞台指示：场景/分镜、镜头、姿态/情绪、动作、视角/机位、出场/登场、清场/空场/无人。';
   const labels = new Map();
   for (const lab of scan.labels) {
     if (labels.has(lab.name)) {
@@ -321,6 +361,19 @@ function applyTextRules(scan) {
   }
 
   for (const rec of scan.lines) {
+    if (rec.kind === 'condError') {
+      issues.push(issue('error', 'E109', rec.line, rec.error, COND_HINT));
+      continue;
+    }
+    if (rec.cond) {
+      const okDir = rec.kind === 'dir' && rec.name !== '结束' && rec.name !== '完';
+      if (rec.kind !== 'say' && !okDir) {
+        const where = rec.kind === 'dir' ? '结束行' : ({
+          meta: '标题、简介或作者行', charRow: '角色表', label: '标签行', choice: '选项行', jump: '跳转行',
+        }[rec.kind] || '这一行');
+        issues.push(issue('error', 'E109', rec.line, `条件行不能用在${where}上。`, COND_HINT));
+      }
+    }
     if (rec.kind === 'dir') {
       const key = rec.name;
       if (!DIR_TAGS.has(key)) {
@@ -437,6 +490,13 @@ function applyTextRules(scan) {
     }
 
     if (rec.kind === 'choice') {
+      if (rec.flagError) {
+        issues.push(issue('error', 'E110', rec.line,
+          rec.flagError === '@'
+            ? '选项末尾的「@」后面没有旗标名。'
+            : `选项旗标「${rec.flagError}」不合法，只能用字母开头、字母/数字/下划线，最长 32 个字符。`,
+          '正确写法：> 选项文字 @flag_a,flag_b -> 标签（@ 前可留空格）'));
+      }
       if (rec.value === null) {
         issues.push(issue('error', 'E105', rec.line,
           '选项行缺少落点，这一行会被当成旁白，选项凭空消失。',
