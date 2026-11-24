@@ -848,6 +848,8 @@ function formatText(result, files, scope) {
     return lines.join('\n');
   }
   const byFile = new Map();
+  // files 是被校验的**用户目标**；内置章节的分组只从 issue 自带的 file（章节标题）生成，
+  // 合成标签「内置 15 章」不得参与分组（否则内置真有错时会多出一行「（未发现问题）」）。
   for (const f of files) byFile.set(f, []);
   for (const it of result.issues) {
     const key = it.file || '(未命名)';
@@ -954,7 +956,9 @@ export function main(argv) {
   ].filter(Boolean).join(' + ');
   const failed = result.summary.errors > 0 || (strict && result.summary.warnings > 0);
   // 诊断一律走 stderr；stdout 只留最终结果（--json 时必须是纯 JSON）。
-  console.log(json ? formatJson(result, files, !failed) : formatText(result, files, scope));
+  console.log(json
+    ? formatJson(result, files, !failed)
+    : formatText(result, targets, scope));
   return failed ? 1 : 0;
 }
 
