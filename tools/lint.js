@@ -415,7 +415,7 @@ function applyTextRules(scan) {
       if (!parserDirBranch(rec.text)) {
         issues.push(issue('error', 'E101', rec.line,
           `舞台指示「${rec.text}」的写法解析器不认，它会被当成旁白。`,
-          '请对照格式说明检查全角 / 半角标点，以及冒号前后不该有空格。'));
+          '请检查冒号前是否多了空格（解析器不容许），以及全角 / 半角标点。'));
       }
       continue;
     }
