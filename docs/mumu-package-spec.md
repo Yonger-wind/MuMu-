@@ -124,6 +124,10 @@ example-series.mumu
 | `type` | string | MIME，按扩展名推断（`jpg`/`jpeg`/`png`/`webp`）。 |
 | `bytes` | number | 资源字节数。 |
 
+**保留 role（P0-4 扩展点契约）**：`cover`（既有）、`card`（卡面，建议路径 `assets/cards/<cardKey>.png`）、
+`night`（夜幕模型，建议路径 `assets/night/<name>.png`）。role 仍是自由字符串，校验强度不变；
+导入时只有 `cover` 会转成 data URL，`card` / `night` 只随清单声明、暂不落地存储，读取留给 P4 的图鉴与夜幕功能。
+
 ### 4.4 缺省与容错
 
 导入时（`validateManifest`）对缺省字段的兜底：

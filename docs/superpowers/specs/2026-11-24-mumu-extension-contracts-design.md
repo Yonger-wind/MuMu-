@@ -125,12 +125,12 @@ export async function loadCardManifest(url = './assets/cards/manifest.json', opt
 
 ### 3.1 命名挂载点
 
-| 槽名 | 页面位置 | 用途 |
-| --- | --- | --- |
-| `home` | `#home` | 首页（品牌角、按钮组之外的自定义模块） |
-| `stage` | `#stage` | 剧情舞台（HUD、夜间提示等） |
-| `modal` | `#modal-root` | 弹层内容区 |
-| `overlay` | `#ui-layer`（**新增空层**） | 全屏悬浮层（卡面查看器、抽卡动画等） |
+| 槽名 | 页面位置 | 用途 | 安全性 / 使用注意 |
+| --- | --- | --- | --- |
+| `home` | `#home` | 首页（品牌角、按钮组之外的自定义模块） | 随 `.screen[aria-hidden="true"]` 整块隐藏，切到舞台时不可见也收不到点击；首页无全局点击推进，但勿遮挡 hero 与「开始体验」。 |
+| `stage` | `#stage` | 剧情舞台（HUD、夜间提示等） | **点击会被 `main.js` 的舞台推进逻辑接收**（`#stage` 的 click 直接调 `engine.advance()`），挂进来的第三方 UI 必须在自身点击 / 指针事件上 `stopPropagation()`；`.stage-top` 与 `.dialogue` 为 `z-index:10`。 |
+| `modal` | `#modal-root` | 弹层内容区 | `openModal` / `closeModal` 都整体覆写 `innerHTML = ''`，内容随时可能被清空，模块必须支持重新挂载；**`#modal-root` 有任意子节点时键盘空格/回车推进被禁用**。 |
+| `overlay` | `#ui-layer`（**新增空层**） | 全屏悬浮层（卡面查看器、抽卡动画等） | 层级 70：在弹窗遮罩（60）之上、开机遮罩（90）与 toast（100）之下——会盖住弹窗并吞掉弹窗点击（需交互的 UI 自行设 `pointer-events` 或改挂 `modal`）；开机遮罩期间不可见；toast 永远在最上层。**第三方 UI 默认挂这里**，需与弹窗共存的交互 UI 再评估。 |
 
 不设 `toast` 槽：`#toast` 的文本由 `main.js` 的轻提示队列整体覆写，往里挂子元素会被下一条提示清掉，属于陷阱而非契约。
 

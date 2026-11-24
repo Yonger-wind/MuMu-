@@ -38,6 +38,12 @@ node tools/lint.js 剧本.txt --strict  # 把警告也算失败
 每条问题都带**行号 + 规则码 + 原因 + 修法提示**；退出码 0 = 通过，1 = 有错误（`--strict` 时 warning 也算），2 = 用法错误。
 规则码表见 [docs/mumu-lint-rules.md](docs/mumu-lint-rules.md)。
 
+## 扩展接口
+
+第三方卡牌检视、UI 模块与素材的接入契约见 `docs/extension-contracts.md`：
+卡牌 = 新增 `scripts/cards/<cardKey>.js` + 在 `assets/cards/manifest.json` 注册；
+UI = 新增模块 + `mountTo('<slot>', node)`；视觉只使用 `styles/tokens.css` 的 `--mumu-*` 令牌。
+
 ## 部署
 
 最终网站由 **Qoder 部署到 Qoder Sites**（唯一部署目标）。
@@ -53,12 +59,15 @@ index.html          首页（动态夕阳 + 塔）与剧情舞台两个屏幕
 starry-night.html   独立《星月夜》氛围页（单文件视觉实验，不参与主流程）
 serve.js            零依赖本地静态服务器（node serve.js）
 styles/main.css     全部样式（保留现有视觉，勿整体重构）
+styles/tokens.css   设计令牌语义层（--mumu-*，带兜底；第三方 UI 只依赖这里）
+styles/extensions.css 扩展样式（只含 .mumu-* 命名空间；悬浮层挂载宿主）
 assets/models/      二十八张半身立绘（透明 PNG）：七张现代人物 + 六张国风人物 +
                     八位《漩涡与深蓝》人物 + 七位《月光下的未完奏鸣》人物
                     原始 PNG 与 *.cut.png 并存；cut 版由 tools/png-alpha.js 去底、裁边后直接使用
 assets/images/      starry-night.jpg（《星月夜》原图：沙龙展墙、画库真迹与曲目卡封面）
                     pathetique-score.png（《悲怆》第二乐章手稿：曲目封面与剧情特写）
                     lujiazui-day.png / lujiazui-night.png（陆家嘴昼/夜：城市远景与写字楼幕墙）
+assets/cards/       卡牌清单 manifest.json 与卡面图（<cardKey>.png）
 scripts/
   main.js           主控：屏幕切换、按钮装配、音频/渲染器/引擎接线
   sunset.js         首页 Canvas 动态夕阳主视觉
@@ -84,6 +93,8 @@ scripts/
                     （旧 mumu.saves.v1 只读，读取时自动迁移补齐）
   modals.js         剧本库（曲目 → 章节两级选择）/ 存档 / 导入 / 玩法说明弹窗
   audio.js          Web Audio 程序化轻音乐（可静音、切曲）
+  cards/            卡牌特殊检视注册表（registry.js）与清单加载器（loader.js）
+  ui/               UI 命名挂载点（slots.js：data-slot = home/stage/modal/overlay）
 tools/png-alpha.js  离线素材工具：白底/透明底人物 → 去底裁边 → *.cut.png（不勾边）；
                     六张国风新立绘会压平内部白色线稿，只留深紫黑剪影
 tools/cdp-shoot.cjs 零依赖截图回归工具（headless Edge + CDP）：按 steps JSON 导航、
