@@ -268,6 +268,9 @@ export function scanText(text) {
   }
 
   // 标签 → 其后第一个故事行（标签行本身不产生内容）
+  // 注意：这只是行级的粗略落点，供文本级规则参考；
+  // 控制流判定（可达性 / 回跳 / 回指）一律用 buildGraph 复刻的**节点下标**，
+  // 因为解析器延迟 push 选项组，标签的真实落点常常不等于「后第一个故事行」。
   for (const lab of labels) {
     const next = lines.find((l) => STORY_KINDS.has(l.kind) && l.line > lab.line);
     lab.targetLine = next ? next.line : null;
@@ -442,6 +445,13 @@ function applyTextRules(scan) {
     }
 
     if (rec.kind === 'jump') {
+      // 「->」后面没有落点：解析器的跳转正则匹配不上，整行按旁白处理（不是跳转，也没有落点可查）
+      if (!rec.value) {
+        issues.push(issue('error', 'E105', rec.line,
+          '跳转行缺少落点，这一行会被当成旁白，跳转不会发生。',
+          '正确写法：-> 目标标签'));
+        continue;
+      }
       if (!labels.has(rec.value)) {
         issues.push(issue('error', 'E103', rec.line,
           `跳转指向了不存在的标签「${rec.value}」。`,
@@ -484,155 +494,238 @@ function applyTextRules(scan) {
 }
 
 /**
- * 控制流建图（行级，语义对齐 scripts/parser.js）：
- * - 标签 target = 其后第一个内容行（标签本身不产生节点）
- * - 跳转行 -> 只走目标，不回落下一行
- * - 连续的选项行合并成一个选项组；选项组只走各选项落点
- * - 普通内容行 -> 下一行内容行
- * - 【结束】/【完】 无后继
+ * 舞台指示落到解析器的哪个分支。
  *
- * 与解析器对齐的三处细节（不能简化，否则会误报）：
- * 1) 解析器只把「> 文本 -> 目标」认成选项。写成「> 只有选项没有落点」时整行按旁白处理，
- *    所以它不是选项组的成员，而是一条普通内容行（后面的一行仍然走得到）。
- * 2) 解析器遇到标签行会先 flush 掉当前选项组（labels[...] = nodes.length 之前先 flushChoices），
- *    所以标签夹在两条选项之间时，那是**两个**选项组，不是同一个。
- * 3) meta / charRow 行不会 flush 选项组，也不会产生节点（解析器直接 continue）。
+ * 这里**复刻** scripts/parser.js 的 if 链与正则（解析器本身零改动，只读引用）：
+ * 顺序、正则都必须与解析器一致，否则「这一行解析器会当成什么」就会算错。
+ * - flush：该分支会不会调用 flushChoices()，即把待定选项组压成一个节点。
+ *   姿态 / 情绪 / 动作 / 视角 / 机位**不 flush** —— 所以它们排在那组选项**之前**入队。
+ * - 返回 null：解析器没有分支认领这一行（缺值、写法不对、未知标签）→ 整行退化成旁白。
  */
-export function buildGraph(scan) {
-  // 只有「故事行」才是节点：meta / charRow / label 在解析器里不产生节点
-  const content = scan.lines.filter((l) => STORY_KINDS.has(l.kind));
-  const labels = new Map(scan.labels.map((l) => [l.name, l]));   // 同名后写覆盖，与解析器一致
-  const succ = new Map();          // line -> number[]（后继行号）
-  const groups = [];               // 选项组
-  const groupOf = new Map();
+const PARSER_DIR_BRANCHES = [
+  { type: 'scene',  flush: true,  re: /^【\s*(?:场景|分镜)[:：]\s*(.+?)\s*】$/ },
+  { type: 'cam',    flush: true,  re: /^【\s*镜头[:：]\s*(.+?)\s*】$/ },
+  { type: 'pose',   flush: false, re: /^【\s*(?:姿态|情绪)[:：]\s*(.+?)\s*】$/ },
+  { type: 'action', flush: false, re: /^【\s*动作[:：]\s*(.+?)\s*】$/ },
+  { type: 'view',   flush: false, re: /^【\s*(?:视角|机位)[:：]\s*(.+?)\s*】$/ },
+  { type: 'enter',  flush: true,  re: /^【\s*(?:出场|登场)[:：]\s*(.+?)\s*】$/ },
+  { type: 'clear',  flush: true,  re: /^【\s*(?:清场|空场|无人)\s*】$/ },
+  { type: 'end',    flush: true,  re: /^【\s*(?:结束|完)\s*(?:[:：]\s*(.+?)\s*)?】$/ },
+];
 
-  // 选项组：在「内容行序列」里连续的 choice 行合并为一个节点。
-  // 注意：解析器先 skip 空行再判断，所以空行分隔的两条选项属于同一个选项组，
-  // 必须按内容行序号相邻来判断，不能按行号连续（内置剧本里有 19 处空行分隔的选项组）。
-  let cur = null;
+function parserDirBranch(text) {
+  for (const b of PARSER_DIR_BRANCHES) {
+    if (b.re.test(text)) return b;
+  }
+  return null;
+}
+
+/**
+ * 控制流建图（**节点级**，逐条对齐 scripts/parser.js 的入队顺序）。
+ *
+ * 解析器不是「一行一个节点」：选项行只往 pendingChoices 里塞，
+ * 只有遇到 flush 点（场景 / 镜头 / 出场 / 清场 / 结束 / 标签 / 跳转 / 台词 / 旁白）
+ * 才把整组选项压成**一个** choice 节点；而姿态 / 情绪 / 动作 / 视角 / 机位
+ * 既不 flush、也不等选项组，它们**立即**入队，所以排在那组选项**之前**。
+ * 行号相邻 ≠ 节点相邻，这正是旧实现会误报 E106 的原因。
+ *
+ * 节点序列建好后，可达性与标签落点全部按**节点下标**推导：
+ * - 标签落点 = 解析器的 labels[name] = nodes.length（此刻已入队的节点数，
+ *   即「下一个将要入队的节点的下标」）。解析器 finalize() 补开场场景时会把
+ *   所有标签下标统一 +1，那是整体平移：本工具在建图时既不补开场场景、也不对
+ *   标签做任何平移，标签与后继全都用同一套下标，相对关系自然一致。
+ * - 后继：普通节点 → 下一个节点；跳转节点 → 目标节点；选项组 → 各选项落点；
+ *   【结束】/【完】 → 无后继。
+ *
+ * 报告口径：issue 的 line 一律是**原始文本行号**，不是节点下标。
+ */
+function buildGraph(scan) {
+  const nodes = [];              // 与解析器 nodes 一一对应
+  const labelIndex = new Map();  // 标签名 -> 节点下标（解析器 labels[name] = nodes.length）
+  let pending = null;            // 待定选项组（解析器 pendingChoices）
+
+  // flush 点：把待定选项组压成**一个** choice 节点入队
+  const flush = () => {
+    if (pending && pending.options.length) {
+      nodes.push({
+        type: 'choice',
+        line: pending.options[0].line,                    // 组内第一行（报告用）
+        lines: pending.options.map((o) => o.line),        // 组内所有行（区间文案用）
+        options: pending.options,
+      });
+    }
+    pending = null;
+  };
+
   for (const rec of scan.lines) {
-    if (rec.kind === 'label') { cur = null; continue; }        // 标签会 flush 选项组
-    if (!STORY_KINDS.has(rec.kind)) continue;                   // meta / charRow 不 flush
+    // meta / charRow：解析器直接 continue —— 既不入队也不 flush
+    if (rec.kind === 'meta' || rec.kind === 'charRow') continue;
+
+    // 标签：先 flush 掉待定选项组，再记「此刻已入队的节点数」
+    if (rec.kind === 'label') {
+      flush();
+      labelIndex.set(rec.name, nodes.length);
+      continue;
+    }
+
+    // 选项行：只挂进待定选项组，不入队
     if (rec.kind === 'choice' && rec.value !== null) {
-      if (!cur) { cur = { lines: [], firstLine: rec.line }; groups.push(cur); }
-      cur.lines.push(rec);
+      if (!pending) pending = { options: [] };
+      pending.options.push({ text: rec.name, to: rec.value, line: rec.line });
       continue;
     }
-    cur = null;
-  }
-  for (const g of groups) {
-    for (const rec of g.lines) groupOf.set(rec.line, g);
-  }
 
-  for (let i = 0; i < content.length; i++) {
-    const rec = content[i];
-    const next = content[i + 1];
-    if (groupOf.has(rec.line)) {
-      succ.set(rec.line, []);   // 选项组的后继稍后按组统一覆盖
+    // 跳转行：flush + jump 节点（没有落点的「->」解析器按旁白处理，落到下面的旁白分支）
+    if (rec.kind === 'jump' && rec.value) {
+      flush();
+      nodes.push({ type: 'jump', line: rec.line, to: rec.value });
       continue;
     }
-    if (rec.kind === 'jump') {
-      const lab = labels.get(rec.value);
-      succ.set(rec.line, lab && lab.targetLine ? [lab.targetLine] : []);
-      continue;
-    }
-    if (rec.kind === 'dir' && (rec.name === '结束' || rec.name === '完')) {
-      succ.set(rec.line, []);
-      continue;
-    }
-    succ.set(rec.line, next ? [next.line] : []);
-  }
 
-  // 选项组的后继 = 各选项落点
-  for (const g of groups) {
-    const targets = [];
-    for (const rec of g.lines) {
-      const lab = labels.get(rec.value);
-      if (lab && lab.targetLine) targets.push(lab.targetLine);
+    // 舞台指示：认得出来的分支决定 flush 与节点类型
+    if (rec.kind === 'dir') {
+      const br = parserDirBranch(rec.text);
+      if (br) {
+        if (br.flush) flush();
+        nodes.push({ type: br.type, line: rec.line });
+        continue;
+      }
+      // 认不出来的写法（缺值 / 带值 / 未知标签）：整行退化成旁白
     }
-    for (const rec of g.lines) succ.set(rec.line, targets);
-  }
 
-  const start = content.length ? content[0].line : null;
-  const reachable = new Set();
-  if (start !== null) {
-    const stack = [start];
+    // 其余（台词 / 旁白 / 缺落点的选项行 / 缺落点的跳转行 / 认不出的指示写法）
+    // 解析器一律按旁白处理：flush 掉待定选项组，再压一个 say 节点。
+    flush();
+    nodes.push({ type: 'say', line: rec.line });
+  }
+  flush();
+
+  // 标签 -> 节点下标；标签后面没有任何节点时是悬空标签（跳过去就到此为止）
+  const target = (name) => {
+    if (!labelIndex.has(name)) return -1;
+    const i = labelIndex.get(name);
+    return i < nodes.length ? i : -1;
+  };
+
+  // 后继：按节点下标相邻推导
+  const succ = nodes.map((n, i) => {
+    if (n.type === 'end') return [];
+    if (n.type === 'jump') {
+      const t = target(n.to);
+      return t < 0 ? [] : [t];
+    }
+    if (n.type === 'choice') {
+      const out = [];
+      for (const o of n.options) {
+        const t = target(o.to);
+        if (t >= 0) out.push(t);
+      }
+      return out;
+    }
+    return i + 1 < nodes.length ? [i + 1] : [];
+  });
+
+  // 可达性：从第一个节点出发（引擎就是从 nodes[0] 开始跑的）
+  const reachable = new Array(nodes.length).fill(false);
+  if (nodes.length) {
+    const stack = [0];
     while (stack.length) {
-      const line = stack.pop();
-      if (reachable.has(line)) continue;
-      reachable.add(line);
-      for (const nx of (succ.get(line) || [])) stack.push(nx);
+      const i = stack.pop();
+      if (reachable[i]) continue;
+      reachable[i] = true;
+      for (const nx of succ[i]) stack.push(nx);
     }
   }
-  // 选项组是「一个节点」：组内任一行可达 → 整组可达（解析器把整组压成一个 choice 节点）
-  for (const g of groups) {
-    if (g.lines.some((rec) => reachable.has(rec.line))) {
-      for (const rec of g.lines) reachable.add(rec.line);
-    }
-  }
-  return { content, labels, succ, groups, groupOf, reachable, start };
+
+  return {
+    nodes,
+    labelIndex,
+    succ,
+    reachable,
+    hasSay: nodes.some((n) => n.type === 'say'),
+  };
 }
 
 /**
  * 4 条控制流规则：E106 不可达、E107 回跳、E108 选项回指、W106 死标签。
  *
+ * 判定一律基于 buildGraph 复刻出来的**节点序列**（不是行相邻），
+ * 报告的 line 一律是原始文本行号。
+ *
  * E106（不可达）只在「控制流图完整」时判定：
  * 只要有跳转 / 选项指向不存在的标签，解析器就会拒绝整个剧本，文件根本加载不了，
  * 这时说「某段玩家永远走不到」是误导 —— 那种剧本该看的是 E103。
+ *
+ * 关于「断链就整份文件放弃不可达判定」：**这是本工具自己的判断，不是解析器的语义**
+ * （解析器只管拒绝加载，不谈可达性）。代价：一处笔误 = 该文件失去不可达检测。
+ * 规则文档里怎么表述留给 Task 5。
  */
 function applyFlowRules(scan) {
   const issues = [];
   const g = buildGraph(scan);
   const refs = new Set();
   let brokenRef = false;
-  for (const rec of g.content) {
+  for (const rec of scan.lines) {
     if (rec.kind === 'jump' && rec.value) {
       refs.add(rec.value);
-      if (!g.labels.has(rec.value)) brokenRef = true;
+      if (!g.labelIndex.has(rec.value)) brokenRef = true;
     }
     if (rec.kind === 'choice' && rec.value) {
       refs.add(rec.value);
-      if (!g.labels.has(rec.value)) brokenRef = true;
+      if (!g.labelIndex.has(rec.value)) brokenRef = true;
     }
   }
 
-  // E106 不可达内容：按「连续内容行」切成一段段，每段一条 issue
+  // E106 不可达内容：按**节点**切成连续段，每段一条 issue
   // （两处互不相邻的死分支要分成两条报，不能合并成一个大区间）
   if (!brokenRef) {
     const runs = [];
     let cur = null;
-    for (const rec of g.content) {
-      if (g.reachable.has(rec.line)) { cur = null; continue; }
-      if (!cur) { cur = { first: rec.line, last: rec.line }; runs.push(cur); }
-      else cur.last = rec.line;
+    for (let i = 0; i < g.nodes.length; i++) {
+      if (g.reachable[i]) { cur = null; continue; }
+      if (!cur) { cur = { lines: [] }; runs.push(cur); }
+      const n = g.nodes[i];
+      for (const l of (n.lines || [n.line])) cur.lines.push(l);
     }
     for (const run of runs) {
-      issues.push(issue('error', 'E106', run.first,
-        run.first === run.last
-          ? `第 ${run.first} 行这一段玩家永远走不到。`
-          : `第 ${run.first}–${run.last} 行这一段玩家永远走不到。`,
+      const ls = run.lines;
+      const first = ls[0];
+      // 行号区间只覆盖真正不可达的行：中间夹着标签行 / meta 行时不并成一个区间
+      let contiguous = true;
+      for (let i = 1; i < ls.length; i++) {
+        if (ls[i] !== ls[i - 1] + 1) { contiguous = false; break; }
+      }
+      const scope = ls.length === 1
+        ? `第 ${first} 行`
+        : (contiguous ? `第 ${ls[0]}–${ls[ls.length - 1]} 行` : `第 ${ls.join('、')} 行`);
+      issues.push(issue('error', 'E106', first,
+        `${scope}这一段玩家永远走不到。`,
         '检查附近的跳转：某个 -> 之后的内容不再顺序执行。'));
     }
   }
 
-  // E107 回跳 / E108 选项回指
-  for (const rec of g.content) {
-    if (rec.kind === 'jump') {
-      const lab = g.labels.get(rec.value);
-      if (lab && lab.targetLine && lab.targetLine <= rec.line) {
-        issues.push(issue('error', 'E107', rec.line,
-          `第 ${rec.line} 行跳回第 ${lab.targetLine} 行的标签「${rec.value}」，会往回跳，容易形成死循环。`,
+  // E107 回跳 / E108 选项回指（都按节点下标比较：下标即执行顺序）
+  for (let i = 0; i < g.nodes.length; i++) {
+    const n = g.nodes[i];
+    if (n.type === 'jump') {
+      const t = g.labelIndex.get(n.to);
+      if (t !== undefined && t < g.nodes.length && t <= i) {
+        const back = g.nodes[t];
+        issues.push(issue('error', 'E107', n.line,
+          `第 ${n.line} 行跳回第 ${back.line} 行的标签「${n.to}」，会往回跳，容易形成死循环。`,
           '请改成跳向更靠后的标签。'));
       }
       continue;
     }
-    if (rec.kind === 'choice' && rec.value !== null) {
-      const lab = g.labels.get(rec.value);
-      const grp = g.groupOf.get(rec.line);
-      if (lab && lab.targetLine && grp && lab.targetLine <= grp.firstLine) {
-        issues.push(issue('error', 'E108', rec.line,
-          `第 ${rec.line} 行的选项指向第 ${lab.targetLine} 行的标签「${rec.value}」，落点不在选项之后，点下去会原地打转。`,
-          '请改成跳向更靠后的标签。'));
+    if (n.type === 'choice') {
+      for (const o of n.options) {
+        const t = g.labelIndex.get(o.to);
+        if (t !== undefined && t < g.nodes.length && t <= i) {
+          const back = g.nodes[t];
+          issues.push(issue('error', 'E108', o.line,
+            `第 ${o.line} 行的选项指向第 ${back.line} 行的标签「${o.to}」，落点不在选项之后，点下去会原地打转。`,
+            '请改成跳向更靠后的标签。'));
+        }
       }
       continue;
     }
@@ -646,23 +739,26 @@ function applyFlowRules(scan) {
         '如果这是废弃的分支，请把标签和它下面的内容一起删掉。'));
     }
   }
-  return issues;
+  // brokenRef / hasSay 交给解析器交叉验证用（去重依据是我们自己算出的事实）
+  return { issues, brokenRef, hasSay: g.hasSay };
 }
 
 /**
  * 解析器交叉验证：把 parseScriptText 抛出的致命错误兜底成 E100。
  * E100 是「兜底」——扫描器已经报过的、更精确的问题不再重复报一遍。
+ *
+ * 去重依据是**我们自己算出的事实**（flow.brokenRef / flow.hasSay），
+ * 不是解析器的错误文案 —— 解析器一改文案，去重不能跟着失效。
  */
-function applyParserCheck(text, fileName, issues) {
+function applyParserCheck(text, fileName, issues, flow) {
   try {
     parseScriptText(text, fileName);
     return;
   } catch (e) {
     const msg = String((e && e.message) || e);
-    // 「跳转指向了不存在的标签」不带行号，但 E103 已经带行号报过一次 → 不重复
-    if (/不存在的标签/.test(msg) && issues.some((i) => i.code === 'E103')) return;
     const m = msg.match(/第\s*(\d+)\s*行/);
     if (m) {
+      // 带行号的错误来自解析阶段（例如未识别的场景）
       const line = Number(m[1]);
       // 该行已经有更具体的 error 报告时不重复报
       if (issues.some((i) => i.line === line && i.severity === 'error')) return;
@@ -671,7 +767,12 @@ function applyParserCheck(text, fileName, issues) {
         '按提示修正后重新校验。'));
       return;
     }
-    // 解析器的错误没有行号（如「没有读取到任何台词或旁白」），一律记在第 1 行
+    // 不带行号的错误只可能来自解析器的收尾阶段：
+    // 「没有读取到任何台词或旁白」或「跳转指向了不存在的标签」。
+    // 后者由我们自己算出的 brokenRef 判定（有跳转/选项指向不存在的标签），
+    // 而 finalize 里「没有台词」的检查排在前面 —— 所以只有 brokenRef 且确实有台词时，
+    // 解析器才一定是死在落点缺失上；E103 已经带行号报过一次，不重复报。
+    if (flow && flow.brokenRef && flow.hasSay) return;
     issues.push(issue('error', 'E100', 1,
       `解析器拒绝了这个剧本：${msg}`,
       '按提示修正后重新校验。'));
@@ -684,8 +785,9 @@ function applyParserCheck(text, fileName, issues) {
  */
 export function lintText(text, fileName = '') {
   const scan = scanText(text);
-  const issues = applyTextRules(scan).concat(applyFlowRules(scan));
-  applyParserCheck(text, fileName, issues);
+  const flow = applyFlowRules(scan);
+  const issues = applyTextRules(scan).concat(flow.issues);
+  applyParserCheck(text, fileName, issues, flow);
   return {
     issues,
     summary: {
