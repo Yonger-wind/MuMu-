@@ -64,7 +64,7 @@ function showScreen(name) {
   $('stage').setAttribute('aria-hidden', name === 'stage' ? 'false' : 'true');
   $('home').toggleAttribute('inert', name !== 'home');
   $('stage').toggleAttribute('inert', name !== 'stage');
-  if (name === 'stage') { sceneRenderer.start(); sunset.stop(); }
+  if (name === 'stage') { sceneRenderer.preloadImages(); sceneRenderer.start(); sunset.stop(); }
   else { sunset.start(); sceneRenderer.stop(); }
 }
 
@@ -210,6 +210,7 @@ async function handleExport({ kind, script, scripts } = {}) {
 }
 
 function showLibrary() {
+  sceneRenderer.preloadImages();
   openLibrary({
     scripts: allScripts(),
     onPlay: (sc) => play(sc),

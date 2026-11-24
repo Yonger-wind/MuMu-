@@ -41,20 +41,27 @@ export function createSceneRenderer(canvas) {
   const starry = new Image();
   let starryReady = false;
   starry.onload = () => { starryReady = true; layers = null; };
-  starry.src = './assets/images/starry-night.jpg';
   // 《月光下的未完奏鸣》：陆家嘴日 / 夜原图，以及贝多芬《悲怆》第二乐章乐谱
   const cityDay = new Image();
   let cityDayReady = false;
   cityDay.onload = () => { cityDayReady = true; layers = null; };
-  cityDay.src = './assets/images/lujiazui-day.png';
   const cityNight = new Image();
   let cityNightReady = false;
   cityNight.onload = () => { cityNightReady = true; layers = null; };
-  cityNight.src = './assets/images/lujiazui-night.png';
   const scoreSheet = new Image();
   let scoreReady = false;
   scoreSheet.onload = () => { scoreReady = true; propLayerKey = ''; };
-  scoreSheet.src = './assets/images/pathetique-score.png';
+
+  // 场景大图按需加载：首屏不请求，进入舞台 / 打开剧本库时由 main.js 触发一次
+  let sceneImagesRequested = false;
+  function preloadSceneImages() {
+    if (sceneImagesRequested) return;
+    sceneImagesRequested = true;
+    starry.src = './assets/images/starry-night.jpg';
+    cityDay.src = './assets/images/lujiazui-day.png';
+    cityNight.src = './assets/images/lujiazui-night.png';
+    scoreSheet.src = './assets/images/pathetique-score.png';
+  }
 
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -16124,7 +16131,7 @@ export function createSceneRenderer(canvas) {
 
   window.addEventListener('resize', resize);
   resize();
-  return { set, start, stop, resize, onChange: (fn) => (onFrame = fn), get state() { return state; } };
+  return { set, start, stop, resize, preloadImages: preloadSceneImages, onChange: (fn) => (onFrame = fn), get state() { return state; } };
 }
 
 /* ---------- 场景零件 ---------- */

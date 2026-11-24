@@ -57,3 +57,23 @@ test('portraits.js：失败键有限自动重试，显式 preloadPortraits 清�
   assert.ok(preload, '未找到 preloadPortraits');
   assert.match(preload[1], /failedKeys\.clear\(\)/);
 });
+
+test('main.js：进舞台与打开剧本库都会请求场景大图', () => {
+  const src = read('scripts/main.js');
+  const hits = src.match(/sceneRenderer\.preloadImages\(\)/g) || [];
+  assert.ok(hits.length >= 2, `preloadImages 调用次数应 ≥2，实际 ${hits.length}`);
+});
+
+test('scene.js：四张场景大图只在 preloadImages 内赋 src，并经渲染器暴露', () => {
+  const src = read('scripts/scene.js');
+  const start = src.indexOf('function preloadSceneImages');
+  assert.ok(start > 0, '缺少 preloadSceneImages');
+  const end = src.indexOf('function resize(', start);
+  assert.ok(end > start, 'preloadSceneImages 应在 resize 之前');
+  const body = src.slice(start, end);
+  for (const name of ['starry.src', 'cityDay.src', 'cityNight.src', 'scoreSheet.src']) {
+    assert.ok(body.includes(name), `${name} 应移入 preloadSceneImages`);
+  }
+  assert.doesNotMatch(src.slice(0, start), /(starry|cityDay|cityNight|scoreSheet)\.src\s*=/);
+  assert.match(src, /preloadImages:\s*preloadSceneImages/);
+});
