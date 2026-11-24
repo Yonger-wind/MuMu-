@@ -107,7 +107,8 @@ API：
 ```js
 export function parseCardManifest(input);   // → 校验后的 entries[]；任何问题抛中文 Error（带第 N 张卡的定位）
 export async function applyCardManifest(manifest, { loadModule, registry = cardInspections });
-// 逐条 await loadModule(entry.module)（默认 (p) => import(p)），取模块的具名导出 inspect 并注册；
+// 逐条 await loadModule(entry.module)：默认实现按站点根解析（new URL(path, document.baseURI)）
+// 后动态 import，避免相对 loader.js 解析；取模块的具名导出 inspect 并注册；
 // 模块缺少 inspect → 中文 Error；返回已注册的 key 数组
 export async function loadCardManifest(url = './assets/cards/manifest.json', opts);
 // fetch + JSON.parse + applyCardManifest；P0-4 不接到任何页面
