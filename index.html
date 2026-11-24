@@ -19,7 +19,7 @@
   </div>
 
   <!-- ===================== 首页 ===================== -->
-  <main id="home" class="screen home" aria-hidden="false">
+  <main id="home" class="screen home" aria-hidden="false" data-slot="home">
     <!-- 动态夕阳画布 -->
     <canvas id="sunset" class="sunset-canvas"></canvas>
     <div class="vignette"></div>
@@ -65,7 +65,7 @@
   </main>
 
   <!-- ===================== 剧情舞台 ===================== -->
-  <section id="stage" class="screen stage" aria-hidden="true">
+  <section id="stage" class="screen stage" aria-hidden="true" data-slot="stage">
     <canvas id="scene" class="scene-canvas"></canvas>
     <div class="scene-grain"></div>
 
@@ -87,7 +87,7 @@
   </section>
 
   <!-- ===================== 弹层容器 ===================== -->
-  <div id="modal-root"></div>
+  <div id="modal-root" data-slot="modal"></div>
 
   <!-- 轻提示 -->
   <div id="toast" class="toast"></div>
