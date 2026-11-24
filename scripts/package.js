@@ -4,8 +4,8 @@
    本模块不依赖 DOM（downloadPackage 除外），可在 Node 单测中运行
    ============================================================ */
 
-import { countChars } from './parser.js';
-import { writeZip } from './zip.js';
+import { countChars, parseScriptText } from './parser.js';
+import { writeZip, readZipEntries } from './zip.js';
 import { serializeScript } from './serialize.js';
 
 export const PACKAGE_FORMAT = 'mumu-package';
@@ -74,7 +74,9 @@ export function makeManifest(opts) {
 }
 
 /* ---------- schema 迁移 ---------- */
-/** 规范化单条 works（迁移与回填共用）：缺省 id / tag / chapterNo / format / chars */
+/** 规范化单条 works（迁移与回填共用）：缺省 id / tag / chapterNo / format / chars
+ *  注意：**不**兜 `file`。迁移路径补默认文件名会让「作品包缺少第 N 章的剧本文件。」
+ *  这条导入期检查永远不可达；缺 file 就让它缺着，由 validateManifest 拦下。 */
 function normalizeWork(w, i) {
   const src = w && typeof w === 'object' ? w : {};
   const chapterNo = Number.isInteger(src.chapterNo) && src.chapterNo > 0 ? src.chapterNo : i + 1;
@@ -83,7 +85,7 @@ function normalizeWork(w, i) {
     title: src.title || '',
     tag: src.tag || src.title || '',
     chapterNo,
-    file: src.file || 'script.txt',
+    file: src.file || '',
     format: src.format || 'text',
     chars: typeof src.chars === 'number' ? src.chars : 0,
   };
@@ -97,7 +99,19 @@ function migrateV1toV2(m) {
     : (Array.isArray(m.works) ? m.works.map(normalizeWork) : []);
   const assets = [];
   if (Array.isArray(m.assets)) {
-    assets.push(...m.assets);
+    // 数组形态：逐条补 id / role / type（按扩展名推断）/ bytes（spec §3.3）
+    for (const a of m.assets) {
+      const src = a && typeof a === 'object' && !Array.isArray(a) ? a : {};
+      const file = src.file || '';
+      assets.push({
+        ...src,
+        id: src.id || src.role || 'asset',
+        role: src.role || src.id || 'asset',
+        file,
+        type: src.type || inferAssetType(file),
+        bytes: typeof src.bytes === 'number' ? src.bytes : 0,
+      });
+    }
   } else {
     const src = m.assets && typeof m.assets === 'object' ? m.assets : {};
     for (const [key, file] of Object.entries(src)) {
@@ -113,7 +127,10 @@ function migrateV1toV2(m) {
   return {
     ...m,
     schemaVersion: SCHEMA_VERSION,
-    kind: works.length > 1 ? 'series' : 'work',
+    // 显式给了 kind 就尊重；没给才按作品数推导。
+    // 无条件重算会把「v2 形状但漏写 schemaVersion、显式 kind=series 且只有 1 个作品」
+    // 的包静默降级成 work，导入端就会按独立卡片落库而不是曲目卡。
+    kind: m.kind || (works.length > 1 ? 'series' : 'work'),
     summary: m.summary || '',
     author: m.author || '',
     series: m.series || null,
@@ -174,7 +191,9 @@ export function validateManifest(input) {
     if (!w.id) w.id = `chapter_${i + 1}`;
     if (!w.title) w.title = w.id;
     if (!w.tag) w.tag = w.title;
-    if (typeof w.chapterNo !== 'number') w.chapterNo = i + 1;
+    // 章序只接受整数：字符串 '2' / 小数 2.5 一律退回下标 +1，
+    // 免得后面按 chapterNo 排序或比较时出现 '10' < '2' 这类诡异行为
+    if (!Number.isInteger(w.chapterNo)) w.chapterNo = i + 1;
     if (!w.format) w.format = 'text';
     if (typeof w.chars !== 'number') w.chars = 0;
   });
@@ -388,4 +407,221 @@ export function downloadPackage(bytes, filename) {
   a.remove();
   // 慢设备 / 大包时 1 秒可能还没开始下载，延后到 30 秒再释放
   setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+/* ---------- 导入 ---------- */
+
+/** 封面缩放失败时允许直接入库的原图上限（spec §7：≤2MB） */
+const MAX_COVER_FALLBACK_BYTES = 2 * 1024 * 1024;
+
+/**
+ * 把封面缩到 ≤640px 的 JPEG data URL。
+ * - 有 DOM 时用 createImageBitmap + canvas 缩放（quality 0.82）
+ * - 无 DOM（Node 单测）或缩放失败时：原图 ≤2MB 返回原图 data URL，否则返回 null（跳过封面）
+ * DOM 相关引用只出现在这个函数体内，模块顶层不碰 document。
+ */
+export async function buildCoverDataUrl(bytes, mime) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || 0);
+  const type = mime || 'image/jpeg';
+  const fallback = () => (u8.length <= MAX_COVER_FALLBACK_BYTES ? bytesToDataUrl(u8, type) : null);
+  if (typeof document === 'undefined' || typeof createImageBitmap !== 'function') return fallback();
+  try {
+    const bitmap = await createImageBitmap(new Blob([u8], { type }));
+    const maxSide = Math.max(bitmap.width || 0, bitmap.height || 0);
+    if (!maxSide) return fallback();
+    const scale = Math.min(1, 640 / maxSide);
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return fallback();
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const url = canvas.toDataURL('image/jpeg', 0.82);
+    return url || fallback();
+  } catch (e) {
+    return fallback();
+  }
+}
+
+/** 在 taken 集合里找一个不冲突的 id：base → base_2 → base_3 … */
+function uniqueId(base, taken) {
+  if (!taken.has(base)) return base;
+  let i = 2;
+  while (taken.has(`${base}_${i}`)) i += 1;
+  return `${base}_${i}`;
+}
+
+/** 统一成 ArrayBuffer（zip 读端要求 ArrayBuffer）；不是缓冲区时返回 null */
+function toArrayBuffer(input) {
+  if (input instanceof ArrayBuffer) return input;
+  if (ArrayBuffer.isView(input)) {
+    return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+  }
+  return null;
+}
+
+/**
+ * 导入作品包（**纯函数**：不写 localStorage、不碰 window、不弹窗）。
+ *
+ * opts.existing：本地已有作品 [{ id, series, builtin }]，用于判断 id / series 冲突。
+ * 返回 { manifest, kind, title, seriesId, seriesTitle, works, warnings }
+ *  - kind='work'   → 每章都是独立卡片，series 恒为 null
+ *  - kind='series' → 整本成为一张曲目卡，works[].series = seriesId
+ * 任何一步失败都抛出带 userFacing 标记的中文错误，调用方据此提示且不落库。
+ */
+export async function importPackage(buffer, opts = {}) {
+  const o = opts && typeof opts === 'object' ? opts : {};
+  const existing = Array.isArray(o.existing) ? o.existing : [];
+  const warnings = [];
+
+  const size = buffer && typeof buffer.byteLength === 'number' ? buffer.byteLength : 0;
+  if (size > MAX_PACKAGE_BYTES) throw pkgFail('作品包超过 32MB，无法导入。');
+
+  const buf = toArrayBuffer(buffer);
+  if (!buf) throw pkgFail('作品包数据无效，无法导入。');
+
+  let entries;
+  try {
+    entries = await readZipEntries(buf);
+  } catch (e) {
+    throw pkgFail('这个文件不是有效的暮幕作品包（ZIP 结构无法读取）。');
+  }
+
+  const manifestBytes = entries.get('manifest.json');
+  if (!manifestBytes) throw pkgFail('作品包缺少 manifest.json。');
+  let rawManifest;
+  try {
+    rawManifest = JSON.parse(new TextDecoder('utf-8').decode(manifestBytes));
+  } catch (e) {
+    throw pkgFail('作品包清单无法解析，可能已损坏。');
+  }
+
+  // 校验与迁移（spec §3.2 / §3.3）：错误都是中文 userFacing
+  const manifest = validateManifest(rawManifest);
+
+  // 本地已有的 id / 曲目 id
+  const localIds = new Set();
+  const builtinIds = new Set();
+  const takenSeries = new Set();
+  for (const s of existing) {
+    if (!s || typeof s !== 'object') continue;
+    if (typeof s.id === 'string' && s.id) {
+      localIds.add(s.id);
+      if (s.builtin) builtinIds.add(s.id);
+    }
+    if (typeof s.series === 'string' && s.series) takenSeries.add(s.series);
+  }
+
+  // 曲目 id 冲突：加 user: 前缀（已是 user: 前缀则视为更新同一曲目）
+  let seriesId = null;
+  let seriesTitle = '';
+  if (manifest.kind === 'series') {
+    const pkgSeries = manifest.series && typeof manifest.series === 'object' ? manifest.series : null;
+    seriesId = String((pkgSeries && pkgSeries.id) || manifest.id || '');
+    seriesTitle = String((pkgSeries && pkgSeries.title) || manifest.title || '');
+    if (seriesId && takenSeries.has(seriesId) && !seriesId.startsWith('user:')) {
+      let next = `user:${seriesId}`;
+      let i = 2;
+      while (takenSeries.has(next)) { next = `user:${seriesId}_${i}`; i += 1; }
+      seriesId = next;
+    }
+  }
+
+  // 封面：整个包一份，落在包内 assets 的 role==='cover' 条目上
+  let coverImage = null;
+  const coverAsset = (manifest.assets || []).find((a) => a && a.role === 'cover');
+  if (coverAsset && coverAsset.file) {
+    const coverBytes = entries.get(coverAsset.file);
+    if (!coverBytes) {
+      warnings.push('作品包内没有封面文件，已跳过封面。');
+    } else if (coverBytes.length > MAX_ASSET_BYTES) {
+      warnings.push('封面图片超过 4MB，已跳过封面。');
+    } else {
+      const mime = coverAsset.type || inferAssetType(coverAsset.file) || 'image/jpeg';
+      coverImage = await buildCoverDataUrl(coverBytes, mime);
+      if (!coverImage) warnings.push('封面图片处理失败，已跳过封面。');
+    }
+  }
+
+  const works = [];
+  const usedIds = new Set(); // 本次导入已用掉的 id（包内重名时用来避让）
+  for (let i = 0; i < manifest.works.length; i++) {
+    const w = manifest.works[i];
+    const file = typeof w.file === 'string' ? w.file : '';
+    if (!file) throw pkgFail(`作品包缺少第 ${i + 1} 章的剧本文件。`);
+    const bytes = entries.get(file);
+    if (!bytes) throw pkgFail(`作品包缺少第 ${i + 1} 章的剧本文件（${file}）。`);
+
+    const text = new TextDecoder('utf-8').decode(bytes);
+    let script;
+    try {
+      script = parseScriptText(text, w.title || w.id || '');
+    } catch (e) {
+      throw pkgFail(`第 ${i + 1} 章《${w.title || w.id}》解析失败：${e.message}`);
+    }
+
+    // id 冲突处理：
+    // - 与内置作品同名（或以 builtin_ 开头）→ 加 user: 前缀另存
+    // - 与本地已导入作品同名 → 视为更新，保持原 id
+    // - 包内 id 重复 → 加后缀，避免同一批作品互相覆盖
+    const taken = new Set([...localIds, ...usedIds]);
+    let id = typeof w.id === 'string' && w.id ? w.id : `chapter_${i + 1}`;
+    if (usedIds.has(id)) {
+      id = uniqueId(id, taken);
+    } else if (builtinIds.has(id) || id.startsWith('builtin_')) {
+      id = uniqueId(`user:${id}`, taken);
+    }
+    usedIds.add(id);
+
+    // 章序只接受整数；缺失 / 非法时整本退回下标 +1，单章退回 0
+    const rawNo = Number.isInteger(w.chapterNo) ? w.chapterNo : null;
+    const chapterNo = manifest.kind === 'series'
+      ? (rawNo === null ? i + 1 : rawNo)
+      : (rawNo === null ? 0 : rawNo);
+
+    works.push({
+      id,
+      title: script.title || w.title || id,
+      summary: script.summary || manifest.summary || '',
+      author: script.author || manifest.author || '',
+      characters: script.characters,
+      nodes: script.nodes,
+      labels: script.labels,
+      cover: script.cover,
+      tag: w.tag || w.title || '',
+      chapterNo,
+      series: manifest.kind === 'series' ? seriesId : null,
+      seriesTitle: manifest.kind === 'series' ? seriesTitle : '',
+      source: text,
+      coverImage,
+      manifest: {
+        format: manifest.format,
+        formatVersion: manifest.formatVersion,
+        schemaVersion: manifest.schemaVersion,
+        kind: manifest.kind,
+        license: manifest.license,
+        engine: manifest.engine,
+        series: manifest.series,
+        packageId: manifest.id,
+        packageTitle: manifest.title,
+        works: (manifest.works || []).map((x) => ({
+          id: x.id, title: x.title, tag: x.tag,
+          chapterNo: x.chapterNo, file: x.file, format: x.format, chars: x.chars,
+        })),
+      },
+      builtin: false,
+    });
+  }
+
+  return {
+    manifest,
+    kind: manifest.kind,
+    title: manifest.title || (works[0] && works[0].title) || '未命名作品',
+    seriesId,
+    seriesTitle,
+    works,
+    warnings,
+  };
 }

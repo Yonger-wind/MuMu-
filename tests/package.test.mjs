@@ -5,8 +5,9 @@ import {
   MAX_PACKAGE_BYTES, MAX_ASSET_BYTES, MIGRATIONS, pkgFail,
   makeManifest, migrateManifest, validateManifest,
   exportPackage, dataUrlToBytes, bytesToDataUrl, checkPackageSize,
+  importPackage, buildCoverDataUrl,
 } from '../scripts/package.js';
-import { readZipEntries } from '../scripts/zip.js';
+import { readZipEntries, writeZip } from '../scripts/zip.js';
 import { parseScriptText, countChars, readFileToScript } from '../scripts/parser.js';
 import { loadBuiltinScripts } from '../scripts/builtin.js';
 
@@ -686,4 +687,391 @@ test('导出时 manifest.works 里每个 file 都真实存在于包内', async (
   for (const w of manifest.works) {
     assert.ok(entries.has(w.file), `包内缺少 ${w.file}`);
   }
+});
+
+/* ============================================================
+   导入链路（Task 5）
+   ============================================================ */
+
+/** 造一个只含 manifest.json 的包（用于缺章节文件等分支） */
+const packWithManifest = async (manifest, extra = []) => writeZip([
+  { name: 'manifest.json', data: JSON.stringify(manifest) },
+  ...extra,
+]);
+
+test('导出后导入：逐节点等价且保留原文', async () => {
+  const sc = parseScriptText(SAMPLE, 'test.txt');
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'w1', title: '测试剧', summary: '简介', author: '作者',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'w1', title: '测试剧', tag: '我的剧本', chapterNo: 1, source: SAMPLE, script: sc }],
+  });
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.kind, 'work');
+  assert.equal(res.works.length, 1);
+  const w = res.works[0];
+  assert.equal(w.id, 'w1');
+  assert.equal(w.title, '测试剧');
+  assert.equal(w.source, SAMPLE);
+  assert.equal(w.nodes.length, sc.nodes.length);
+  assert.deepEqual(w.nodes.map((n) => n.t), sc.nodes.map((n) => n.t));
+  assert.equal(w.builtin, false);
+});
+
+test('导入结果带齐本地作品记录的全部字段', async () => {
+  const sc = parseScriptText(SAMPLE, 'test.txt');
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'w1', title: '测试剧', summary: '简介', author: '作者',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'w1', title: '测试剧', tag: '我的剧本', chapterNo: 1, source: SAMPLE, script: sc }],
+  });
+  const res = await importPackage(ab(bytes), { existing: [] });
+  const w = res.works[0];
+  for (const key of [
+    'id', 'title', 'summary', 'author', 'characters', 'nodes', 'labels', 'cover',
+    'tag', 'chapterNo', 'series', 'seriesTitle', 'source', 'coverImage', 'manifest', 'builtin',
+  ]) {
+    assert.ok(key in w, `导入结果缺少字段 ${key}`);
+  }
+  assert.equal(w.tag, '我的剧本');
+  assert.equal(w.series, null);
+  assert.equal(w.builtin, false);
+  assert.equal(w.manifest.kind, 'work');
+  assert.equal(w.manifest.packageId, 'w1');
+  assert.equal(w.manifest.packageTitle, '测试剧');
+  assert.ok(Array.isArray(w.characters) && w.characters.length === 1);
+  assert.ok(w.labels && typeof w.labels === 'object');
+});
+
+test('整本导入：作品按章序排列并带 series 信息', async () => {
+  const a = parseScriptText(SAMPLE, 'a.txt');
+  const b = parseScriptText(SAMPLE, 'b.txt');
+  const { bytes } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '简介', author: '',
+    series: null, license: null, coverImage: null,
+    works: [
+      { id: 's1_01', title: '曲目', tag: '第一章', chapterNo: 1, source: SAMPLE, script: a },
+      { id: 's1_02', title: '曲目', tag: '第二章', chapterNo: 2, source: SAMPLE, script: b },
+    ],
+  });
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.kind, 'series');
+  assert.equal(res.seriesId, 's1');
+  assert.equal(res.works.length, 2);
+  assert.equal(res.works[0].chapterNo, 1);
+  assert.equal(res.works[1].chapterNo, 2);
+  assert.equal(res.works[0].series, 's1');
+  assert.equal(res.works[0].seriesTitle, '曲目');
+});
+
+test('整本导入且 series 与本地冲突时加 user: 前缀', async () => {
+  const a = parseScriptText(SAMPLE, 'a.txt');
+  const { bytes } = await exportPackage({
+    kind: 'series', id: 'cicada', title: '蝉鸣止于逢魔时', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'cicada_01', title: '蝉鸣止于逢魔时', tag: '第一章', chapterNo: 1, source: SAMPLE, script: a }],
+  });
+  const res = await importPackage(ab(bytes), { existing: [{ id: 'builtin_cicada_01', series: 'cicada', builtin: true }] });
+  assert.equal(res.seriesId, 'user:cicada');
+  assert.equal(res.works[0].series, 'user:cicada');
+});
+
+test('作品 id 与本地已导入作品相同时视为更新（id 不变）', async () => {
+  const sc = parseScriptText(SAMPLE, 'test.txt');
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'w1', title: '测试剧', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'w1', title: '测试剧', tag: '', chapterNo: 1, source: SAMPLE, script: sc }],
+  });
+  const res = await importPackage(ab(bytes), { existing: [{ id: 'w1', builtin: false }] });
+  assert.equal(res.works[0].id, 'w1');
+});
+
+test('作品 id 与内置作品冲突时加 user: 前缀', async () => {
+  const sc = parseScriptText(SAMPLE, 'test.txt');
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'builtin_cicada_01', title: '测试剧', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'builtin_cicada_01', title: '测试剧', tag: '', chapterNo: 1, source: SAMPLE, script: sc }],
+  });
+  const res = await importPackage(ab(bytes), { existing: [{ id: 'builtin_cicada_01', builtin: true }] });
+  assert.equal(res.works[0].id, 'user:builtin_cicada_01');
+});
+
+test('缺少章节文件时报错并给出中文原因', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧', works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }], assets: [],
+  };
+  const bytes = await packWithManifest(manifest);
+  await assert.rejects(
+    () => importPackage(ab(bytes), { existing: [] }),
+    (e) => e.userFacing === true && e.message.includes('缺少第 1 章'),
+  );
+});
+
+test('缺少 manifest.json 时报错', async () => {
+  const bytes = await writeZip([{ name: 'script.txt', data: 'x' }]);
+  await assert.rejects(
+    () => importPackage(ab(bytes), { existing: [] }),
+    (e) => e.userFacing === true && e.message.includes('manifest.json'),
+  );
+});
+
+test('剧本语法错误时报错并指出章序', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧', works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }], assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [
+    { name: 'script.txt', data: '【场景：不存在的地方 | 黄昏 | 中景】\n阿蓝：你好\n【结束】' },
+  ]);
+  await assert.rejects(
+    () => importPackage(ab(bytes), { existing: [] }),
+    (e) => e.userFacing === true && e.message.includes('第 1 章'),
+  );
+});
+
+/* ---------- 裁定 R-a：迁移不得无条件重算 kind ---------- */
+
+test('R-a：缺 schemaVersion 且显式 kind=series 的单作品包迁移后仍是 series', () => {
+  const m = migrateManifest({
+    format: 'mumu-package', formatVersion: 1, kind: 'series',
+    id: 's1', title: '曲目',
+    works: [{ id: 's1_01', title: '曲目', file: 'chapters/01.txt' }],
+  });
+  assert.equal(m.kind, 'series');
+  assert.equal(m.works.length, 1);
+});
+
+test('R-a：缺 schemaVersion 且未写 kind 时仍按作品数推导', () => {
+  const m = migrateManifest({
+    format: 'mumu-package', formatVersion: 1, id: 'x', title: 'X',
+    works: [
+      { id: 'a', title: 'A', file: 'chapters/01.txt' },
+      { id: 'b', title: 'B', file: 'chapters/02.txt' },
+    ],
+  });
+  assert.equal(m.kind, 'series');
+});
+
+test('R-a：显式 kind=series 的包导入后仍按曲目分组', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, kind: 'series',
+    id: 's1', title: '曲目',
+    works: [{ id: 's1_01', title: '曲目', file: 'chapters/01.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [
+    { name: 'chapters/01.txt', data: SAMPLE },
+  ]);
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.kind, 'series');
+  assert.equal(res.seriesId, 's1');
+  assert.equal(res.works[0].series, 's1');
+});
+
+/* ---------- 裁定 R-b：迁移路径不兜 file ---------- */
+
+test('R-b：v1 迁移后缺 file 的章节由校验拦下', () => {
+  const v1 = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 1,
+    id: 'x', title: 'X',
+    chapters: [{ id: 'c1', title: '第一章' }],
+  };
+  const m = migrateManifest(v1);
+  assert.equal(m.works[0].file, '');
+  assert.throws(
+    () => validateManifest(v1),
+    (e) => e.userFacing === true && e.message.includes('作品包缺少第 1 章的剧本文件'),
+  );
+});
+
+test('R-b：包内没有该章节文件时错误文案带上文件名', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧', works: [{ id: 'w1', title: '测试剧', file: 'chapters/01.txt' }], assets: [],
+  };
+  const bytes = await packWithManifest(manifest);
+  await assert.rejects(
+    () => importPackage(ab(bytes), { existing: [] }),
+    (e) => e.userFacing === true && e.message.includes('缺少第 1 章') && e.message.includes('chapters/01.txt'),
+  );
+});
+
+/* ---------- 裁定 R-c：数组形态 assets 也要推断 type ---------- */
+
+test('R-c：数组形态 assets 迁移后按扩展名推断 type', () => {
+  const v1 = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 1,
+    id: 'x', title: 'X',
+    works: [{ id: 'w1', title: 'W1', file: 'script.txt' }],
+    assets: [{ id: 'cover', role: 'cover', file: 'assets/cover.png' }],
+  };
+  const m = migrateManifest(v1);
+  assert.equal(m.assets.length, 1);
+  assert.equal(m.assets[0].type, 'image/png');
+  assert.equal(m.assets[0].role, 'cover');
+  assert.equal(m.assets[0].id, 'cover');
+});
+
+/* ---------- 裁定 R-d：chapterNo 必须是整数 ---------- */
+
+test('R-d：manifest 里 chapterNo 为字符串时导入结果是 number', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'series',
+    id: 's1', title: '曲目',
+    works: [
+      { id: 's1_01', title: '曲目', file: 'chapters/01.txt', chapterNo: '1' },
+      { id: 's1_02', title: '曲目', file: 'chapters/02.txt', chapterNo: '2' },
+    ],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [
+    { name: 'chapters/01.txt', data: SAMPLE },
+    { name: 'chapters/02.txt', data: SAMPLE },
+  ]);
+  const res = await importPackage(ab(bytes), { existing: [] });
+  res.works.forEach((w) => assert.equal(typeof w.chapterNo, 'number'));
+  res.works.forEach((w) => assert.ok(Number.isInteger(w.chapterNo)));
+});
+
+/* ---------- 裁定 R-e / R-f：错误文案与封面兜底 ---------- */
+
+test('R-f：无 DOM 时封面回退为原图 data URL', async () => {
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const url = await buildCoverDataUrl(png, 'image/png');
+  assert.ok(url && url.startsWith('data:image/png;base64,'));
+});
+
+test('R-f：无 DOM 时超过 2MB 的封面被跳过', async () => {
+  const big = new Uint8Array(2 * 1024 * 1024 + 1);
+  const url = await buildCoverDataUrl(big, 'image/png');
+  assert.equal(url, null);
+});
+
+test('导入带封面的包时 coverImage 是 data URL', async () => {
+  const sc = parseScriptText(SAMPLE, 'test.txt');
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'w1', title: '测试剧', summary: '', author: '',
+    series: null, license: null, coverImage: bytesToDataUrl(png, 'image/png'),
+    works: [{ id: 'w1', title: '测试剧', tag: '', chapterNo: 1, source: SAMPLE, script: sc }],
+  });
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.ok(res.works[0].coverImage.startsWith('data:image/png;base64,'));
+});
+
+test('导入超过 4MB 的封面时跳过封面并给出警告', async () => {
+  // 导出侧本来就会跳过 4MB 以上的封面，所以这里手工造一个超限的包来验证导入侧的兜底
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [{ id: 'cover', role: 'cover', file: 'assets/cover.png', type: 'image/png', bytes: MAX_ASSET_BYTES + 1 }],
+  };
+  const bytes = await packWithManifest(manifest, [
+    { name: 'script.txt', data: SAMPLE },
+    { name: 'assets/cover.png', data: new Uint8Array(MAX_ASSET_BYTES + 1) },
+  ]);
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.works[0].coverImage, null);
+  assert.ok(Array.isArray(res.warnings) && res.warnings.some((x) => x.includes('封面图片超过 4MB')));
+});
+
+/* ---------- 裁定 R-g：JSON 源 → 导入 → 导出 → 再导入 ---------- */
+
+test('R-g 闭环：JSON 源导出导入后 nodes 等价，再导出再导入仍等价', async () => {
+  const script = await readFileToScript(new File([JSON_SRC], 'test.json'));
+  const first = await exportPackage({
+    kind: 'work', id: 'w1', title: 'JSON 剧', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'w1', title: 'JSON 剧', tag: '', chapterNo: 1, source: script.source, script }],
+  });
+  const imported = await importPackage(ab(first.bytes), { existing: [] });
+  assert.equal(imported.works.length, 1);
+  const w = imported.works[0];
+  assert.deepEqual(w.nodes.map((n) => n.t), script.nodes.map((n) => n.t));
+
+  const second = await exportPackage({
+    kind: 'work', id: 'w1', title: 'JSON 剧', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{
+      id: w.id, title: w.title, tag: w.tag, chapterNo: w.chapterNo, source: w.source,
+      script: {
+        title: w.title, summary: w.summary, author: w.author,
+        characters: w.characters, nodes: w.nodes, labels: w.labels,
+      },
+    }],
+  });
+  const again = await importPackage(ab(second.bytes), { existing: [] });
+  const w2 = again.works[0];
+  assert.deepEqual(w2.nodes.map((n) => n.t), w.nodes.map((n) => n.t));
+  assert.deepEqual(
+    w2.nodes.map((n) => (n.t === 'say' ? n.text : '')),
+    w.nodes.map((n) => (n.t === 'say' ? n.text : '')),
+  );
+});
+
+/* ---------- 导入端限额与坏包 ---------- */
+
+test('导入端 32MB 上限：超限包给出中文 userFacing 错误', async () => {
+  const oversized = new Uint8Array(MAX_PACKAGE_BYTES + 1);
+  await assert.rejects(
+    () => importPackage(oversized, { existing: [] }),
+    (e) => e.userFacing === true && e.message.includes('32MB'),
+  );
+});
+
+test('不是 ZIP 的数据导入时报中文 userFacing 错误', async () => {
+  const junk = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+  await assert.rejects(
+    () => importPackage(ab(junk), { existing: [] }),
+    (e) => e.userFacing === true && e.message.includes('不是有效的暮幕作品包'),
+  );
+});
+
+test('manifest.json 不是合法 JSON 时报中文 userFacing 错误', async () => {
+  const bytes = await writeZip([{ name: 'manifest.json', data: '{ 不是 json' }]);
+  await assert.rejects(
+    () => importPackage(ab(bytes), { existing: [] }),
+    (e) => e.userFacing === true && e.message.includes('无法解析'),
+  );
+});
+
+test('importPackage 是纯函数：不触碰 localStorage', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'w1', title: '测试剧', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'w1', title: '测试剧', tag: '', chapterNo: 1, source: SAMPLE, script: sc }],
+  });
+  let touched = false;
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    get() { touched = true; throw new Error('importPackage 不应触碰 localStorage'); },
+  });
+  try {
+    const res = await importPackage(ab(bytes), { existing: [] });
+    assert.equal(res.works.length, 1);
+    assert.equal(touched, false);
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test('单章包导入后不进入任何曲目（series 为空）', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'w1', title: '测试剧', summary: '', author: '',
+    series: { id: 'cicada', title: '蝉鸣止于逢魔时' }, license: null, coverImage: null,
+    works: [{ id: 'w1', title: '测试剧', tag: '', chapterNo: 1, source: SAMPLE, script: sc }],
+  });
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.kind, 'work');
+  assert.equal(res.seriesId, null);
+  assert.equal(res.works[0].series, null);
+  assert.equal(res.works[0].seriesTitle, '');
+  // 包内 series 字段只作为来源信息存进 manifest 快照
+  assert.deepEqual(res.works[0].manifest.series, { id: 'cicada', title: '蝉鸣止于逢魔时' });
 });
