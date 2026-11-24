@@ -31,11 +31,11 @@ node --test          # 运行 tests/*.test.mjs
 ```bash
 node tools/lint.js 剧本.txt        # 校验单个 .txt / .md 剧本
 node tools/lint.js --builtin      # 校验内置 15 章
-node tools/lint.js --json         # 机器可读输出
+node tools/lint.js --builtin --json   # 机器可读输出
 node tools/lint.js 剧本.txt --strict  # 把警告也算失败
 ```
 
-每条问题都带**行号 + 规则码 + 原因 + 修法提示**；退出码 0 = 通过，1 = 有错误，2 = 用法错误。
+每条问题都带**行号 + 规则码 + 原因 + 修法提示**；退出码 0 = 通过，1 = 有错误（`--strict` 时 warning 也算），2 = 用法错误。
 规则码表见 [docs/mumu-lint-rules.md](docs/mumu-lint-rules.md)。
 
 ## 部署

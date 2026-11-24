@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { SCENES, TIMES, CAMS, POSES, ACTS, VIEWS, MODELS } from '../scripts/parser.js';
 import { matchTable, resolveTable, scanText, lintText, lintBuiltin } from '../tools/lint.js';
+import { loadBuiltinScripts } from '../scripts/builtin.js';
 
 const TABLES = { SCENES, TIMES, CAMS, POSES, ACTS, VIEWS };
 
@@ -801,6 +802,7 @@ test('CLI 文本模式通过行按「、」连接作用域（--builtin 文案可
 // ---- 回归哨兵：内置语料必须零 issue，且离线工具不得渗进运行时 ----
 
 test('内置 15 章零 issue', () => {
+  assert.equal(loadBuiltinScripts().length, 15, '内置语料应恰好 15 章，否则下面的零 issue 断言会变空洞');
   const r = lintBuiltin();
   assert.deepEqual(r.issues.map((i) => `${i.code} ${i.file} ${i.line}: ${i.message}`), []);
   assert.equal(r.summary.errors, 0);
