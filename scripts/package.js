@@ -4,7 +4,7 @@
    本模块不依赖 DOM（downloadPackage 除外），可在 Node 单测中运行
    ============================================================ */
 
-import { countChars, parseScriptText } from './parser.js';
+import { countChars, parseScriptText, LIMITS } from './parser.js';
 import { writeZip, readZipEntries } from './zip.js';
 import { serializeScript } from './serialize.js';
 
@@ -13,6 +13,8 @@ export const FORMAT_VERSION = 1;
 export const SCHEMA_VERSION = 2;
 export const MAX_PACKAGE_BYTES = 32 * 1024 * 1024;
 export const MAX_ASSET_BYTES = 4 * 1024 * 1024;
+/** 包内全部条目解压后的总字节上限（zip bomb 防护） */
+export const MAX_UNPACKED_BYTES = 64 * 1024 * 1024;
 
 export function pkgFail(msg) {
   const e = new Error(msg);
@@ -74,17 +76,28 @@ export function makeManifest(opts) {
 }
 
 /* ---------- schema 迁移 ---------- */
+/**
+ * 章序归一（**唯一入口**：迁移与校验共用同一处判定）。
+ * - 接受可转成整数的数字字符串：'10' → 10（与导出侧 Number() 语义一致，
+ *   免得包作者写的章序被静默改写成 1）
+ * - 其余情况（undefined / 'oops' / NaN / 非正数）退回下标 +1
+ * 输出一定是 number。
+ */
+function normalizeChapterNo(value, i) {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : i + 1;
+}
+
 /** 规范化单条 works（迁移与回填共用）：缺省 id / tag / chapterNo / format / chars
  *  注意：**不**兜 `file`。迁移路径补默认文件名会让「作品包缺少第 N 章的剧本文件。」
  *  这条导入期检查永远不可达；缺 file 就让它缺着，由 validateManifest 拦下。 */
 function normalizeWork(w, i) {
   const src = w && typeof w === 'object' ? w : {};
-  const chapterNo = Number.isInteger(src.chapterNo) && src.chapterNo > 0 ? src.chapterNo : i + 1;
   return {
     id: src.id || `chapter_${i + 1}`,
     title: src.title || '',
     tag: src.tag || src.title || '',
-    chapterNo,
+    chapterNo: normalizeChapterNo(src.chapterNo, i),
     file: src.file || '',
     format: src.format || 'text',
     chars: typeof src.chars === 'number' ? src.chars : 0,
@@ -191,9 +204,9 @@ export function validateManifest(input) {
     if (!w.id) w.id = `chapter_${i + 1}`;
     if (!w.title) w.title = w.id;
     if (!w.tag) w.tag = w.title;
-    // 章序只接受整数：字符串 '2' / 小数 2.5 一律退回下标 +1，
-    // 免得后面按 chapterNo 排序或比较时出现 '10' < '2' 这类诡异行为
-    if (!Number.isInteger(w.chapterNo)) w.chapterNo = i + 1;
+    // 章序归一只在 normalizeChapterNo 一处做：数字字符串按数值取，
+    // 非法值退回下标 +1（免得后面按 chapterNo 排序或比较时出现 '10' < '2' 这类行为）
+    w.chapterNo = normalizeChapterNo(w.chapterNo, i);
     if (!w.format) w.format = 'text';
     if (typeof w.chars !== 'number') w.chars = 0;
   });
@@ -489,6 +502,13 @@ export async function importPackage(buffer, opts = {}) {
     throw pkgFail('这个文件不是有效的暮幕作品包（ZIP 结构无法读取）。');
   }
 
+  // 解压后总量上限：压缩包本身不大不代表解压后不大（zip bomb）
+  let unpacked = 0;
+  for (const bytes of entries.values()) unpacked += bytes && bytes.length ? bytes.length : 0;
+  if (unpacked > MAX_UNPACKED_BYTES) {
+    throw pkgFail('作品包解压后的内容超过 64MB，请缩减内容后再导入。');
+  }
+
   const manifestBytes = entries.get('manifest.json');
   if (!manifestBytes) throw pkgFail('作品包缺少 manifest.json。');
   let rawManifest;
@@ -505,54 +525,114 @@ export async function importPackage(buffer, opts = {}) {
   const localIds = new Set();
   const builtinIds = new Set();
   const takenSeries = new Set();
+  const localById = new Map();   // 本地 id → { series, builtin }
   for (const s of existing) {
     if (!s || typeof s !== 'object') continue;
     if (typeof s.id === 'string' && s.id) {
       localIds.add(s.id);
       if (s.builtin) builtinIds.add(s.id);
+      localById.set(s.id, { series: s.series, builtin: !!s.builtin });
     }
     if (typeof s.series === 'string' && s.series) takenSeries.add(s.series);
   }
 
-  // 曲目 id 冲突：加 user: 前缀（已是 user: 前缀则视为更新同一曲目）
+  /** 曲目归属桶：undefined / null / '' 视为同一个「无曲目」桶 */
+  const seriesBucket = (v) => (typeof v === 'string' && v) ? v : null;
+
+  /** 原始曲目 id 是否已被本地占用（含章节 id 形如 <曲目id>_<序号> 的情况） */
+  const seriesOccupied = (sid) => {
+    if (!sid) return false;
+    if (takenSeries.has(sid)) return true;
+    for (const id of localIds) {
+      if (id === sid || id.startsWith(`${sid}_`)) return true;
+    }
+    return false;
+  };
+
+  // 曲目 id 冲突处理（顺序见 brief B1）：
+  // 1. 先判「是否同一曲目的更新」：包内每个 work 的 id 都能在本地找到同 id 的作品，
+  //    且这些本地作品属于同一个曲目、该曲目就是包声明的原始曲目 id
+  //    （或其 user: 变体）→ 视为更新，曲目 id 与章节 id 都保持原值。
+  // 2. 否则原始曲目 id 已被本地占用 → 加 user: 前缀（已是 user: 前缀则视为同曲目）。
   let seriesId = null;
   let seriesTitle = '';
   if (manifest.kind === 'series') {
     const pkgSeries = manifest.series && typeof manifest.series === 'object' ? manifest.series : null;
-    seriesId = String((pkgSeries && pkgSeries.id) || manifest.id || '');
+    const rawSeriesId = String((pkgSeries && pkgSeries.id) || manifest.id || '');
     seriesTitle = String((pkgSeries && pkgSeries.title) || manifest.title || '');
-    if (seriesId && takenSeries.has(seriesId) && !seriesId.startsWith('user:')) {
-      let next = `user:${seriesId}`;
+
+    let localSeries = null;
+    let sameSeries = manifest.works.length > 0;
+    if (sameSeries) {
+      for (const w of manifest.works) {
+        const loc = localById.get(w.id);
+        if (!loc || loc.builtin) { sameSeries = false; break; }
+        const bucket = seriesBucket(loc.series);
+        if (!bucket) { sameSeries = false; break; }
+        if (localSeries === null) localSeries = bucket;
+        else if (localSeries !== bucket) { sameSeries = false; break; }
+      }
+    }
+    const isUpdate = sameSeries && localSeries !== null && (
+      localSeries === rawSeriesId
+      || localSeries === `user:${rawSeriesId}`
+      || localSeries.startsWith(`user:${rawSeriesId}_`)
+    );
+
+    if (isUpdate) {
+      seriesId = localSeries;                        // 同一曲目的更新：保持已有 id
+    } else if (!rawSeriesId || rawSeriesId.startsWith('user:')) {
+      seriesId = rawSeriesId;                        // 已是 user: 前缀 → 视为同曲目
+    } else if (seriesOccupied(rawSeriesId)) {
+      let next = `user:${rawSeriesId}`;              // 冲突：加 user: 前缀另存
       let i = 2;
-      while (takenSeries.has(next)) { next = `user:${seriesId}_${i}`; i += 1; }
+      while (takenSeries.has(next)) { next = `user:${rawSeriesId}_${i}`; i += 1; }
       seriesId = next;
+    } else {
+      seriesId = rawSeriesId;
     }
   }
 
-  // 封面：整个包一份，落在包内 assets 的 role==='cover' 条目上
+  // 封面：整个包一份，落在包内 role==='cover' 或 id==='cover' 的条目上
   let coverImage = null;
-  const coverAsset = (manifest.assets || []).find((a) => a && a.role === 'cover');
-  if (coverAsset && coverAsset.file) {
-    const coverBytes = entries.get(coverAsset.file);
-    if (!coverBytes) {
+  const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
+  const coverAsset = assets.find((a) => a && (a.role === 'cover' || a.id === 'cover'));
+  if (coverAsset) {
+    if (!coverAsset.file) {
       warnings.push('作品包内没有封面文件，已跳过封面。');
-    } else if (coverBytes.length > MAX_ASSET_BYTES) {
-      warnings.push('封面图片超过 4MB，已跳过封面。');
     } else {
-      const mime = coverAsset.type || inferAssetType(coverAsset.file) || 'image/jpeg';
-      coverImage = await buildCoverDataUrl(coverBytes, mime);
-      if (!coverImage) warnings.push('封面图片处理失败，已跳过封面。');
+      const coverBytes = entries.get(coverAsset.file);
+      if (!coverBytes) {
+        warnings.push('作品包内没有封面文件，已跳过封面。');
+      } else if (coverBytes.length > MAX_ASSET_BYTES) {
+        warnings.push('封面图片超过 4MB，已跳过封面。');
+      } else {
+        const mime = coverAsset.type || inferAssetType(coverAsset.file) || 'image/jpeg';
+        coverImage = await buildCoverDataUrl(coverBytes, mime);
+        if (!coverImage) warnings.push('封面图片处理失败，已跳过封面。');
+      }
     }
+  } else if (assets.some((a) => a && typeof a === 'object' && (
+    (typeof a.id === 'string' && a.id.toLowerCase().includes('cover'))
+    || (typeof a.role === 'string' && a.role.toLowerCase().includes('cover'))
+  ))) {
+    // 看起来是封面、却无法识别的条目：记一条警告，不静默跳过
+    warnings.push('作品包内的封面条目无法识别，已跳过封面。');
   }
 
   const works = [];
   const usedIds = new Set(); // 本次导入已用掉的 id（包内重名时用来避让）
+  const targetSeries = manifest.kind === 'series' ? seriesId : null;
   for (let i = 0; i < manifest.works.length; i++) {
     const w = manifest.works[i];
     const file = typeof w.file === 'string' ? w.file : '';
     if (!file) throw pkgFail(`作品包缺少第 ${i + 1} 章的剧本文件。`);
     const bytes = entries.get(file);
     if (!bytes) throw pkgFail(`作品包缺少第 ${i + 1} 章的剧本文件（${file}）。`);
+    // 单章文本上限：复用解析器的 5MB 限制，防止超大文本拖垮浏览器
+    if (bytes.length > LIMITS.maxFileBytes) {
+      throw pkgFail(`第 ${i + 1} 章的剧本文件超过 5MB，请拆分后再导入。`);
+    }
 
     const text = new TextDecoder('utf-8').decode(bytes);
     let script;
@@ -562,36 +642,39 @@ export async function importPackage(buffer, opts = {}) {
       throw pkgFail(`第 ${i + 1} 章《${w.title || w.id}》解析失败：${e.message}`);
     }
 
-    // id 冲突处理：
-    // - 与内置作品同名（或以 builtin_ 开头）→ 加 user: 前缀另存
-    // - 与本地已导入作品同名 → 视为更新，保持原 id
+    // id 冲突处理（按顺序）：
     // - 包内 id 重复 → 加后缀，避免同一批作品互相覆盖
+    // - 与内置作品同名（或以 builtin_ 开头）→ 加 user: 前缀另存
+    // - 本地已有同 id 作品：
+    //   · 归属同一曲目（undefined / null 同属「无曲目」桶）→ 视为更新，id 不变
+    //   · 归属别的曲目 → 不得覆盖，改名为 user:<id>
     const taken = new Set([...localIds, ...usedIds]);
     let id = typeof w.id === 'string' && w.id ? w.id : `chapter_${i + 1}`;
     if (usedIds.has(id)) {
       id = uniqueId(id, taken);
     } else if (builtinIds.has(id) || id.startsWith('builtin_')) {
       id = uniqueId(`user:${id}`, taken);
+    } else {
+      const loc = localById.get(id);
+      if (loc && seriesBucket(loc.series) !== seriesBucket(targetSeries)) {
+        id = uniqueId(`user:${id}`, taken);
+      }
     }
     usedIds.add(id);
-
-    // 章序只接受整数；缺失 / 非法时整本退回下标 +1，单章退回 0
-    const rawNo = Number.isInteger(w.chapterNo) ? w.chapterNo : null;
-    const chapterNo = manifest.kind === 'series'
-      ? (rawNo === null ? i + 1 : rawNo)
-      : (rawNo === null ? 0 : rawNo);
 
     works.push({
       id,
       title: script.title || w.title || id,
-      summary: script.summary || manifest.summary || '',
+      // 包级摘要优先于剧本内的简介：解析器对缺「简介」的剧本会兜底出一句摘要，
+      // 不然包级 manifest.summary 永远用不上
+      summary: manifest.summary || script.summary || '',
       author: script.author || manifest.author || '',
       characters: script.characters,
       nodes: script.nodes,
       labels: script.labels,
       cover: script.cover,
       tag: w.tag || w.title || '',
-      chapterNo,
+      chapterNo: w.chapterNo,   // 已在 validateManifest 归一（number）
       series: manifest.kind === 'series' ? seriesId : null,
       seriesTitle: manifest.kind === 'series' ? seriesTitle : '',
       source: text,

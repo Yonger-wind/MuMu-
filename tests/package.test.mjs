@@ -8,7 +8,7 @@ import {
   importPackage, buildCoverDataUrl,
 } from '../scripts/package.js';
 import { readZipEntries, writeZip } from '../scripts/zip.js';
-import { parseScriptText, countChars, readFileToScript } from '../scripts/parser.js';
+import { parseScriptText, countChars, readFileToScript, LIMITS } from '../scripts/parser.js';
 import { loadBuiltinScripts } from '../scripts/builtin.js';
 
 test('常量与 spec 一致', () => {
@@ -1074,4 +1074,200 @@ test('单章包导入后不进入任何曲目（series 为空）', async () => {
   assert.equal(res.works[0].seriesTitle, '');
   // 包内 series 字段只作为来源信息存进 manifest 快照
   assert.deepEqual(res.works[0].manifest.series, { id: 'cicada', title: '蝉鸣止于逢魔时' });
+});
+
+/* ============================================================
+   修补轮 fix-r1：B1 曲目/章节 id 同步改名
+   ============================================================ */
+
+test('B1：同一曲目二次导入时曲目 id 与章节 id 都不变', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'series',
+    id: 's1', title: '曲目',
+    works: [
+      { id: 's1_01', title: '曲目', file: 'chapters/01.txt' },
+      { id: 's1_02', title: '曲目', file: 'chapters/02.txt' },
+    ],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [
+    { name: 'chapters/01.txt', data: SAMPLE },
+    { name: 'chapters/02.txt', data: SAMPLE },
+  ]);
+  const res = await importPackage(ab(bytes), {
+    existing: [{ id: 's1_01', series: 's1' }, { id: 's1_02', series: 's1' }],
+  });
+  assert.equal(res.seriesId, 's1');
+  assert.deepEqual(res.works.map((w) => w.id), ['s1_01', 's1_02']);
+  assert.deepEqual(res.works.map((w) => w.series), ['s1', 's1']);
+});
+
+test('B1：曲目 id 撞名且章节 id 撞名时曲目与章节都改名，本地作品不被覆盖', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'series',
+    id: 's1', title: '曲目',
+    works: [{ id: 's1_01', title: '曲目', file: 'chapters/01.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [
+    { name: 'chapters/01.txt', data: SAMPLE },
+  ]);
+  const res = await importPackage(ab(bytes), { existing: [{ id: 's1_01', series: 'other' }] });
+  assert.equal(res.seriesId, 'user:s1');
+  assert.notEqual(res.works[0].id, 's1_01');
+  assert.ok(res.works[0].id.startsWith('user:'), `章节 id 应带 user: 前缀，实际 ${res.works[0].id}`);
+  assert.equal(res.works[0].series, 'user:s1');
+});
+
+test('B1：单章作品的 id 与别的曲目下的本地作品撞名时改名', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: SAMPLE }]);
+  const res = await importPackage(ab(bytes), { existing: [{ id: 'w1', series: 'other' }] });
+  assert.equal(res.works[0].id, 'user:w1');
+});
+
+/* ============================================================
+   修补轮 fix-r1：B2 chapterNo 归一（接受数字字符串）
+   ============================================================ */
+
+test('B2：validateManifest 把数字字符串 chapterNo 归一成 number', () => {
+  const m = validateManifest({
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2,
+    works: [{ id: 'a', title: 'A', file: 'script.txt', chapterNo: '2' }],
+  });
+  assert.equal(m.works[0].chapterNo, 2);
+  assert.equal(typeof m.works[0].chapterNo, 'number');
+});
+
+test('B2：chapterNo 为数字字符串时按数值归一，非法值退回下标 +1', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'series',
+    id: 's1', title: '曲目',
+    works: [
+      { id: 's1_01', title: '曲目', file: 'chapters/01.txt', chapterNo: '2' },
+      { id: 's1_02', title: '曲目', file: 'chapters/02.txt', chapterNo: 'oops' },
+      { id: 's1_03', title: '曲目', file: 'chapters/03.txt' },
+    ],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [
+    { name: 'chapters/01.txt', data: SAMPLE },
+    { name: 'chapters/02.txt', data: SAMPLE },
+    { name: 'chapters/03.txt', data: SAMPLE },
+  ]);
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.works[0].chapterNo, 2);
+  assert.equal(res.works[1].chapterNo, 2);
+  assert.equal(res.works[2].chapterNo, 3);
+  res.works.forEach((w) => {
+    assert.equal(typeof w.chapterNo, 'number');
+    assert.ok(Number.isInteger(w.chapterNo));
+  });
+});
+
+/* ============================================================
+   修补轮 fix-r1：B3 解压后总量上限（zip bomb 防护）
+   ============================================================ */
+
+/** 包内条目解压后总字节上限（与 scripts/package.js 保持一致） */
+const MAX_UNPACKED_BYTES = 64 * 1024 * 1024;
+
+test('B3：单章剧本超过 5MB 时报中文 userFacing 错误', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  const big = new Uint8Array(LIMITS.maxFileBytes + 1).fill(65);
+  const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: big }]);
+  await assert.rejects(
+    () => importPackage(ab(bytes), { existing: [] }),
+    (e) => e.userFacing === true && e.message.includes('5MB'),
+  );
+});
+
+test('B3：包内条目解压总量超过 64MB 时报中文 userFacing 错误', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  const chunk = new Uint8Array(5 * 1024 * 1024).fill(65);
+  const files = [{ name: 'script.txt', data: SAMPLE }];
+  const count = Math.ceil((MAX_UNPACKED_BYTES + 1) / chunk.length);
+  for (let i = 0; i < count; i++) files.push({ name: `assets/pad${i}.bin`, data: chunk });
+  const bytes = await packWithManifest(manifest, files);
+  await assert.rejects(
+    () => importPackage(ab(bytes), { existing: [] }),
+    (e) => e.userFacing === true && e.message.includes('64MB'),
+  );
+});
+
+/* ============================================================
+   修补轮 fix-r1：B4 封面识别（role 或 id）
+   ============================================================ */
+
+test('B4：assets 条目只有 id=cover、没有 role 时也能识别封面', async () => {
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [{ id: 'cover', file: 'assets/cover.png', type: 'image/png' }],
+  };
+  const bytes = await packWithManifest(manifest, [
+    { name: 'script.txt', data: SAMPLE },
+    { name: 'assets/cover.png', data: png },
+  ]);
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.ok(res.works[0].coverImage, '封面应被识别');
+  assert.ok(res.works[0].coverImage.startsWith('data:image/png;base64,'));
+});
+
+test('B4：封面条目无法处理时记一条警告而不是静默跳过', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [{ id: 'cover', role: 'cover' }],
+  };
+  const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: SAMPLE }]);
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.works[0].coverImage, null);
+  assert.ok(res.warnings.some((w) => w.includes('封面')), '应有封面相关警告');
+});
+
+/* ============================================================
+   修补轮 fix-r1：B5 包级 summary 优先
+   ============================================================ */
+
+test('B5：包级 manifest.summary 优先于剧本内的简介', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧', summary: '包级简介',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: SAMPLE }]);
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.works[0].summary, '包级简介');
+});
+
+test('B5：包级没有 summary 时回落到剧本内的简介', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: SAMPLE }]);
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.works[0].summary, '一段用于测试的短剧。');
 });
