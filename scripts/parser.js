@@ -337,21 +337,24 @@ function compileText(text, fileName) {
     // 避免把普通叙述误判成台词；未声明名字仍沿用 6 字以内的旧规则。
     if ((m = line.match(/^([^\s:：【】\[\]>]{1,8})[（(]([^)）]{1,40})[)）][:：]\s*(.+)$/))
       && (m[1] === '旁白' || characters.has(m[1]) || m[2].trim().length <= 6)) {
-      const poseKey = matchKey(POSES, m[2], null);
-      if (poseKey) {
-        flushChoices();
-        if (m[1] === '旁白') nodes.push({ t: 'say', who: '', text: m[3].trim() });
-        else { ensureChar(m[1]); nodes.push({ t: 'say', who: m[1], text: m[3].trim(), pose: poseKey }); }
-        continue;
-      }
       // 画外音：名字（录音）/（画外）/（电话）…… 只显示名字，不让人物出场
-      // 允许括号里带语气前缀，如（温柔的声音，画外音）——只取末尾的画外音类型显示
-      const voiceTag = m[2].trim().match(/^(?:[^，,、]*[，,、]\s*)?(录音中|录音|画外音|画外|电话|广播|回忆|心声)$/);
+      // 允许括号里带语气前缀，如（温柔的声音，画外音）——只取末尾的画外音类型显示；
+      // 前缀可以有多段，如（声音微微有些颤抖，随后又化作释然的笑意，画外音）
+      // 画外音必须**先于**情绪判定：括号里的长描写常含「笑」「轻」等词，
+      // 会被姿态模糊匹配抢走，导致画外音人物被当成在场角色立绘。
+      const voiceTag = m[2].trim().match(/^(?:[^，,、]*[，,、]\s*)*(录音中|录音|画外音|画外|电话|广播|回忆|心声)$/);
       if (voiceTag) {
         flushChoices();
         const who = m[1] === '旁白' ? '' : m[1];
         if (who) ensureChar(who);
         nodes.push({ t: 'say', who, text: m[3].trim(), voice: voiceTag[1] });
+        continue;
+      }
+      const poseKey = matchKey(POSES, m[2], null);
+      if (poseKey) {
+        flushChoices();
+        if (m[1] === '旁白') nodes.push({ t: 'say', who: '', text: m[3].trim() });
+        else { ensureChar(m[1]); nodes.push({ t: 'say', who: m[1], text: m[3].trim(), pose: poseKey }); }
         continue;
       }
       // 其他括号（轻声 / 无奈 / 迟疑……）只当作语气备注，不生成假角色

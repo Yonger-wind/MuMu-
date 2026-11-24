@@ -19,6 +19,7 @@ export function pickProp(text) {
   if (/星图|星象图|星座|紫外|紫外线|荧光|光谱/.test(t)) return 'starmap';
   if (/账本|账簿|账册|黑皮|流水账/.test(t)) return 'ledger';
   if (/档案|卷宗|文件袋|档案袋|便签|纸条|机密/.test(t)) return 'archive';
+  if (/令牌|玄铁|虎符/.test(t)) return 'token';
   if (/雕塑|铜像|雕像|小像|青铜/.test(t)) return 'sculpture';
   if (/咖啡|浓缩|茶杯|杯碟/.test(t)) return 'coffee';
   if (/戒指|素圈|指环/.test(t)) return 'ring';
@@ -27,7 +28,6 @@ export function pickProp(text) {
   if (/乐谱|手抄|曲谱|谱纸|五线谱|奏鸣曲|总谱/.test(t)) return 'score';
   if (/钢琴|琴键|黑白键|键盘|琴凳/.test(t)) return 'piano';
   if (/星月夜|真迹|仿作|赝品|油画|画框|画作|那幅画|画布/.test(t)) return 'starry';
-  if (/令牌|玄铁|虎符/.test(t)) return 'token';
   if (/长卷|画卷|画匣|画轴|千里江山|卷尾|红枫|血珠|血迹/.test(t)) return 'scroll';
   if (/紫檀木盒|木盒|匣|妆奁/.test(t)) return 'box';
   if (/研钵|玉杵|颜料|石青|石绿|青金|雌黄|朱砂|矿石|矿物|色碟|瓷碟|粉末/.test(t)) return 'paint';
