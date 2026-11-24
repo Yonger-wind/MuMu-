@@ -34,6 +34,9 @@
 - Consumes: `scripts/parser.js` 导出的 `SCENES` `TIMES` `CAMS` `POSES` `ACTS` `VIEWS` `MODELS` `matchModel`；`scripts/builtin.js` 导出的 `loadBuiltinScripts()`。
 - Produces（本任务交付、后续任务依赖的导出）：
   - `export function matchTable(table, text): string | null` —— 工具侧的词表匹配器（复刻解析器 `matchKey` 语义）。
+  - `export function resolveTable(table, text): { key: string | null, mode: 'exact' | 'prefix' | 'fuzzy' | 'none' }` —— 解析器实际会怎么理解这个值：
+    `exact` = 精确别名命中；`prefix` = 命中「作为前缀的别名」（作者写的是规范取值）；`fuzzy` = 只命中「作为子串的别名」（解析器会静默改写成别的值）；
+    `none` = 解析器认不出来（回落到默认值 / 场景名直接抛错）。
   - `export function scanText(text): ScanResult` —— 文本扫描器。
   - `export function lintText(text, fileName): LintResult` —— 本任务先返回 `{ issues: [], summary: { errors: 0, warnings: 0 } }`，Task 2/3 填充规则。
   - `export function lintScript(script, source, fileName): LintResult`
@@ -55,7 +58,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SCENES, TIMES, CAMS, POSES, ACTS, VIEWS, MODELS } from '../scripts/parser.js';
-import { matchTable, scanText, lintText } from '../tools/lint.js';
+import { matchTable, resolveTable, scanText, lintText } from '../tools/lint.js';
 
 const TABLES = { SCENES, TIMES, CAMS, POSES, ACTS, VIEWS };
 
@@ -77,9 +80,17 @@ test('matchTable 对陌生词返回 null', () => {
   assert.equal(matchTable(POSES, '崩溃'), null);
 });
 
-test('matchTable 复刻解析器的最长子串口径：火夜 不能被 夜 抢先', () => {
+test('matchTable 用作者口径：规范取值认得，带修饰语也认得，奇奇怪怪的写法不认', () => {
   assert.equal(matchTable(TIMES, '火夜'), 'fire');
   assert.equal(matchTable(TIMES, '夜晚'), 'night');
+  assert.equal(matchTable(TIMES, '夜晚的教室'), 'night');
+  assert.equal(matchTable(CAMS, '超特写'), null);
+});
+
+test('resolveTable 复刻解析器口径：能说出解析器实际会当成什么', () => {
+  assert.deepEqual(resolveTable(TIMES, '火夜'), { key: 'fire', mode: 'exact' });
+  assert.deepEqual(resolveTable(CAMS, '超特写'), { key: 'detail', mode: 'fuzzy' });
+  assert.deepEqual(resolveTable(SCENES, '未识别的场景'), { key: null, mode: 'none' });
 });
 
 test('scanText 逐行分类并保留行号', () => {
@@ -148,9 +159,9 @@ import { loadBuiltinScripts } from '../scripts/builtin.js';
 //                import path from 'node:path';
 
 /**
- * 词表匹配：复刻 scripts/parser.js 的 matchKey 语义。
- * 1) 精确别名命中；2) 最长的、作为子串包含在文本里的别名；3) 都没有 → null（未知）。
- * 注意必须与解析器同口径，否则会出现误报/漏报。
+ * 词表匹配（作者口径）：这个值是不是一个「规范的词表取值」。
+ * 1) 精确别名命中；2) 最长的、作为前缀包含在文本里的别名；3) 都没有 → null（未识别）。
+ * 与解析器的差别见 resolveTable 的注释。
  */
 export function matchTable(table, text) {
   const t = String(text || '').trim().toLowerCase();
@@ -166,10 +177,35 @@ export function matchTable(table, text) {
   for (const [key, def] of entries) {
     for (const a of def.aliases || []) {
       const al = a.toLowerCase();
-      if (al.length > bestLen && t.includes(al)) { best = key; bestLen = al.length; }
+      if (al.length > bestLen && t.startsWith(al)) { best = key; bestLen = al.length; }
     }
   }
   return best;
+}
+
+/**
+ * 解析器口径：scripts/parser.js 的 matchKey 会怎么理解这个值。
+ * exact = 精确别名；fuzzy = 只命中子串（解析器会静默改写成别的值）；none = 认不出来。
+ * 用来在告警文案里说清「解析器实际上会当成什么」，避免把话说错。
+ */
+export function resolveTable(table, text) {
+  const t = String(text || '').trim().toLowerCase();
+  if (!t) return { key: null, mode: 'none' };
+  const entries = Object.entries(table);
+  for (const [key, def] of entries) {
+    for (const a of def.aliases || []) {
+      if (a.toLowerCase() === t) return { key, mode: 'exact' };
+    }
+  }
+  let best = null;
+  let bestLen = 0;
+  for (const [key, def] of entries) {
+    for (const a of def.aliases || []) {
+      const al = a.toLowerCase();
+      if (al.length > bestLen && t.includes(al)) { best = key; bestLen = al.length; }
+    }
+  }
+  return best ? { key: best, mode: 'fuzzy' } : { key: null, mode: 'none' };
 }
 ```
 
@@ -178,6 +214,9 @@ export function matchTable(table, text) {
 紧接着写入：
 
 ```js
+/** 故事行：解析器会为这些行生成节点；meta / charRow / label 不是节点 */
+export const STORY_KINDS = new Set(['dir', 'choice', 'jump', 'say']);
+
 const DIR_TAGS = new Set([
   '场景', '分镜', '镜头', '姿态', '情绪', '动作', '视角', '机位',
   '出场', '登场', '清场', '空场', '无人', '结束', '完',
@@ -261,9 +300,9 @@ export function scanText(text) {
     lines.push({ line, kind: 'say', text: t });
   }
 
-  // 标签 → 其后第一个内容行（标签行本身不产生内容）
+  // 标签 → 其后第一个「故事行」（标签行本身不产生内容；meta/charRow 行也不是故事节点）
   for (const lab of labels) {
-    const next = lines.find((l) => l.kind !== 'label' && l.line > lab.line);
+    const next = lines.find((l) => STORY_KINDS.has(l.kind) && l.line > lab.line);
     lab.targetLine = next ? next.line : null;
   }
   return { lines, chars, labels, meta, sawScene, sawEnd };
@@ -392,7 +431,7 @@ test('E105 选项行缺少落点', () => {
 
 test('W101 未知时间/镜头/姿态/动作/视角各一条', () => {
   const r = lint([
-    '标题：x', '', '【场景：教室 | 黄昏 | 远景】',
+    '标题：x', '', '【场景：教室 | 凌晨 | 远景】',
     '【镜头：超特写】', '【姿态：崩溃】', '【动作：飞翔】', '【视角：俯瞰】',
     '阿蓝：你好。',
   ].join('\n'));
@@ -486,40 +525,39 @@ function applyTextRules(scan) {
         continue;
       }
       const value = rec.value || '';
+      // 词表类判定：matchTable 认不出的才报；文案用 resolveTable 说清「解析器实际会当成什么」
+      const vocab = (table, val, kind, available, fallback) => {
+        if (!val || matchTable(table, val)) return;
+        const r = resolveTable(table, val);
+        const what = r.mode === 'fuzzy'
+          ? `解析器会把它当成「${table[r.key].label}」`
+          : `解析器会回落到「${fallback}」`;
+        issues.push(issue('warning', 'W101', rec.line,
+          `未识别的${kind}「${val}」：${what}。`,
+          `可用${kind}：${available}。`));
+      };
       if (key === '场景' || key === '分镜') {
         const parts = value.split(/[|｜,，\s]+/).filter(Boolean);
-        if (parts[0] && !matchTable(SCENES, parts[0])) {
-          issues.push(issue('error', 'E102', rec.line,
-            `未识别的场景「${parts[0]}」。可用场景：${SCENE_LIST}。`,
-            '请改成上面列出的场景名。'));
+        if (parts[0]) {
+          if (!matchTable(SCENES, parts[0]) && resolveTable(SCENES, parts[0]).mode === 'none') {
+            issues.push(issue('error', 'E102', rec.line,
+              `未识别的场景「${parts[0]}」。可用场景：${SCENE_LIST}。`,
+              '请改成上面列出的场景名；否则解析器会直接拒绝这个剧本。'));
+          } else {
+            vocab(SCENES, parts[0], '场景', SCENE_LIST, '教室');
+          }
         }
-        if (parts[1] && !matchTable(TIMES, parts[1])) {
-          issues.push(issue('warning', 'W101', rec.line,
-            `未识别的时段「${parts[1]}」，会被当成「黄昏」。`,
-            '可用时段：黄昏 / 白天 / 夜晚 / 火夜。'));
-        }
-        if (parts[2] && !matchTable(CAMS, parts[2])) {
-          issues.push(issue('warning', 'W101', rec.line,
-            `未识别的镜头「${parts[2]}」，会被当成「中景」。`,
-            '可用镜头：远景 / 中景 / 近景 / 特写。'));
-        }
+        if (parts[1]) vocab(TIMES, parts[1], '时段', '黄昏 / 白天 / 夜晚 / 火夜', '黄昏');
+        if (parts[2]) vocab(CAMS, parts[2], '镜头', '远景 / 中景 / 近景 / 特写', '中景');
       }
-      if (key === '镜头' && value && !matchTable(CAMS, value)) {
-        issues.push(issue('warning', 'W101', rec.line, `未识别的镜头「${value}」，会被当成「中景」。`, '可用镜头：远景 / 中景 / 近景 / 特写。'));
-      }
+      if (key === '镜头') vocab(CAMS, value, '镜头', '远景 / 中景 / 近景 / 特写', '中景');
       if (key === '姿态' || key === '情绪') {
         const parts = value.split(/[|｜]/).map((x) => x.trim()).filter(Boolean);
         const pose = parts.length > 1 ? parts[1] : parts[0];
-        if (pose && !matchTable(POSES, pose)) {
-          issues.push(issue('warning', 'W101', rec.line, `未识别的姿态「${pose}」，会被当成「自然」。`, '可用姿态：自然 / 开心 / 难过 / 生气 / 惊讶 / 疲惫 / 沉思。'));
-        }
+        vocab(POSES, pose, '姿态', '自然 / 开心 / 难过 / 生气 / 惊讶 / 疲惫 / 沉思', '自然');
       }
-      if (key === '动作' && value && !matchTable(ACTS, value)) {
-        issues.push(issue('warning', 'W101', rec.line, `未识别的动作「${value}」，会被当成「站立」。`, '可用动作：站立 / 行走 / 坐下 / 转身 / 低头 / 抬头。'));
-      }
-      if ((key === '视角' || key === '机位') && value && !matchTable(VIEWS, value)) {
-        issues.push(issue('warning', 'W101', rec.line, `未识别的视角「${value}」，会被当成「常规」。`, '可用视角：常规 / 过肩 / 背影。'));
-      }
+      if (key === '动作') vocab(ACTS, value, '动作', '站立 / 行走 / 坐下 / 转身 / 低头 / 抬头', '站立');
+      if (key === '视角' || key === '机位') vocab(VIEWS, value, '视角', '常规 / 过肩 / 背影', '常规');
       if (key === '出场' || key === '登场') {
         for (const n of value.split(/[|｜、,，]/).map((x) => x.trim()).filter(Boolean)) {
           if (!scan.chars.has(n)) {
@@ -676,7 +714,7 @@ test('E106 不可达节点', () => {
   ].join('\n'));
   const it = r.issues.find((i) => i.code === 'E106');
   assert.ok(it, '应报 E106');
-  assert.equal(it.line, 8);
+  assert.equal(it.line, 9);
 });
 
 test('E107 回跳（跳到更早的标签）', () => {
@@ -737,7 +775,8 @@ Expected: FAIL —— E106/E107/E108/W106/E100 断言失败。
  * - 【结束】/【完】 无后继
  */
 function buildGraph(scan) {
-  const content = scan.lines.filter((l) => l.kind !== 'label');
+  // 只有「故事行」才是节点：meta / charRow / label 在解析器里不产生节点
+  const content = scan.lines.filter((l) => STORY_KINDS.has(l.kind));
   const labels = new Map(scan.labels.map((l) => [l.name, l]));
   const succ = new Map();          // line -> number[]（后继行号）
   const groups = [];               // 选项组
@@ -760,18 +799,21 @@ function buildGraph(scan) {
     succ.set(rec.line, next ? [next.line] : []);
   }
 
-  // 选项组：连续的 choice 行合并
+  // 选项组：在「内容行序列」里连续的 choice 行合并为一个节点
+  // 注意：解析器先 skip 空行再判断，所以空行分隔的两条选项属于同一个选项组，
+  // 必须按内容行序号相邻来判断，不能按行号连续（内置剧本里有 19 处空行分隔的选项组）。
   const groupOf = new Map();
   for (let i = 0; i < content.length; i++) {
     const rec = content[i];
     if (rec.kind !== 'choice') continue;
     let g = groups[groups.length - 1];
-    if (!g || g.lastLine + 1 !== rec.line) {
-      g = { lines: [], firstLine: rec.line, lastLine: rec.line };
+    if (!g || g.lastIndex !== i - 1) {
+      g = { lines: [], firstLine: rec.line, lastLine: rec.line, lastIndex: i };
       groups.push(g);
     }
     g.lines.push(rec);
     g.lastLine = rec.line;
+    g.lastIndex = i;
     groupOf.set(rec.line, g);
   }
   // 选项组的后继 = 各选项落点
@@ -795,6 +837,12 @@ function buildGraph(scan) {
       for (const nx of (succ.get(line) || [])) stack.push(nx);
     }
   }
+  // 选项组是「一个节点」：组内任一行可达 → 整组可达（解析器把整组压成一个 choice 节点）
+  for (const g of groups) {
+    if (g.lines.some((rec) => reachable.has(rec.line))) {
+      for (const rec of g.lines) reachable.add(rec.line);
+    }
+  }
   return { content, labels, succ, groups, groupOf, reachable, start };
 }
 
@@ -808,15 +856,20 @@ function applyFlowRules(scan) {
     if (rec.kind === 'choice' && rec.value) refs.add(rec.value);
   }
 
-  // E106 不可达内容（连续区间合并成一条）
-  const unreached = g.content.filter((r) => !g.reachable.has(r.line));
-  if (unreached.length) {
-    const first = unreached[0].line;
-    const last = unreached[unreached.length - 1].line;
-    issues.push(issue('error', 'E106', first,
-      unreached.length === 1
-        ? `第 ${first} 行这一段玩家永远走不到。`
-        : `第 ${first}–${last} 行这一段玩家永远走不到。`,
+  // E106 不可达内容：按「连续内容行」切成一段段，每段一条 issue
+  // （两处互不相邻的死分支要分成两条报，不能合并成一个大区间）
+  const runs = [];
+  let cur = null;
+  for (const rec of g.content) {
+    if (g.reachable.has(rec.line)) { cur = null; continue; }
+    if (!cur) { cur = { first: rec.line, last: rec.line }; runs.push(cur); }
+    else cur.last = rec.line;
+  }
+  for (const run of runs) {
+    issues.push(issue('error', 'E106', run.first,
+      run.first === run.last
+        ? `第 ${run.first} 行这一段玩家永远走不到。`
+        : `第 ${run.first}–${run.last} 行这一段玩家永远走不到。`,
       '检查附近的跳转：某个 -> 之后的内容不再顺序执行。'));
   }
 
