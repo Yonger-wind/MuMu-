@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { SLOT_NAMES, findSlot, mountTo } from '../scripts/ui/slots.js';
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 function fakeHost() {
   return {
@@ -96,4 +100,69 @@ test('挂载：未知槽名先按未知挂载点报错', () => {
     () => mountTo('toast', {}, { root }),
     (err) => !/找不到挂载点/.test(err.message)
   );
+});
+
+/* ---------------- index.html / 令牌 / 悬浮层契约 ---------------- */
+
+test('index.html：四个 data-slot 与两个样式链接齐全，链接在 main.css 之后', () => {
+  const html = readFileSync(`${ROOT}index.html`, 'utf8');
+  for (const name of ['home', 'stage', 'modal', 'overlay']) {
+    assert.ok(html.includes(`data-slot="${name}"`), `缺少 data-slot="${name}"`);
+  }
+  const main = html.indexOf('styles/main.css');
+  const tokens = html.indexOf('styles/tokens.css');
+  const ext = html.indexOf('styles/extensions.css');
+  assert.ok(main >= 0, '缺少 main.css');
+  assert.ok(tokens > main, 'tokens.css 应在 main.css 之后');
+  assert.ok(ext > tokens, 'extensions.css 应在 tokens.css 之后');
+});
+
+test('令牌：颜色 / 字体令牌都带 var() 与字面量兜底', () => {
+  const css = readFileSync(`${ROOT}styles/tokens.css`, 'utf8');
+  const lines = css.split('\n').filter((l) => /--mumu-(color|font)-[\w-]+\s*:/.test(l));
+  assert.ok(lines.length >= 12, `令牌数量异常：${lines.length}`);
+  for (const line of lines) {
+    assert.match(line, /var\([^)]*,[^)]*\)/, `缺少兜底：${line.trim()}`);
+  }
+});
+
+test('令牌：层级档位与 main.css 现有实现一致', () => {
+  const tokens = readFileSync(`${ROOT}styles/tokens.css`, 'utf8');
+  const main = readFileSync(`${ROOT}styles/main.css`, 'utf8');
+  assert.match(tokens, /--mumu-z-modal:\s*60\s*;/);
+  assert.match(tokens, /--mumu-z-overlay:\s*70\s*;/);
+  assert.match(tokens, /--mumu-z-boot:\s*90\s*;/);
+  assert.match(tokens, /--mumu-z-toast:\s*100\s*;/);
+  assert.match(main, /\.modal-mask\s*\{[^}]*z-index:\s*60\s*;/);
+  assert.match(main, /\.boot-veil\s*\{[^}]*z-index:\s*90\s*;/);
+  assert.match(main, /\.toast\s*\{[^}]*z-index:\s*100\s*;/);
+});
+
+test('悬浮层：空层不拦截点击，子元素默认恢复可交互', () => {
+  const css = readFileSync(`${ROOT}styles/extensions.css`, 'utf8');
+  assert.match(css, /\.mumu-ui-layer\s*\{[^}]*pointer-events:\s*none\s*;/);
+  assert.match(css, /\.mumu-ui-layer\s*>\s*\*\s*\{[^}]*pointer-events:\s*auto\s*;/);
+});
+
+test('扩展样式：只出现在 .mumu-* 命名空间', () => {
+  const css = readFileSync(`${ROOT}styles/extensions.css`, 'utf8');
+  const selectors = css
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('}')
+    .map((chunk) => chunk.split('{')[0].trim())
+    .filter(Boolean);
+  for (const selector of selectors) {
+    for (const one of selector.split(',')) {
+      assert.match(one.trim(), /^\.mumu-/, `越界选择器：${one.trim()}`);
+    }
+  }
+});
+
+test('运行时隔离：除 cards/ 自身外没有模块引用 cards/loader', () => {
+  const files = readdirSync(`${ROOT}scripts`, { recursive: true })
+    .filter((f) => typeof f === 'string' && f.endsWith('.js'))
+    .map((f) => f.replace(/\\/g, '/'))
+    .filter((f) => !f.startsWith('cards/'));
+  const offenders = files.filter((f) => readFileSync(`${ROOT}scripts/${f}`, 'utf8').includes('cards/loader'));
+  assert.deepEqual(offenders, []);
 });

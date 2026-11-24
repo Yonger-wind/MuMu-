@@ -7,6 +7,8 @@
   <meta name="description" content="暮幕 —— 一个唯美的网页版互动剧本体验。导入你的剧本，在印象派黄昏里展开一段故事。" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="./styles/main.css" />
+  <link rel="stylesheet" href="./styles/tokens.css" />
+  <link rel="stylesheet" href="./styles/extensions.css" />
 </head>
 <body>
   <!-- 入场遮罩 -->
@@ -85,6 +87,8 @@
       <div class="dlg-hint" id="dlg-hint">点击继续 ▸</div>
     </div>
   </section>
+
+  <div id="ui-layer" class="mumu-ui-layer" data-slot="overlay"></div>
 
   <!-- ===================== 弹层容器 ===================== -->
   <div id="modal-root" data-slot="modal"></div>

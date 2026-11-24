@@ -1,0 +1,43 @@
+/* ============================================================
+   暮幕 · 设计令牌（P0-4 扩展点契约）
+   语义层：第三方 UI 只依赖 --mumu-*，不直接依赖 main.css 的变量名。
+   每个颜色 / 字体令牌都带字面量兜底：main.css 改名时不会静默失效。
+   只新增变量，不覆盖任何既有规则。
+   ============================================================ */
+
+:root {
+  /* 颜色（映射 main.css 现有色板，带兜底） */
+  --mumu-color-ink: var(--ink, #2a1f33);
+  --mumu-color-cream: var(--cream, #fff4e6);
+  --mumu-color-amber: var(--amber, #ff9d57);
+  --mumu-color-rose: var(--rose, #ff7a8a);
+  --mumu-color-plum: var(--plum, #6b4a8f);
+  --mumu-color-dusk: var(--dusk, #3a2a56);
+  --mumu-color-night: var(--night, #1b1430);
+  --mumu-color-glass: var(--glass, rgba(255, 244, 230, 0.10));
+  --mumu-color-glass-border: var(--glass-brd, rgba(255, 244, 230, 0.28));
+  --mumu-color-text-soft: var(--soft, rgba(255, 244, 230, 0.72));
+
+  /* 字体 */
+  --mumu-font-serif: var(--serif, "Noto Serif SC", "Songti SC", "STSong", Georgia, serif);
+  --mumu-font-sans: var(--sans, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif);
+
+  /* 间距 */
+  --mumu-space-xs: 4px;
+  --mumu-space-sm: 8px;
+  --mumu-space-md: 16px;
+  --mumu-space-lg: 24px;
+  --mumu-space-xl: 40px;
+
+  /* 圆角 */
+  --mumu-radius-sm: 8px;
+  --mumu-radius-md: 12px;
+  --mumu-radius-lg: 16px;
+  --mumu-radius-pill: 999px;
+
+  /* 层级：对齐 main.css 现有档位（modal-mask 60 / boot 90 / toast 100） */
+  --mumu-z-modal: 60;
+  --mumu-z-overlay: 70;
+  --mumu-z-boot: 90;
+  --mumu-z-toast: 100;
+}
