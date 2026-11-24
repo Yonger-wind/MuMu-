@@ -182,13 +182,182 @@ export function scanText(text) {
 }
 
 /**
+ * 一条 issue：severity ∈ error|warning，code 见规则码表，line 为原始文本行号。
+ * hint 只在有可操作建议时给出。
+ */
+function issue(severity, code, line, message, hint) {
+  return hint ? { severity, code, line, message, hint } : { severity, code, line, message };
+}
+
+const SCENE_LIST = Object.values(SCENES).map((s) => s.label).join(' / ');
+const TIME_LIST = '黄昏 / 白天 / 夜晚 / 火夜';
+const CAM_LIST = '远景 / 中景 / 近景 / 特写';
+const POSE_LIST = '自然 / 开心 / 难过 / 生气 / 惊讶 / 疲惫 / 沉思';
+const ACT_LIST = '站立 / 行走 / 坐下 / 转身 / 低头 / 抬头';
+const VIEW_LIST = '常规 / 过肩 / 背影';
+
+/**
+ * 12 条文本级规则：E101-E105、W101-W105、W107、W108。
+ *
+ * 判定口径：
+ * - 「要不要报」用 matchTable（作者口径：精确别名 → 最长前缀）；
+ * - 「报的时候怎么说」用 resolveTable（解析器口径：精确别名 → 最长子串），
+ *   于是能明确告诉作者「解析器会把它当成什么」或「会回落到哪个默认值」。
+ */
+function applyTextRules(scan) {
+  const issues = [];
+  const labels = new Map();
+  for (const lab of scan.labels) {
+    if (labels.has(lab.name)) {
+      issues.push(issue('error', 'E104', lab.line,
+        `标签「${lab.name}」重复定义，前一次在第 ${labels.get(lab.name)} 行；后一次会覆盖前一次。`,
+        '请删掉多余的一处，或把两处改成不同的标签名。'));
+    } else {
+      labels.set(lab.name, lab.line);
+    }
+  }
+
+  for (const rec of scan.lines) {
+    if (rec.kind === 'dir') {
+      const key = rec.name;
+      if (!DIR_TAGS.has(key)) {
+        issues.push(issue('error', 'E101', rec.line,
+          `未知舞台指示标签「${key}」。本项目只认：场景/分镜、镜头、姿态/情绪、动作、视角/机位、出场/登场、清场/空场/无人、结束/完。`,
+          '把标签名改成上面列出的写法，否则这一行会被当成旁白。'));
+        continue;
+      }
+      const value = rec.value || '';
+      // 词表类判定：matchTable 认不出的才报；文案用 resolveTable 说清「解析器实际会当成什么」
+      const vocab = (table, val, kind, available, fallback) => {
+        if (!val || matchTable(table, val)) return;
+        const r = resolveTable(table, val);
+        const what = r.mode === 'fuzzy'
+          ? `解析器会把它当成「${table[r.key].label}」`
+          : `解析器会回落到「${fallback}」`;
+        issues.push(issue('warning', 'W101', rec.line,
+          `未识别的${kind}「${val}」：${what}。`,
+          `可用${kind}：${available}。`));
+      };
+      if (key === '场景' || key === '分镜') {
+        const parts = value.split(/[|｜,，\s]+/).filter(Boolean);
+        if (parts[0]) {
+          if (!matchTable(SCENES, parts[0]) && resolveTable(SCENES, parts[0]).mode === 'none') {
+            issues.push(issue('error', 'E102', rec.line,
+              `未识别的场景「${parts[0]}」。可用场景：${SCENE_LIST}。`,
+              '请改成上面列出的场景名；否则解析器会直接拒绝这个剧本。'));
+          } else {
+            vocab(SCENES, parts[0], '场景', SCENE_LIST, '教室');
+          }
+        }
+        if (parts[1]) vocab(TIMES, parts[1], '时段', TIME_LIST, '黄昏');
+        if (parts[2]) vocab(CAMS, parts[2], '镜头', CAM_LIST, '中景');
+      }
+      if (key === '镜头') vocab(CAMS, value, '镜头', CAM_LIST, '中景');
+      if (key === '姿态' || key === '情绪') {
+        const parts = value.split(/[|｜]/).map((x) => x.trim()).filter(Boolean);
+        const pose = parts.length > 1 ? parts[1] : parts[0];
+        vocab(POSES, pose, '姿态', POSE_LIST, '自然');
+      }
+      if (key === '动作') {
+        const parts = value.split(/[|｜]/).map((x) => x.trim()).filter(Boolean);
+        const act = parts.length > 1 ? parts[1] : parts[0];
+        vocab(ACTS, act, '动作', ACT_LIST, '站立');
+      }
+      if (key === '视角' || key === '机位') vocab(VIEWS, value, '视角', VIEW_LIST, '常规');
+      if (key === '出场' || key === '登场') {
+        for (const n of value.split(/[|｜、,，]/).map((x) => x.trim()).filter(Boolean)) {
+          if (!scan.chars.has(n)) {
+            issues.push(issue('warning', 'W104', rec.line,
+              `「【${key}：${n}】」里的「${n}」未在角色表中声明，该出场指令不会生效。`,
+              '请在「角色：」块里补上这一行，或改对名字。'));
+          }
+        }
+      }
+      continue;
+    }
+
+    if (rec.kind === 'charRow') {
+      const rec2 = scan.chars.get(rec.text.split('|')[0].trim());
+      const cols = rec2 ? rec2.cols : rec.text.split('|').map((x) => x.trim());
+      if (cols.length !== 5) {
+        issues.push(issue('warning', 'W105', rec.line,
+          `角色行有 ${cols.length} 列，规范是 5 列（名字 | 性别 | 发型 | 衣色 | 模型）。`,
+          '补齐或删掉多余的分隔符；第 5 列（模型）留空表示交给系统分配。'));
+      }
+      if (cols[4] && !matchModel(cols[4])) {
+        issues.push(issue('warning', 'W102', rec.line,
+          `未识别的模型「${cols[4]}」，会按性别回落外观。`,
+          '请填 assets/models 里已有的模型名（如 少年 / 少女（2）/ 画师少年）。'));
+      }
+      continue;
+    }
+
+    if (rec.kind === 'choice') {
+      if (rec.value === null) {
+        issues.push(issue('error', 'E105', rec.line,
+          '选项行缺少落点，这一行会被当成旁白，选项凭空消失。',
+          '正确写法：> 追问磁带 -> 追问分支'));
+        continue;
+      }
+      if (!labels.has(rec.value)) {
+        issues.push(issue('error', 'E103', rec.line,
+          `选项指向了不存在的标签「${rec.value}」。`,
+          `请检查 [${rec.value}] 是否已定义。`));
+      }
+      continue;
+    }
+
+    if (rec.kind === 'jump') {
+      if (!labels.has(rec.value)) {
+        issues.push(issue('error', 'E103', rec.line,
+          `跳转指向了不存在的标签「${rec.value}」。`,
+          `请检查 [${rec.value}] 是否已定义。`));
+      }
+      continue;
+    }
+
+    if (rec.kind === 'say') {
+      // 与解析器的两种台词形态对齐：「名字（情绪）：内容」与「名字：内容」
+      const dm = rec.text.match(/^([^\s:：【】\[\]>]{1,8})[（(][^）)]{1,40}[)）][:：]/);
+      const dm2 = dm ? null : rec.text.match(/^([^\s:：【】\[\]>]{1,8})[:：]/);
+      const who = dm ? dm[1].trim() : (dm2 ? dm2[1].trim() : null);
+      if (who && who !== '旁白' && !scan.chars.has(who)) {
+        issues.push(issue('warning', 'W103', rec.line,
+          `说话人「${who}」未在角色表中声明。`,
+          '若这是错别字请改正；若确实要临时出场，也建议在角色表里补上。'));
+      }
+      continue;
+    }
+  }
+
+  if (!scan.sawScene) {
+    issues.push(issue('warning', 'W107', 1,
+      '全文没有任何场景指示，开场会被强行补成「教室 · 黄昏 · 中景」。',
+      '请在开头加一行【场景：教室 | 黄昏 | 远景】。'));
+  }
+  if (!scan.sawEnd) {
+    issues.push(issue('warning', 'W108', scan.lines.length ? scan.lines[scan.lines.length - 1].line : 1,
+      '结尾没有显式的【结束】，引擎会自动补一个收尾。',
+      '建议在末尾写一行【结束】。'));
+  }
+  return issues;
+}
+
+/**
  * 校验一段剧本文本。
- * Task 1 只交付扫描器骨架：issue 列表暂时为空，规则由 Task 2 / Task 3 填。
- * 返回的 scan 供后续规则复用，避免重复扫描。
+ * 返回：{ issues, summary: { errors, warnings }, scan }；scan 供后续规则复用，避免重复扫描。
  */
 export function lintText(text, fileName = '') {
   const scan = scanText(text);
-  return { issues: [], summary: { errors: 0, warnings: 0 }, scan };
+  const issues = applyTextRules(scan);
+  return {
+    issues,
+    summary: {
+      errors: issues.filter((i) => i.severity === 'error').length,
+      warnings: issues.filter((i) => i.severity === 'warning').length,
+    },
+    scan,
+  };
 }
 
 /**
