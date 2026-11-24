@@ -659,3 +659,80 @@ test('没有落点的「->」行按旁白处理，不报「不存在的标签 nu
   assert.deepEqual(exact(r), ['E105@7']);
   assert.doesNotMatch(r.issues[0].message, /null/);
 });
+
+/* ============================================================
+   Task 4：CLI 入口（子进程真跑 node tools/lint.js）
+   ============================================================ */
+
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const runCli = (args) => spawnSync(process.execPath, ['tools/lint.js', ...args], {
+  cwd: ROOT, encoding: 'utf8',
+});
+
+test('CLI 对干净样本退出码 0', () => {
+  const r = runCli(['tests/fixtures/lint/clean.txt']);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /通过|没有错误/);
+});
+
+test('CLI 对写坏样本退出码 1 并打印行号', () => {
+  const r = runCli(['tests/fixtures/lint/bad-text-level.txt']);
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /第 \d+ 行/);
+  assert.match(r.stdout, /E10\d/);
+});
+
+test('CLI --json 输出可解析的 JSON', () => {
+  const r = runCli(['tests/fixtures/lint/bad-text-level.txt', '--json']);
+  assert.equal(r.status, 1);
+  const data = JSON.parse(r.stdout);
+  assert.equal(data.ok, false);
+  assert.ok(data.issues.length > 0);
+  assert.ok(data.issues.every((i) => i.code && i.severity && typeof i.line === 'number'));
+  assert.ok(data.summary.errors > 0);
+});
+
+test('CLI --builtin 对内置 15 章零 issue', () => {
+  const r = runCli(['--builtin', '--json']);
+  assert.equal(r.status, 0);
+  const data = JSON.parse(r.stdout);
+  assert.deepEqual(data.issues, []);
+});
+
+test('CLI 用法错误退出码 2', () => {
+  const r = runCli(['--不存在的参数']);
+  assert.equal(r.status, 2);
+});
+
+test('CLI --strict 把 warning 也算失败', () => {
+  // 只有 warning、没有 error 的样本：默认通过，--strict 才失败
+  const plain = runCli(['tests/fixtures/lint/warn-only.txt']);
+  assert.equal(plain.status, 0, '默认模式：warning 不挡');
+  assert.match(plain.stdout, /警告/);
+  const strict = runCli(['tests/fixtures/lint/warn-only.txt', '--strict']);
+  assert.equal(strict.status, 1, '--strict 模式：warning 也挡');
+  // 干净样本在 --strict 下仍然通过
+  const clean = runCli(['tests/fixtures/lint/clean.txt', '--strict']);
+  assert.equal(clean.status, 0);
+});
+
+test('CLI 对 .json 剧本给出中文提示并退出码 2（不走进行级扫描）', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mumu-lint-'));
+  const file = join(dir, 'nodes.json');
+  writeFileSync(file, '{"title":"x","nodes":[{"t":"say","text":"hi"}]}', 'utf8');
+  try {
+    const r = runCli([file]);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /JSON/);
+    assert.match(r.stderr, /不支持|改用/);
+    assert.equal(r.stdout.trim(), '', '不支持的文件不应往 stdout 打印半截结果');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

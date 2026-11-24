@@ -8,9 +8,9 @@ import {
   matchModel, parseScriptText,
 } from '../scripts/parser.js';
 import { loadBuiltinScripts } from '../scripts/builtin.js';
-// Task 4 会补上：import { readFileSync, existsSync } from 'node:fs';
-//                import { fileURLToPath } from 'node:url';
-//                import path from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 /**
  * 词表匹配：与 scripts/parser.js 的 matchKey 保持同一「认识 / 不认识」口径。
@@ -824,3 +824,108 @@ export function lintBuiltin() {
     },
   };
 }
+
+/* ---------------- CLI ---------------- */
+
+const USAGE = '用法：node tools/lint.js <文件...> | --builtin [--json] [--strict]';
+
+/** 文本输出：按文件分组，逐条列出「第 X 行  E101 原因」与提示。 */
+function formatText(result, files) {
+  const lines = [];
+  const byFile = new Map();
+  for (const it of result.issues) {
+    const key = it.file || '(未命名)';
+    if (!byFile.has(key)) byFile.set(key, []);
+    byFile.get(key).push(it);
+  }
+  for (const [file, list] of byFile) {
+    lines.push(file);
+    for (const it of list) {
+      lines.push(`  第 ${it.line} 行  ${it.code} ${it.message}`);
+      if (it.hint) lines.push(`      提示：${it.hint}`);
+    }
+  }
+  const s = result.summary;
+  if (!result.issues.length) {
+    lines.push(`通过：${files} 未发现问题。`);
+  } else {
+    lines.push(`共 ${s.errors} 个错误，${s.warnings} 个警告（${files.length} 个文件）。`);
+  }
+  return lines.join('\n');
+}
+
+/** JSON 输出：{ ok, files, issues, summary }，stdout 必须是纯 JSON。 */
+function formatJson(result, files) {
+  return JSON.stringify({
+    ok: result.summary.errors === 0,
+    files,
+    issues: result.issues,
+    summary: result.summary,
+  }, null, 2);
+}
+
+/**
+ * CLI 入口。返回退出码：0 通过 / 1 有 error（--strict 下 warning 也算）/ 2 用法错误。
+ * argv 为 process.argv（含 node 与脚本路径）。
+ */
+export function main(argv) {
+  const args = argv.slice(2);
+  const json = args.includes('--json');
+  const strict = args.includes('--strict');
+  const wantBuiltin = args.includes('--builtin');
+  const targets = args.filter((a) => !a.startsWith('--'));
+  const unknown = args.filter((a) => a.startsWith('--') && !['--json', '--strict', '--builtin'].includes(a));
+  if (unknown.length) {
+    console.error(`未知参数：${unknown.join(' ')}\n${USAGE}`);
+    return 2;
+  }
+  if (!wantBuiltin && !targets.length) {
+    console.error(USAGE);
+    return 2;
+  }
+
+  // 先把目标文件读进来并做格式分流：JSON 剧本是节点格式，行级扫描会把
+  // 整份 JSON 拆成满屏假 issue，所以直接拒绝，而不是给出误导性报告。
+  const sources = [];
+  for (const f of targets) {
+    if (!existsSync(f)) {
+      console.error(`文件不存在：${f}`);
+      return 2;
+    }
+    const text = readFileSync(f, 'utf8');
+    if (/\.json$/i.test(f) || text.trim().startsWith('{')) {
+      console.error(`JSON 格式剧本暂不支持内容校验，请改用 .txt / .md：${f}`);
+      return 2;
+    }
+    sources.push({ file: f, text });
+  }
+
+  const issues = [];
+  const files = [];
+  if (wantBuiltin) {
+    const r = lintBuiltin();
+    issues.push(...r.issues);
+    files.push(`内置 ${loadBuiltinScripts().length} 章`);
+  }
+  for (const { file, text } of sources) {
+    const r = lintText(text, file);
+    issues.push(...r.issues.map((i) => ({ ...i, file })));
+    files.push(file);
+  }
+
+  const result = {
+    issues,
+    summary: {
+      errors: issues.filter((i) => i.severity === 'error').length,
+      warnings: issues.filter((i) => i.severity === 'warning').length,
+    },
+  };
+  // 诊断一律走 stderr；stdout 只留最终结果（--json 时必须是纯 JSON）。
+  console.log(json ? formatJson(result, files) : formatText(result, files));
+  const failed = result.summary.errors > 0 || (strict && result.summary.warnings > 0);
+  return failed ? 1 : 0;
+}
+
+const isMain = process.argv[1]
+  && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain) process.exit(main(process.argv));
