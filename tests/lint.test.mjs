@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { SCENES, TIMES, CAMS, POSES, ACTS, VIEWS, MODELS } from '../scripts/parser.js';
-import { matchTable, resolveTable, scanText, lintText } from '../tools/lint.js';
+import { matchTable, resolveTable, scanText, lintText, lintBuiltin } from '../tools/lint.js';
 
 const TABLES = { SCENES, TIMES, CAMS, POSES, ACTS, VIEWS };
 
@@ -796,4 +796,27 @@ test('CLI 文本模式通过行按「、」连接作用域（--builtin 文案可
   const r = runCli(['--builtin']);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /通过：内置 \d+ 章 未发现问题。/);
+});
+
+// ---- 回归哨兵：内置语料必须零 issue，且离线工具不得渗进运行时 ----
+
+test('内置 15 章零 issue', () => {
+  const r = lintBuiltin();
+  assert.deepEqual(r.issues.map((i) => `${i.code} ${i.file} ${i.line}: ${i.message}`), []);
+  assert.equal(r.summary.errors, 0);
+  assert.equal(r.summary.warnings, 0);
+});
+
+test('scripts/ 不得引用 tools/lint.js（离线工具不进运行时）', () => {
+  const dir = new URL('../scripts/', import.meta.url);
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith('.js')) continue;
+    const src = readFileSync(new URL(f, dir), 'utf8');
+    assert.equal(src.includes('tools/lint'), false, `scripts/${f} 不应引用 tools/lint.js`);
+  }
+});
+
+test('index.html 不应引用 tools/lint.js', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.equal(html.includes('tools/lint'), false);
 });

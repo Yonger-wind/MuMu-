@@ -24,6 +24,20 @@ node --test          # 运行 tests/*.test.mjs
 存档写入 `mumu.saves.v2`，旧版本 `mumu.saves.v1` 的存档会在读取时自动迁移补齐；
 存档同时携带故事状态（旗标、数值、结局标识、检查点），因此读档可以回到原位继续。
 
+## 内容校验
+
+剧本写完可以用零依赖的校验器自检（不参与游戏运行）：
+
+```bash
+node tools/lint.js 剧本.txt        # 校验单个 .txt / .md 剧本
+node tools/lint.js --builtin      # 校验内置 15 章
+node tools/lint.js --json         # 机器可读输出
+node tools/lint.js 剧本.txt --strict  # 把警告也算失败
+```
+
+每条问题都带**行号 + 规则码 + 原因 + 修法提示**；退出码 0 = 通过，1 = 有错误，2 = 用法错误。
+规则码表见 [docs/mumu-lint-rules.md](docs/mumu-lint-rules.md)。
+
 ## 部署
 
 最终网站由 **Qoder 部署到 Qoder Sites**（唯一部署目标）。
