@@ -484,12 +484,208 @@ function applyTextRules(scan) {
 }
 
 /**
+ * 控制流建图（行级，语义对齐 scripts/parser.js）：
+ * - 标签 target = 其后第一个内容行（标签本身不产生节点）
+ * - 跳转行 -> 只走目标，不回落下一行
+ * - 连续的选项行合并成一个选项组；选项组只走各选项落点
+ * - 普通内容行 -> 下一行内容行
+ * - 【结束】/【完】 无后继
+ *
+ * 与解析器对齐的三处细节（不能简化，否则会误报）：
+ * 1) 解析器只把「> 文本 -> 目标」认成选项。写成「> 只有选项没有落点」时整行按旁白处理，
+ *    所以它不是选项组的成员，而是一条普通内容行（后面的一行仍然走得到）。
+ * 2) 解析器遇到标签行会先 flush 掉当前选项组（labels[...] = nodes.length 之前先 flushChoices），
+ *    所以标签夹在两条选项之间时，那是**两个**选项组，不是同一个。
+ * 3) meta / charRow 行不会 flush 选项组，也不会产生节点（解析器直接 continue）。
+ */
+export function buildGraph(scan) {
+  // 只有「故事行」才是节点：meta / charRow / label 在解析器里不产生节点
+  const content = scan.lines.filter((l) => STORY_KINDS.has(l.kind));
+  const labels = new Map(scan.labels.map((l) => [l.name, l]));   // 同名后写覆盖，与解析器一致
+  const succ = new Map();          // line -> number[]（后继行号）
+  const groups = [];               // 选项组
+  const groupOf = new Map();
+
+  // 选项组：在「内容行序列」里连续的 choice 行合并为一个节点。
+  // 注意：解析器先 skip 空行再判断，所以空行分隔的两条选项属于同一个选项组，
+  // 必须按内容行序号相邻来判断，不能按行号连续（内置剧本里有 19 处空行分隔的选项组）。
+  let cur = null;
+  for (const rec of scan.lines) {
+    if (rec.kind === 'label') { cur = null; continue; }        // 标签会 flush 选项组
+    if (!STORY_KINDS.has(rec.kind)) continue;                   // meta / charRow 不 flush
+    if (rec.kind === 'choice' && rec.value !== null) {
+      if (!cur) { cur = { lines: [], firstLine: rec.line }; groups.push(cur); }
+      cur.lines.push(rec);
+      continue;
+    }
+    cur = null;
+  }
+  for (const g of groups) {
+    for (const rec of g.lines) groupOf.set(rec.line, g);
+  }
+
+  for (let i = 0; i < content.length; i++) {
+    const rec = content[i];
+    const next = content[i + 1];
+    if (groupOf.has(rec.line)) {
+      succ.set(rec.line, []);   // 选项组的后继稍后按组统一覆盖
+      continue;
+    }
+    if (rec.kind === 'jump') {
+      const lab = labels.get(rec.value);
+      succ.set(rec.line, lab && lab.targetLine ? [lab.targetLine] : []);
+      continue;
+    }
+    if (rec.kind === 'dir' && (rec.name === '结束' || rec.name === '完')) {
+      succ.set(rec.line, []);
+      continue;
+    }
+    succ.set(rec.line, next ? [next.line] : []);
+  }
+
+  // 选项组的后继 = 各选项落点
+  for (const g of groups) {
+    const targets = [];
+    for (const rec of g.lines) {
+      const lab = labels.get(rec.value);
+      if (lab && lab.targetLine) targets.push(lab.targetLine);
+    }
+    for (const rec of g.lines) succ.set(rec.line, targets);
+  }
+
+  const start = content.length ? content[0].line : null;
+  const reachable = new Set();
+  if (start !== null) {
+    const stack = [start];
+    while (stack.length) {
+      const line = stack.pop();
+      if (reachable.has(line)) continue;
+      reachable.add(line);
+      for (const nx of (succ.get(line) || [])) stack.push(nx);
+    }
+  }
+  // 选项组是「一个节点」：组内任一行可达 → 整组可达（解析器把整组压成一个 choice 节点）
+  for (const g of groups) {
+    if (g.lines.some((rec) => reachable.has(rec.line))) {
+      for (const rec of g.lines) reachable.add(rec.line);
+    }
+  }
+  return { content, labels, succ, groups, groupOf, reachable, start };
+}
+
+/**
+ * 4 条控制流规则：E106 不可达、E107 回跳、E108 选项回指、W106 死标签。
+ *
+ * E106（不可达）只在「控制流图完整」时判定：
+ * 只要有跳转 / 选项指向不存在的标签，解析器就会拒绝整个剧本，文件根本加载不了，
+ * 这时说「某段玩家永远走不到」是误导 —— 那种剧本该看的是 E103。
+ */
+function applyFlowRules(scan) {
+  const issues = [];
+  const g = buildGraph(scan);
+  const refs = new Set();
+  let brokenRef = false;
+  for (const rec of g.content) {
+    if (rec.kind === 'jump' && rec.value) {
+      refs.add(rec.value);
+      if (!g.labels.has(rec.value)) brokenRef = true;
+    }
+    if (rec.kind === 'choice' && rec.value) {
+      refs.add(rec.value);
+      if (!g.labels.has(rec.value)) brokenRef = true;
+    }
+  }
+
+  // E106 不可达内容：按「连续内容行」切成一段段，每段一条 issue
+  // （两处互不相邻的死分支要分成两条报，不能合并成一个大区间）
+  if (!brokenRef) {
+    const runs = [];
+    let cur = null;
+    for (const rec of g.content) {
+      if (g.reachable.has(rec.line)) { cur = null; continue; }
+      if (!cur) { cur = { first: rec.line, last: rec.line }; runs.push(cur); }
+      else cur.last = rec.line;
+    }
+    for (const run of runs) {
+      issues.push(issue('error', 'E106', run.first,
+        run.first === run.last
+          ? `第 ${run.first} 行这一段玩家永远走不到。`
+          : `第 ${run.first}–${run.last} 行这一段玩家永远走不到。`,
+        '检查附近的跳转：某个 -> 之后的内容不再顺序执行。'));
+    }
+  }
+
+  // E107 回跳 / E108 选项回指
+  for (const rec of g.content) {
+    if (rec.kind === 'jump') {
+      const lab = g.labels.get(rec.value);
+      if (lab && lab.targetLine && lab.targetLine <= rec.line) {
+        issues.push(issue('error', 'E107', rec.line,
+          `第 ${rec.line} 行跳回第 ${lab.targetLine} 行的标签「${rec.value}」，会往回跳，容易形成死循环。`,
+          '请改成跳向更靠后的标签。'));
+      }
+      continue;
+    }
+    if (rec.kind === 'choice' && rec.value !== null) {
+      const lab = g.labels.get(rec.value);
+      const grp = g.groupOf.get(rec.line);
+      if (lab && lab.targetLine && grp && lab.targetLine <= grp.firstLine) {
+        issues.push(issue('error', 'E108', rec.line,
+          `第 ${rec.line} 行的选项指向第 ${lab.targetLine} 行的标签「${rec.value}」，落点不在选项之后，点下去会原地打转。`,
+          '请改成跳向更靠后的标签。'));
+      }
+      continue;
+    }
+  }
+
+  // W106 死标签
+  for (const lab of scan.labels) {
+    if (!refs.has(lab.name)) {
+      issues.push(issue('warning', 'W106', lab.line,
+        `标签「${lab.name}」从未被引用。`,
+        '如果这是废弃的分支，请把标签和它下面的内容一起删掉。'));
+    }
+  }
+  return issues;
+}
+
+/**
+ * 解析器交叉验证：把 parseScriptText 抛出的致命错误兜底成 E100。
+ * E100 是「兜底」——扫描器已经报过的、更精确的问题不再重复报一遍。
+ */
+function applyParserCheck(text, fileName, issues) {
+  try {
+    parseScriptText(text, fileName);
+    return;
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    // 「跳转指向了不存在的标签」不带行号，但 E103 已经带行号报过一次 → 不重复
+    if (/不存在的标签/.test(msg) && issues.some((i) => i.code === 'E103')) return;
+    const m = msg.match(/第\s*(\d+)\s*行/);
+    if (m) {
+      const line = Number(m[1]);
+      // 该行已经有更具体的 error 报告时不重复报
+      if (issues.some((i) => i.line === line && i.severity === 'error')) return;
+      issues.push(issue('error', 'E100', line,
+        `解析器拒绝了这个剧本：${msg}`,
+        '按提示修正后重新校验。'));
+      return;
+    }
+    // 解析器的错误没有行号（如「没有读取到任何台词或旁白」），一律记在第 1 行
+    issues.push(issue('error', 'E100', 1,
+      `解析器拒绝了这个剧本：${msg}`,
+      '按提示修正后重新校验。'));
+  }
+}
+
+/**
  * 校验一段剧本文本。
  * 返回：{ issues, summary: { errors, warnings }, scan }；scan 供后续规则复用，避免重复扫描。
  */
 export function lintText(text, fileName = '') {
   const scan = scanText(text);
-  const issues = applyTextRules(scan);
+  const issues = applyTextRules(scan).concat(applyFlowRules(scan));
+  applyParserCheck(text, fileName, issues);
   return {
     issues,
     summary: {

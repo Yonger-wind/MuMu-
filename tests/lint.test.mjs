@@ -389,3 +389,110 @@ test('W101：全角｜但值本身合法时只报分隔符问题', () => {
   assert.match(its[0].message, /｜/);
   assert.doesNotMatch(its[0].message, /未识别/);
 });
+
+/* ============================================================
+   Task 3：4 条控制流规则与解析器交叉验证
+   ============================================================ */
+
+test('E106 不可达节点', () => {
+  const r = lint([
+    '标题：x', '', '【场景：教室 | 黄昏 | 远景】',
+    '甲：一', '-> 主线', '[主线]', '乙：二', '【结束】',
+    '丙：这段永远走不到',
+  ].join('\n'));
+  const it = r.issues.find((i) => i.code === 'E106');
+  assert.ok(it, '应报 E106');
+  assert.equal(it.line, 9);
+});
+
+test('E107 回跳（跳到更早的标签）', () => {
+  const r = lint([
+    '标题：x', '', '【场景：教室 | 黄昏 | 远景】',
+    '[起点]', '甲：一', '-> 起点', '【结束】',
+  ].join('\n'));
+  const it = r.issues.find((i) => i.code === 'E107');
+  assert.ok(it);
+  assert.equal(it.line, 6);
+});
+
+test('E108 选项回指（落点在选项之前）', () => {
+  const r = lint([
+    '标题：x', '', '【场景：教室 | 黄昏 | 远景】',
+    '[起点]', '甲：一', '> 回头 -> 起点', '【结束】',
+  ].join('\n'));
+  const it = r.issues.find((i) => i.code === 'E108');
+  assert.ok(it);
+  assert.equal(it.line, 6);
+});
+
+test('W106 死标签（从未被引用）', () => {
+  const r = lint([
+    '标题：x', '', '【场景：教室 | 黄昏 | 远景】',
+    '[没人去]', '甲：一', '【结束】',
+  ].join('\n'));
+  const it = r.issues.find((i) => i.code === 'W106');
+  assert.ok(it);
+  assert.equal(it.line, 4);
+});
+
+test('E100 解析器交叉验证兜底（扫描器未覆盖的硬错误）', () => {
+  // 没有任何台词或旁白：解析器会拒绝，扫描器本身不会报
+  const r = lint('标题：x\n\n【场景：教室 | 黄昏 | 远景】');
+  const it = r.issues.find((i) => i.code === 'E100');
+  assert.ok(it, '应报 E100');
+  assert.equal(it.severity, 'error');
+});
+
+test('坏控制流样本：产生精确的 4 条 issue（E108@10、W106@11、E106@12、E107@13）', () => {
+  const src = readFileSync(new URL('./fixtures/lint/bad-control-flow.txt', import.meta.url), 'utf8');
+  const r = lint(src, 'bad-control-flow.txt');
+  const got = r.issues.map((i) => `${i.code}@${i.line}`).sort();
+  assert.deepEqual(got, ['E106@12', 'E107@13', 'E108@10', 'W106@11']);
+});
+
+test('解析器交叉验证不与已有的行级报告重复（E103 已报就不再来一条 E100）', () => {
+  // 这份样本的跳转指向不存在的标签：解析器会抛「跳转指向了不存在的标签」，
+  // 但 E103 已经带行号报过一次，不应该再冒出一条没有行号的 E100。
+  const src = readFileSync(new URL('./fixtures/lint/bad-text-level.txt', import.meta.url), 'utf8');
+  const r = lint(src, 'bad-text-level.txt');
+  assert.equal(r.issues.filter((i) => i.code === 'E100').length, 0);
+});
+
+/* ============================================================
+   修复轮 R=1：控制流规则必须与解析器的真实语义一致
+   ============================================================ */
+
+test('没有落点的选项行按旁白处理，不参与选项组（与解析器一致）', () => {
+  // 解析器只把「> 文本 -> 目标」认成选项；「> 只有选项没有落点」整行按旁白处理，
+  // 所以它后面的一行仍然走得到，不该报 E106。
+  const r = lint([
+    '标题：x', '', '【场景：教室 | 黄昏 | 远景】',
+    '甲：一', '> 只有选项没有落点', '乙：二', '【结束】',
+  ].join('\n'));
+  assert.equal(r.issues.filter((i) => i.code === 'E106').length, 0);
+});
+
+test('断链（落点标签不存在）时不做不可达判定', () => {
+  // 解析器会直接拒绝这个剧本，文件根本加载不了，
+  // 这时说「某段玩家永远走不到」是误导：E103 才是真正该看的那条。
+  const r = lint([
+    '标题：x', '', '【场景：教室 | 黄昏 | 远景】',
+    '甲：一', '-> 不存在的标签', '乙：二', '【结束】',
+  ].join('\n'));
+  assert.ok(r.issues.find((i) => i.code === 'E103'), '应报 E103');
+  assert.equal(r.issues.filter((i) => i.code === 'E106').length, 0);
+});
+
+test('标签夹在两条选项之间时是两个选项组（解析器遇到标签会 flush 掉选项组）', () => {
+  // 实测 scripts/parser.js：这段文本被解析成两个独立的 choice 节点，
+  // [中间] 指向第二个选项组；第一个选项组的后继是它自己的落点，不会顺序走到第二个选项组，
+  // 所以第二个选项组是走不到的（E106），而不是被当成同一个组。
+  const r = lint([
+    '标题：x', '', '【场景：教室 | 黄昏 | 远景】',
+    '> 甲 -> 甲支线', '[中间]', '> 乙 -> 乙支线',
+    '[甲支线]', '甲：一', '[乙支线]', '乙：二', '【结束】',
+  ].join('\n'));
+  assert.equal(r.issues.filter((i) => i.code === 'E108').length, 0, '第二个选项的落点在它之后，不该报 E108');
+  assert.deepEqual(r.issues.filter((i) => i.code === 'E106').map((i) => i.line), [6],
+    '第二个选项组走不到，报在第 6 行');
+});
