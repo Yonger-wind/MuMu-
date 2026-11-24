@@ -327,8 +327,10 @@ export async function exportPackage(opts) {
   // 章节按 chapterNo 稳定升序：文件序号与 manifest.works 顺序保持一致，
   // 调用方传乱序章节也不会让包内章节错位
   const ordered = sortByChapterNo(works);
+  const texts = [];
   const entries = ordered.map((d, i) => {
     const text = workText(d.work);
+    texts.push(text);
     const chars = countChars(text);
     // 字数上限：与导入侧同口径，保证「导出的包一定能被自己导回来」
     if (chars > LIMITS.maxChars) {
@@ -377,7 +379,7 @@ export async function exportPackage(opts) {
 
   files.push({ name: 'manifest.json', data: JSON.stringify(manifest, null, 2) });
   ordered.forEach((d, i) => {
-    files.push({ name: entries[i].file, data: workText(d.work) });
+    files.push({ name: entries[i].file, data: texts[i] });
   });
 
   const chapterList = ordered.map((d, i) => `${entries[i].chapterNo}. ${entries[i].tag || entries[i].title}`).join('\n');

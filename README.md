@@ -120,8 +120,8 @@ tools/cdp-shoot.cjs 零依赖截图回归工具（headless Edge + CDP）：按 s
 - **导入**：首页「导入」支持 `.mumu`（拖入或选择文件）。坏包会给出中文报错并且**不写入任何数据**；
   与内置曲目同名时导入为新卡片，不覆盖内置剧本。
 - **包内结构**：`manifest.json`（包清单）+ 剧本文本（单章 `script.txt` / 整本 `chapters/01.txt`…）
-  + 可选封面 `assets/cover.jpg`（导出时另附模板生成的 `README.md`）。封面支持
-  PNG / JPEG / WebP，扩展名按实际 MIME 写入。
+  + 可选封面 `assets/cover.<png|jpg|webp>`（按封面实际格式落扩展名；导出时另附模板生成的
+  `README.md`）。封面支持 PNG / JPEG / WebP。
 - **限额**：整包 32MB、单个资源 4MB、解压后 64MB、单章文本 5MB、单章字数 30000 字
   （导入与导出都卡这道字数上限，保证导出的包一定能被自己导回来）；封面入库前缩到最长边
   640px 的 JPEG。

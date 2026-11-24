@@ -253,8 +253,10 @@ export const MIGRATIONS = {
 
 **容错口径**（不产生错误文案，只回填字段）：manifest 里**不认识的字段忽略但不报错**
 （向前兼容）；`works[].id` / `title` / `tag` / `chapterNo` / `format` / `chars`、
-`summary` / `author` / `series` / `license` / `assets` 等字段缺失时按第 3 节规则回填，
-只有 `works` 为空、章节 `file` 缺失或 `file` 指向的文本不在包内才报错。
+`summary` / `author` / `series` / `license` / `assets` 等字段缺失时按第 3 节规则回填。
+会报错的只有两类：**格式与版本号校验**（`format` 不是 `mumu-package`、
+`formatVersion` / `schemaVersion` 非法或过高）、**作品内容校验**（`works` 为空、
+章节 `file` 缺失或 `file` 指向的文本不在包内、单章文本超限）。
 
 **导入期硬错误**（抛出后整包不落库）：
 
