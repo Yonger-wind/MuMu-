@@ -113,6 +113,7 @@ node serve.js        # → http://localhost:5173
 | 首页视觉、按钮、模块装配 | `scripts/sunset.js`、`scripts/main.js`、`index.html` |
 | 存储键与读写 | `scripts/storage.js`（`mumu.scripts.v1`、`mumu.saves.v2`；旧 `mumu.saves.v1` 只读迁移） |
 | 状态层（旗标/数值/结局标识/检查点） | `scripts/state.js`（纯逻辑单测在 `tests/state.test.mjs`）；引擎侧 `engine.state / setFlag / getFlag / setVar / getVar / rewind`（`rewind()` 逐级退回上一个选项，UI 入口属 P3-1） |
+| 作品包导入导出（.mumu） | `scripts/package.js`（manifest 校验/迁移、导出、导入）、`scripts/zip.js`（ZIP 读写）、`scripts/serialize.js`（nodes→DSL 兜底）；字段表与限额见 `docs/mumu-package-spec.md`。导出/导入提示是**队列**，逐条显示，不会互相覆盖 |
 
 ## 5. 交付前自检清单
 
@@ -141,4 +142,5 @@ node serve.js        # → http://localhost:5173
       第四章读信只出"白石葵（画外音）"，舞台上不出现她的立绘。
 - [ ] 保存 → 刷新 → 读档续演位置正确；旧存档（缺 `actState`）可读。
 - [ ] 剧本库 / 导入 / 玩法 弹窗正常，导入示例与新格式一致。
+- [ ] 导出内置曲目为 .mumu → 再导入 → 可正常播放；坏包导入有中文报错且不污染作品库。
 - [ ] 控制台无错误、无 404。

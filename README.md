@@ -52,6 +52,9 @@ scripts/
   state.js          状态层纯逻辑：createState / setFlag / setVar / pushCheckpoint /
                     upgradeSave（单测见 tests/state.test.mjs）
   parser.js         剧本解析（.txt/.md/.json/.docx/.zip）：台词、分支、舞台指示标签
+  zip.js            最小 ZIP 读写（CRC-32 + deflate-raw），供作品包与 .zip 剧本导入共用
+  package.js        作品包 .mumu：manifest 构造/校验/迁移、单章与整本导出、导入链路
+  serialize.js      剧本序列化（解析结果 → DSL 文本），导出兜底
   character-manager.js  角色 cid 分配与模型选择（仅剧本明写的模型/性别线索）
   builtin.js        内置剧本：《蝉鸣止于逢魔时》《青绿长卷·千里未归》
                     《月光下的未完奏鸣》各四章，《漩涡与深蓝：星月夜的回响》三章（双结局）
@@ -105,6 +108,24 @@ tools/cdp-shoot.cjs 零依赖截图回归工具（headless Edge + CDP）：按 s
 
 括号情绪允许较长描写（如"看着天色，眉头微蹙"），仅当名字已在角色表中声明时生效，
 不会把普通叙述误判成台词；未声明名字仍按 6 字以内判定，旧剧本行为不变。
+
+## 作品包 .mumu
+
+作品包是把一部作品（单章或整本）整体带走的文件：一个 `.mumu` 就是标准 ZIP 容器，
+里面是 `manifest.json` + 剧本文本 + 可选封面。导出与导入全部在浏览器内完成，不上传服务器。
+
+- **导出**：内置曲目卡有「导出整本」（整本包）；独立卡有「导出 .mumu」、章节列表的每一行有
+  「导出」（都是单章包）。下载文件名：整本为 `曲目标题.mumu`，单章为
+  `曲目标题 · 章节标识.mumu`；包内 `title` 保持作品原标题不变。
+- **导入**：首页「导入」支持 `.mumu`（拖入或选择文件）。坏包会给出中文报错并且**不写入任何数据**；
+  与内置曲目同名时导入为新卡片，不覆盖内置剧本。
+- **包内结构**：`manifest.json`（包清单）+ 剧本文本（单章 `script.txt` / 整本 `chapters/01.txt`…）
+  + 可选封面 `assets/cover.jpg`；导出时另附模板生成的 `README.md`。
+- **限额**：整包 32MB、单个资源 4MB、解压后 64MB、单章文本 5MB；封面入库前缩到最长边 640px 的 JPEG。
+- **库内管理**：非内置的独立卡有「导出 .mumu」与「移除」；曲目卡有「导出整本」，
+  非内置曲目另有「移除整本」与「已导入」徽标。移除只在浏览器本地生效。
+
+字段表、许可证与二创规则、DSL 速查、常见报错与处理见 **[docs/mumu-package-spec.md](docs/mumu-package-spec.md)**。
 
 ## 当前状态（2026-11-23）
 
