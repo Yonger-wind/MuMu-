@@ -124,6 +124,8 @@ function singleCard(s) {
 
 function seriesCard(g) {
   const first = g.chapters[0];
+  // 组里只要有一章不是内置，这张卡就是用户导入的：给角标与「移除整本」入口
+  const hasCustom = g.chapters.some((c) => c.builtin !== true);
   const chips = g.chapters.map((c) => `<span class="chapter-chip">${esc((c.tag || '').split(' · ')[0] || `第${c.chapterNo || ''}章`)}</span>`).join('');
   // 内置曲目用固定原图封面；导入的曲目包用自己的封面图
   const cover = SERIES_COVER[g.key]
@@ -132,6 +134,7 @@ function seriesCard(g) {
   return `
     <div class="script-card series-card" data-series="${esc(g.key)}" tabindex="0">
       <div class="script-thumb" style="${cover}">
+        ${hasCustom ? '<span class="badge-custom">已导入</span>' : ''}
         <span class="series-badge">合订本 · 全 ${g.chapters.length} 章</span>
       </div>
       <div class="script-body">
@@ -141,6 +144,7 @@ function seriesCard(g) {
         <div class="chapter-chips">${chips}</div>
         <div class="script-actions">
           <button class="mini-btn" data-export-series="${esc(g.key)}">导出整本</button>
+          ${hasCustom ? `<button class="mini-btn danger" data-del-series="${esc(g.key)}">移除整本</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -195,7 +199,7 @@ export function openLibrary({ scripts, onPlay, onDelete, onExport }) {
     if (!group) return;
     const go = () => openChapters(group, onPlay, () => openLibrary({ scripts, onPlay, onDelete, onExport }), onExport);
     el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-export-series]')) return;   // 导出按钮不进入章节列表
+      if (e.target.closest('[data-export-series], [data-del-series]')) return;   // 卡内按钮不进入章节列表
       go();
     });
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === el) go(); });
@@ -225,6 +229,18 @@ export function openLibrary({ scripts, onPlay, onDelete, onExport }) {
       e.stopPropagation();
       const group = entries.find((e) => e.kind === 'series' && e.key === el.dataset.exportSeries);
       if (group && onExport) onExport({ kind: 'series', scripts: group.chapters });
+    });
+  });
+
+  // 曲目卡上的「移除整本」：一次删掉该组里所有非内置章节
+  m.querySelectorAll('[data-del-series]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const group = entries.find((x) => x.kind === 'series' && x.key === el.dataset.delSeries);
+      if (!group) return;
+      const ids = group.chapters.filter((c) => c.builtin !== true).map((c) => c.id);
+      if (!ids.length) return;
+      if (onDelete) onDelete(ids);
     });
   });
 }
@@ -296,7 +312,11 @@ export function openImport({ onImported, onPackage }) {
     msg.textContent = '正在解析…';
     try {
       if (ext === 'mumu') {
-        if (!onPackage) throw new Error('当前入口不支持作品包导入。');
+        if (!onPackage) {
+          const e = new Error('当前入口不支持作品包导入。');
+          e.userFacing = true;
+          throw e;
+        }
         await onPackage(file);
         closeModal();
       } else {

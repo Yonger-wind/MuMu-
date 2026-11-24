@@ -156,18 +156,38 @@ $('stage-save').addEventListener('click', () => {
 
 /* ---------------- 首页按钮 ---------------- */
 /** 同一包内的章序必须连续且唯一：优先用作品自带章序，缺失或非法时按顺序补位；
- *  一旦出现重复或缺口就整体重排，免得 README 里出现「2. 甲 / 2. 乙」。 */
+ *  只有「多作品 + 章序重复」才整体重排，免得 README 里出现「2. 甲 / 2. 乙」；
+ *  单作品（哪怕自带第二章的章序）保留它自己的章序。 */
 function chapterNosOf(works) {
   const nums = works.map((w, i) => {
     const n = Number(w.chapterNo);
     return Number.isInteger(n) && n > 0 ? n : i + 1;
   });
-  const contiguous = nums.every((n, i) => n === i + 1);
-  return contiguous ? nums : works.map((_, i) => i + 1);
+  if (works.length < 2) return nums;
+  const duplicated = new Set(nums).size !== nums.length;
+  return duplicated ? works.map((_, i) => i + 1) : nums;
+}
+
+/** 文件名安全化：去掉 Windows 非法字符与结尾的点/空格 */
+function safeFileBase(name) {
+  let s = String(name || '').trim().replace(/[\\/:*?"<>|]/g, '_');
+  s = s.replace(/[. ]+$/g, '').slice(0, 80).replace(/[. ]+$/g, '');
+  return s;
+}
+
+/** 单章导出：下载文件名带上章节标识，免得和整本包撞名（浏览器会存成「名字(1).mumu」）。
+ *  只改文件名，包里的 title 仍是作品原标题（导入后的卡片标题不会被改写）。 */
+function workDownloadName(baseName, work, chapterNo) {
+  const base = safeFileBase(baseName);
+  const rawTag = String((work && work.tag) || '').trim();
+  const tag = rawTag.replace(/[\\/:*?"<>|]/g, '_') || `第${chapterNo || 1}章`;
+  if (!base) return `${tag}.mumu`;
+  if (tag === base) return `${base}.mumu`;
+  return `${base} · ${tag}.mumu`;
 }
 
 /** 导出作品包：kind='work' 导单章，kind='series' 导整本。 */
-async function handleExport({ kind, script, scripts }) {
+async function handleExport({ kind, script, scripts } = {}) {
   try {
     const isSeries = kind === 'series';
     const works = (isSeries ? (scripts || []) : (script ? [script] : [])).filter(Boolean);
@@ -190,8 +210,12 @@ async function handleExport({ kind, script, scripts }) {
         source: w.source || null, script: w,
       })),
     });
-    downloadPackage(bytes, filename);
-    toast(`已导出《${filename}》`);
+    // 单章导出的文件名带上章节标识（整本导出的文件名保持不变）
+    const downloadName = isSeries
+      ? filename
+      : workDownloadName(works[0].seriesTitle || works[0].title, works[0], chapterNos[0]);
+    downloadPackage(bytes, downloadName);
+    toast(`已导出《${downloadName}》`);
     // 早期导入的剧本没有保留原文，导出走的是重建文本，要如实告诉用户
     if (!works.some((w) => typeof w.source === 'string' && w.source.trim())) {
       toast('该剧本没有原文，导出为重建文本（内容可能与原文略有差异）。');
@@ -206,9 +230,15 @@ function showLibrary() {
   openLibrary({
     scripts: allScripts(),
     onPlay: (sc) => play(sc),
-    onDelete: (id) => {
-      removeCustomScript(id);
-      toast('已移除该剧本');
+    onDelete: (ids) => {
+      // 单个 id 或一组 id（整本曲目）都能传进来
+      const list = Array.isArray(ids) ? ids : [ids];
+      for (const id of list) removeCustomScript(id);
+      // removeCustomScript 不返回写入结果，重新读一次存储确认是否真的删掉了
+      const left = loadCustomScripts().map((s) => s.id);
+      const failed = list.filter((id) => left.includes(id));
+      if (failed.length) toast(`有 ${failed.length} 个剧本没有移除成功，可能是浏览器存储写入失败。`);
+      else toast('已移除该剧本。');
       showLibrary();
     },
     onExport: handleExport,
@@ -240,13 +270,20 @@ function showImport() {
     onPackage: async (file) => {
       const buf = await file.arrayBuffer();
       const res = await importPackage(buf, { existing: [...builtins, ...loadCustomScripts()] });
-      if (!res.works.length) throw new Error('作品包里没有作品。');
+      if (!res.works.length) {
+        const e = new Error('作品包里没有作品。');
+        e.userFacing = true;
+        throw e;
+      }
       let failed = 0;
       for (const w of res.works) {
         if (!addCustomScript(w).ok) failed += 1;
       }
       if (failed) {
+        // 部分章节没存进去：警告也要说清楚，最后照样刷新库（已存进去的章节要能看见）
+        for (const w of res.warnings) toast(w);
         toast(`浏览器存储空间不足，${res.works.length} 章中有 ${failed} 章没有保存成功。`);
+        setTimeout(showLibrary, 500);
         return;
       }
       toast(`已导入《${res.title}》，共 ${res.works.length} 章`);
