@@ -120,15 +120,15 @@ const engine = createEngine({
   endOptions: (sc) => {
     const options = [];
     const next = nextChapterOf(sc);
-    if (next) options.push({ label: '继续下一章', run: () => play(next) });
+    if (next) options.push({ label: '继续下一章', run: () => play(next, null, { ...engine.state.flags }) });
     options.push({ label: '换一个剧本', run: () => { leaveStage(); showLibrary(); } });
     return options;
   },
 });
 
-function play(script, snapshot = null) {
+function play(script, snapshot = null, carry = null) {
   showScreen('stage');
-  engine.start(script, snapshot);
+  engine.start(script, snapshot, carry);
 }
 
 function leaveStage() {

@@ -79,12 +79,30 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
     return true;
   }
 
+  /** 条件行是否成立：只读布尔旗标；缺字段按“未发生”处理。 */
+  function condOk(cond) {
+    if (!cond || !cond.key) return true;
+    const on = !!(state.flags && state.flags[cond.key]);
+    return cond.neg ? !on : on;
+  }
+
+  /** 选中选项时把注解里的旗标全部置真。 */
+  function applyOptionFlags(opt) {
+    if (!opt || !Array.isArray(opt.set)) return;
+    for (const key of opt.set) {
+      if (key) state.flags[key] = true;
+    }
+  }
+
   /* ---------- 核心：运行到下一次需要玩家参与 ---------- */
   function run() {
     waiting = false;
     waitingChoice = false;
     while (idx < script.nodes.length) {
       const n = script.nodes[idx];
+
+      // 条件不成立的整行跳过：不渲染、不发声，只前进一格
+      if (n.cond && !condOk(n.cond)) { idx++; continue; }
 
       if (n.t === 'scene') {
         sceneState = { scene: n.scene, time: n.time, cam: n.cam };
@@ -185,6 +203,8 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
         waitingChoice = true;
         ui.setChoices(n.options.map((o) => o.text), (i) => {
           choices.push(n.options[i].text);
+          // 检查点已在选项 UI 出现前入栈，因此 rewind 会连旗标一起回滚
+          applyOptionFlags(n.options[i]);
           ui.setChoices([]);
           idx = script.labels[n.options[i].to];
           run();
@@ -215,7 +235,7 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
   }
 
   /* ---------- 对外接口 ---------- */
-  function start(sc, snapshot = null) {
+  function start(sc, snapshot = null, carry = null) {
     script = sc;
     ended = false;
     choices = [];
@@ -223,6 +243,8 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
     idx = 0;
     actState = { poses: {}, actions: {}, view: 'normal' };
     state = snapshot && snapshot.state ? deserializeState(snapshot.state) : createState();
+    // 跨章只带旗标：有快照时旗标以快照为准，carry 不参与
+    if (!snapshot && carry && typeof carry === 'object') state.flags = { ...carry };
     skipCheckpoint = false;
     lastSpeaker = '';
     lastProp = '';
