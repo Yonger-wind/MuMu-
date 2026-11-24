@@ -245,6 +245,7 @@
 - `scripts/builtin.js`：第一章后果段、第二章跨章段。
 - `tests/parser-choice-flags.test.mjs`、`tests/engine-choice-flags.test.mjs`、`tests/serialize-choice-flags.test.mjs`、`tests/lint-choice-flags.test.mjs`。
 - `README.md` / `AGENTS.md` / `docs/mumu-package-spec.md`：格式说明与交付自检项。
+- `scripts/modals.js`：导入弹窗的格式说明补一行新语法（不改布局）。
 
 ## 15. 裁决记录
 
