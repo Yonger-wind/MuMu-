@@ -58,16 +58,53 @@ function makeFaded(key, img) {
   if (entry) { entry.faded = c; entry.ready = true; }
 }
 
+const PORTRAIT_IDLE_BATCH = 4;
+
+/** 把 keys 按 size 切成批次（纯函数，供单测）。 */
+export function planPortraitBatches(keys, size = PORTRAIT_IDLE_BATCH) {
+  const out = [];
+  for (let i = 0; i < keys.length; i += size) out.push(keys.slice(i, i + size));
+  return out;
+}
+
+function loadPortrait(key) {
+  if (images.has(key)) return;               // 显式全量预加载与空闲分批可能并存，避免重复请求
+  const img = new Image();
+  img.decoding = 'async';
+  const entry = { img, faded: null, ready: false };
+  images.set(key, entry);
+  img.onload = () => makeFaded(key, img);
+  img.onerror = () => console.error('立绘加载失败', PORTRAITS[key].src);
+  img.src = PORTRAITS[key].src;
+}
+
+/** 显式全量预加载（调试 / 测试用；正常启动走 schedulePortraitPreload）。 */
 export function preloadPortraits() {
-  for (const key of Object.keys(PORTRAITS)) {
-    const img = new Image();
-    img.decoding = 'async';
-    const entry = { img, faded: null, ready: false };
-    images.set(key, entry);
-    img.onload = () => makeFaded(key, img);
-    img.onerror = () => console.error('立绘加载失败', PORTRAITS[key].src);
-    img.src = PORTRAITS[key].src;
-  }
+  for (const key of Object.keys(PORTRAITS)) loadPortrait(key);
+}
+
+function atIdle(fn, timeout) {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(() => fn(), { timeout });
+  else setTimeout(fn, 60);
+}
+
+/** 首页首帧之后再分批预加载立绘：不阻塞首屏可交互（幂等）。 */
+export function schedulePortraitPreload() {
+  if (schedulePortraitPreload.started) return;
+  schedulePortraitPreload.started = true;
+  const batches = planPortraitBatches(Object.keys(PORTRAITS));
+  const start = () => {
+    let i = 0;
+    const next = () => {
+      const batch = batches[i++];
+      if (!batch) return;
+      for (const key of batch) loadPortrait(key);
+      atIdle(next, 300);
+    };
+    atIdle(next, 1200);
+  };
+  if (document.readyState === 'complete') start();
+  else window.addEventListener('load', start, { once: true });
 }
 
 export function portraitOf(key) {

@@ -6,7 +6,7 @@ import { createAudio } from './audio.js';
 import { createSceneRenderer } from './scene.js';
 import { createEngine } from './engine.js';
 import { createCharacterManager } from './character-manager.js';
-import { preloadPortraits } from './portraits.js';
+import { schedulePortraitPreload } from './portraits.js';
 import { loadBuiltinScripts } from './builtin.js';
 import { loadCustomScripts, addCustomScript, removeCustomScript, loadSaves, upsertSave, removeSave, makeId } from './storage.js';
 import { exportPackage, downloadPackage, importPackage, safeFileName } from './package.js';
@@ -19,7 +19,7 @@ const audio = createAudio();
 const sunset = createSunset($('sunset'));
 const sceneRenderer = createSceneRenderer($('scene'));
 const castManager = createCharacterManager();
-preloadPortraits();
+schedulePortraitPreload();
 const builtins = castManager.decorateAll(loadBuiltinScripts());
 
 const allScripts = () => castManager.decorateAll([...builtins, ...loadCustomScripts()]);
