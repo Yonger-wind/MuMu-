@@ -87,6 +87,9 @@ node serve.js        # → http://localhost:5173
   `'moonlight'` 合订为四张曲目卡，修改 `builtin.js` 时保留 `series / seriesTitle / chapterNo` 字段；
   首页「开始体验」必须打开「选择剧本」，不要直接 `play(builtins[0])`。
 - 不要引入第三方依赖、不要加构建步骤、不要整体重构 UI 与页面布局。
+- **部署口径：最终网站由 Qoder 部署到 Qoder Sites（唯一部署目标）**；
+  不为 Cloudflare Pages / GitHub Pages 等其他托管做适配，仓库保持零依赖零构建的纯静态形态；
+  部署动作由 Qoder 侧执行（见 `docs/superpowers/specs/2026-11-23-mumu-local-creation-platform-roadmap.md` §7）。
 - 内置剧本保留《蝉鸣止于逢魔时》《青绿长卷·千里未归》《月光下的未完奏鸣》各第一至四章（终章），
   以及《漩涡与深蓝：星月夜的回响》第一至三章（第三章为双结局终章）；
   删除内置剧本/人物前先确认这是产品决策。

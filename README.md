@@ -24,6 +24,14 @@ node --test          # 运行 tests/*.test.mjs
 存档写入 `mumu.saves.v2`，旧版本 `mumu.saves.v1` 的存档会在读取时自动迁移补齐；
 存档同时携带故事状态（旗标、数值、结局标识、检查点），因此读档可以回到原位继续。
 
+## 部署
+
+最终网站由 **Qoder 部署到 Qoder Sites**（唯一部署目标）。
+本仓库保持零依赖、零构建的纯静态形态，可直接被 Qoder Sites 托管
+（`index.html` + `scripts/` + `styles/` + `assets/`）；作品库与存档仍留在访问者浏览器本地，
+不因上公网而引入账号或服务端依赖。部署约束见
+`docs/superpowers/specs/2026-11-23-mumu-local-creation-platform-roadmap.md` §7。
+
 ## 目录结构
 
 ```
