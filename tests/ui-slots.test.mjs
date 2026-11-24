@@ -61,3 +61,39 @@ test('挂载：找不到槽位抛中文错误并提示 data-slot 写法', () => 
   const root = fakeRoot({});
   assert.throws(() => mountTo('stage', {}, { root }), /找不到挂载点「stage」.*data-slot="stage"/);
 });
+
+test('挂载：node 非法时中文报错', () => {
+  const root = fakeRoot({ modal: fakeHost() });
+  assert.throws(() => mountTo('modal', undefined, { root }), /挂载内容必须是 DOM 节点/);
+  assert.throws(() => mountTo('modal', null, { root }), /挂载内容必须是 DOM 节点/);
+});
+
+test('槽位：默认根取 globalThis.document', () => {
+  const host = fakeHost();
+  // 精确还原：原本是自有属性就写回原值，原本没有才删除（不能无条件 delete）。
+  const hadDocument = Object.prototype.hasOwnProperty.call(globalThis, 'document');
+  const originalDocument = globalThis.document;
+  globalThis.document = {
+    querySelector: (selector) => (selector === '[data-slot="home"]' ? host : null),
+  };
+  try {
+    assert.equal(findSlot('home'), host);
+  } finally {
+    if (hadDocument) globalThis.document = originalDocument;
+    else delete globalThis.document;
+  }
+});
+
+test('槽位：非标准根时查询结果收敛为 null', () => {
+  const root = { querySelector: () => undefined };
+  assert.equal(findSlot('modal', root), null);
+});
+
+test('挂载：未知槽名先按未知挂载点报错', () => {
+  const root = fakeRoot({});
+  assert.throws(() => mountTo('toast', {}, { root }), /未知的挂载点「toast」/);
+  assert.throws(
+    () => mountTo('toast', {}, { root }),
+    (err) => !/找不到挂载点/.test(err.message)
+  );
+});

@@ -13,14 +13,13 @@ function ensureName(name) {
       `未知的挂载点「${String(name)}」；可用：${SLOT_NAMES.join(' / ')}。`
     );
   }
-  return name;
 }
 
-/** 查找槽位元素；未知槽名抛错，页面上没有该槽返回 null。 */
+/** 查找槽位元素（Element | null）；未知槽名抛错，页面上没有该槽返回 null。 */
 export function findSlot(name, root = globalThis.document) {
   ensureName(name);
   if (!root || typeof root.querySelector !== 'function') return null;
-  return root.querySelector(`[data-slot="${name}"]`);
+  return root.querySelector(`[data-slot="${name}"]`) || null;
 }
 
 /** 把节点挂到命名槽；找不到槽位抛错。返回 { node, remove() }，remove 幂等。 */
@@ -28,7 +27,16 @@ export function mountTo(name, node, opts = {}) {
   const o = opts && typeof opts === 'object' ? opts : {};
   const host = findSlot(name, o.root);
   if (!host) {
-    throw new Error(`页面上找不到挂载点「${name}」，请确认 index.html 里带有 data-slot="${name}"。`);
+    throw new Error(
+      `页面上找不到挂载点「${name}」，请确认 index.html 里带有 data-slot="${name}"；` +
+        `可用：${SLOT_NAMES.join(' / ')}。`
+    );
+  }
+  if (!node || typeof node !== 'object') {
+    throw new Error('挂载内容必须是 DOM 节点。');
+  }
+  if (typeof host.appendChild !== 'function') {
+    throw new Error(`挂载点「${name}」不可挂载。`);
   }
   host.appendChild(node);
   return {
