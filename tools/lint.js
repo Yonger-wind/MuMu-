@@ -94,6 +94,27 @@ const DIR_TAGS_NEED_VALUE = new Set([
 ]);
 
 /**
+ * 只能不带值的标签：解析器只认「【清场】」这种形式，
+ * 写成「【清场：xxx】」时整行会退化成旁白（静默失败，正是本工具要抓的那类）。
+ * 注意：结束 / 完 允许带值（那是结局名），不在此列。
+ */
+const DIR_TAGS_NO_VALUE = new Set(['清场', '空场', '无人']);
+
+/**
+ * 「值只有空白」时解析器会回落到哪个默认值。
+ * 与 scripts/parser.js 里各分支的 fallback 参数一一对应：
+ * 镜头 → mid（中景）、姿态 → neutral（自然）、动作 → stand（站立）、视角 → normal（常规）。
+ */
+const DIR_TAG_DEFAULT = {
+  镜头: { noun: '镜头', fallback: '中景' },
+  姿态: { noun: '姿态', fallback: '自然' },
+  情绪: { noun: '姿态', fallback: '自然' },
+  动作: { noun: '动作', fallback: '站立' },
+  视角: { noun: '视角', fallback: '常规' },
+  机位: { noun: '视角', fallback: '常规' },
+};
+
+/**
  * 舞台指示的 key（【xxx：…】里的 xxx）；未知 key 由规则 E101 报出。
  * 无值形式（【结束】/【完】/【清场】）也要认得出 key，
  * 否则每一条【结束】都会被当成未知标签误报。
@@ -107,6 +128,68 @@ export function dirKey(text) {
 export function dirValue(text) {
   const m = String(text).match(/^【\s*[^:：]+[:：]\s*([^】]*)\s*】\s*$/);
   return m ? m[1].trim() : '';
+}
+
+/**
+ * 舞台指示的原始值（未 trim）：【镜头： 】得到「 」，【镜头：】与【镜头】都得到 ''。
+ * 用来区分两种「没有值」：
+ * - 完全缺值（【场景】/【场景：】）：解析器匹配不到任何分支 → 整行退化成旁白；
+ * - 只有空白（【镜头： 】）：解析器能匹配到分支，但值取空 → 产出节点并回落到默认值。
+ */
+export function dirRaw(text) {
+  const m = String(text).match(/^【\s*[^:：]+[:：]([^】]*)】\s*$/);
+  return m ? m[1] : '';
+}
+
+/** 原始值的三态：none（完全缺值）/ blank（只有空白）/ text（有实际内容） */
+function dirValueKind(raw) {
+  if (!raw) return 'none';
+  if (!raw.trim()) return 'blank';
+  return 'text';
+}
+
+/**
+ * 取「作者真正想写的那个值」：先按半角 | 切开取末段，
+ * 末段里若还夹着全角 ｜，再取 ｜ 之后的最后一段。
+ * 例：【姿态：阿蓝｜疲惫】→ 半角切分得「阿蓝｜疲惫」→ 再按全角切分得「疲惫」。
+ */
+function intentValue(value) {
+  const half = String(value).split('|').map((s) => s.trim()).filter(Boolean);
+  let seg = half.length ? half[half.length - 1] : '';
+  if (seg.includes('｜')) {
+    const fw = seg.split('｜').map((s) => s.trim()).filter(Boolean);
+    if (fw.length) seg = fw[fw.length - 1];
+  }
+  return seg;
+}
+
+/**
+ * 解析器实际会把这个值当成什么（文案口径，见 resolveTable）。
+ * 模糊命中 → 说出被命中的词条；完全认不出 → 说出会回落的默认值。
+ */
+function whatFor(table, val, fallback) {
+  const r = resolveTable(table, val);
+  return r.mode === 'fuzzy'
+    ? `解析器会把它当成「${table[r.key].label}」`
+    : `解析器会回落到「${fallback}」`;
+}
+
+/**
+ * 「值只有空白」时的 E101 文案：解析器仍会产出节点，但值取空 → 回落到默认值。
+ * 三类口径都按 scripts/parser.js 的真实行为写：
+ * - 镜头 / 姿态 / 动作 / 视角：产出节点并回落到对应默认值；
+ * - 场景 / 分镜：解析器读不出场景名，会直接抛「未识别的场景」，整个剧本都加载不了；
+ * - 出场 / 登场：出场名单为空，谁也不会上场，这一行等于没写。
+ */
+function blankValueMessage(key, text) {
+  const d = DIR_TAG_DEFAULT[key];
+  if (d) {
+    return `舞台指示「${text}」的值为空（只有空白），解析器会回落到默认${d.noun}「${d.fallback}」。`;
+  }
+  if (key === '场景' || key === '分镜') {
+    return `舞台指示「${text}」的值为空（只有空白），解析器读不出场景名，会报「未识别的场景」并中断整个剧本的加载。`;
+  }
+  return `舞台指示「${text}」的值为空（只有空白），解析器不会让任何人出场，这一行不会生效。`;
 }
 
 /**
@@ -160,12 +243,13 @@ export function scanText(text) {
     if (/^【.*】$/.test(t)) {
       const key = dirKey(t);
       const value = dirValue(t);
+      const raw = dirRaw(t);
       // 只有「场景/分镜」且带值才算真正的场景指示：
       // 【场景】（缺值）解析器不认，会退化成旁白，不能用来抑制 W107。
       if ((key === '场景' || key === '分镜') && value) sawScene = true;
       if (key === '结束' || key === '完') sawEnd = true;
       lines.push({
-        line, kind: 'dir', text: t, name: key, value,
+        line, kind: 'dir', text: t, name: key, value, raw,
         parts: value ? value.split(/[|｜,，\s]+/).filter(Boolean) : [],
       });
       continue;
@@ -243,22 +327,34 @@ function applyTextRules(scan) {
         continue;
       }
       const value = rec.value || '';
-      // 已知标签但缺必需值：解析器匹配不到任何分支，整行退化成旁白
-      if (DIR_TAGS_NEED_VALUE.has(key) && !value) {
+      const vkind = dirValueKind(rec.raw);
+      // 已知标签但缺必需值：分两种口径，文案必须说清解析器的真实行为
+      if (DIR_TAGS_NEED_VALUE.has(key) && vkind === 'none') {
+        // 完全缺值（【场景】/【场景：】）：解析器匹配不到任何分支 → 整行退化成旁白
         issues.push(issue('error', 'E101', rec.line,
           `舞台指示「${rec.text}」缺少值，解析器不认识这一行，它会被当成旁白。`,
           `这一类标签必须带值（例如【${key}：…】）；补上值之后这一行才会作为舞台指示生效。`));
         continue;
       }
+      if (DIR_TAGS_NEED_VALUE.has(key) && vkind === 'blank') {
+        // 只有空白（【镜头： 】）：解析器仍会产出节点，但值取空 → 回落到默认值
+        issues.push(issue('error', 'E101', rec.line,
+          blankValueMessage(key, rec.text),
+          `这一类标签必须带值（例如【${key}：…】）；补上值之后这一行才会按预期生效。`));
+        continue;
+      }
+      // 只能不带值的标签带了值（【清场：xxx】）：整行退化成旁白，静默失败
+      if (DIR_TAGS_NO_VALUE.has(key) && vkind !== 'none') {
+        issues.push(issue('error', 'E101', rec.line,
+          `舞台指示「${rec.text}」不该带值：${key}只有不带值的写法才有效，写成【${key}：xxx】会被当成旁白。`,
+          `请把这一行改成【${key}】（不要冒号，也不要值）。`));
+        continue;
+      }
       // 词表类判定：matchTable 认不出的才报；文案用 resolveTable 说清「解析器实际会当成什么」
       const vocab = (table, val, kind, available, fallback) => {
         if (!val || matchTable(table, val)) return;
-        const r = resolveTable(table, val);
-        const what = r.mode === 'fuzzy'
-          ? `解析器会把它当成「${table[r.key].label}」`
-          : `解析器会回落到「${fallback}」`;
         issues.push(issue('warning', 'W101', rec.line,
-          `未识别的${kind}「${val}」：${what}。`,
+          `未识别的${kind}「${val}」：${whatFor(table, val, fallback)}。`,
           `可用${kind}：${available}。`));
       };
       if (key === '场景' || key === '分镜') {
@@ -284,9 +380,16 @@ function applyTextRules(scan) {
         const available = isPose ? POSE_LIST : ACT_LIST;
         const fallback = isPose ? '自然' : '站立';
         if (value.includes('｜')) {
-          issues.push(issue('warning', 'W101', rec.line,
-            `舞台指示「${rec.text}」里用了全角「｜」，解析器只认半角「|」，作用对象会变成全场。`,
-            '请把全角「｜」改成半角「|」（例如【姿态：角色|难过】）。'));
+          // 全角 ｜：解析器的 splitDir 只按半角 | 切分，目标角色会丢掉。
+          // 但值本身仍然要判定 —— 分隔符写错不该掩盖「姿态拼错了」这件事。
+          const val = intentValue(value);
+          const unknown = !!val && val !== '*' && !matchTable(table, val);
+          const message = unknown
+            ? `舞台指示「${rec.text}」里用了全角「｜」，解析器只认半角「|」，作用对象会变成全场；`
+              + `而且${kind}「${val}」未识别，${whatFor(table, value, fallback)}。`
+            : `舞台指示「${rec.text}」里用了全角「｜」，解析器只认半角「|」，作用对象会变成全场。`;
+          issues.push(issue('warning', 'W101', rec.line, message,
+            `请把全角「｜」改成半角「|」（例如【${key}：角色|${fallback === '自然' ? '难过' : '坐下'}】）；可用${kind}：${available}。`));
         } else {
           const parts = value.split('|').map((x) => x.trim()).filter(Boolean);
           const val = parts.length > 1 ? parts[1] : parts[0];

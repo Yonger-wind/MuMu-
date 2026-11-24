@@ -312,3 +312,80 @@ test('重名角色行按当前行原文判定列数与模型', () => {
   assert.deepEqual(model.issues.filter((i) => i.code === 'W102').map((i) => i.line), [3],
     '第 3 行的坏模型要报 W102，不被后写的同名行覆盖');
 });
+
+/* ============================================================
+   修复轮 R=2：E101 语义边界、无值标签带值、全角分支补值判定
+   ============================================================ */
+
+test('E101：值只有空白时说「回落到默认」，不说「当成旁白」', () => {
+  // 解析器对【镜头： 】产出 cam 节点（cam:"mid"），不是旁白，文案不能骗人
+  const r = lint('标题：x\n【镜头： 】');
+  const it = r.issues.find((i) => i.code === 'E101');
+  assert.ok(it, '只有空白的值也应报 E101');
+  assert.equal(it.severity, 'error');
+  assert.equal(it.line, 2);
+  assert.match(it.message, /回落/);
+  assert.match(it.message, /中景/, '镜头应回落到中景');
+  assert.doesNotMatch(it.message, /当成旁白/);
+});
+
+test('E101：值完全为空时仍说「会被当成旁白」', () => {
+  const r = lint('标题：x\n【场景】');
+  const it = r.issues.find((i) => i.code === 'E101');
+  assert.ok(it);
+  assert.match(it.message, /当成旁白/);
+  assert.doesNotMatch(it.message, /回落/);
+});
+
+test('E101：只有空白的值按标签说清各自的解析器行为', () => {
+  const cases = [
+    ['【姿态： 】', /回落.*自然/],
+    ['【动作： 】', /回落.*站立/],
+    ['【视角： 】', /回落.*常规/],
+    ['【出场： 】', /不会生效/],
+  ];
+  for (const [line, re] of cases) {
+    const r = lint(`标题：x\n${line}`);
+    const it = r.issues.find((i) => i.code === 'E101');
+    assert.ok(it, `${line} 应报 E101`);
+    assert.equal(it.line, 2);
+    assert.match(it.message, re, `${line} 的文案应说清解析器的真实行为`);
+    assert.doesNotMatch(it.message, /当成旁白/);
+  }
+});
+
+test('E101：无值标签带值（清场/空场/无人）要报错', () => {
+  for (const tag of ['清场', '空场', '无人']) {
+    const r = lint(`标题：x\n【${tag}：xxx】`);
+    const it = r.issues.find((i) => i.code === 'E101');
+    assert.ok(it, `【${tag}：xxx】应报 E101`);
+    assert.equal(it.severity, 'error');
+    assert.equal(it.line, 2);
+    assert.match(it.message, /旁白/, '带值后整行会退化成旁白');
+  }
+});
+
+test('E101：结束 / 完 允许带值（结局名），不报 E101', () => {
+  for (const tag of ['结束', '完']) {
+    const r = lint(`标题：x\n【${tag}：xxx】`);
+    assert.equal(r.issues.filter((i) => i.code === 'E101').length, 0, `【${tag}：xxx】不应报 E101`);
+  }
+});
+
+test('W101：全角｜分支仍要判定值本身（阿蓝｜疲惫）', () => {
+  const r = lint('标题：x\n【姿态：阿蓝｜疲惫】');
+  const its = r.issues.filter((i) => i.code === 'W101');
+  assert.equal(its.length, 1);
+  assert.equal(its[0].line, 2);
+  assert.match(its[0].message, /｜/, '要提到用了全角分隔符');
+  assert.match(its[0].message, /疲惫/, '要提到作者真正想写的那个值');
+  assert.match(its[0].message, /未识别/, '要说明该值未识别');
+});
+
+test('W101：全角｜但值本身合法时只报分隔符问题', () => {
+  const r = lint('标题：x\n【姿态：阿蓝｜难过】');
+  const its = r.issues.filter((i) => i.code === 'W101');
+  assert.equal(its.length, 1);
+  assert.match(its[0].message, /｜/);
+  assert.doesNotMatch(its[0].message, /未识别/);
+});
