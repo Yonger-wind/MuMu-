@@ -80,7 +80,7 @@ export function openModal(title, bodyHtml, wide = false) {
 
 /* ---------------- 剧本库 ---------------- */
 /** 把同一 series 的多章合并为一张“曲目”卡；导入的剧本仍单卡展示。 */
-function groupScripts(scripts) {
+export function groupScripts(scripts) {
   const entries = [];
   const bySeries = new Map();
   for (const s of scripts) {
@@ -89,7 +89,7 @@ function groupScripts(scripts) {
       if (!g) {
         g = {
           kind: 'series', key: s.series, title: s.seriesTitle || s.title,
-          brief: s.summary, cover: s.cover, chapters: [],
+          brief: '', cover: s.cover, chapters: [],
         };
         bySeries.set(s.series, g);
         entries.push(g);
@@ -100,7 +100,11 @@ function groupScripts(scripts) {
     }
   }
   entries.forEach((e) => {
-    if (e.kind === 'series') e.chapters.sort((a, b) => (a.chapterNo || 0) - (b.chapterNo || 0));
+    if (e.kind !== 'series') return;
+    e.chapters.sort((a, b) => (a.chapterNo || 0) - (b.chapterNo || 0));
+    // 曲目卡的简介取第一章的：库里同名的内置卡与导入卡必须显示同一句话，
+    // 不能因为导入是倒序写入（addCustomScript 用 unshift）而拿到最后一章的简介
+    e.brief = (e.chapters[0] && e.chapters[0].summary) || '';
   });
   return entries;
 }
