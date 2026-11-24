@@ -23,11 +23,18 @@ function write(key, val) {
 
 export function loadCustomScripts() { return read(K_SCRIPTS, []); }
 export function saveCustomScripts(list) { return write(K_SCRIPTS, list); }
+/** 新增/覆盖一个自定义剧本。
+ *  返回 { ok, list, error }：ok 为 false 时说明本地存储写失败（多半是配额满），
+ *  调用方必须据此提示用户，不能假装保存成功。 */
 export function addCustomScript(script) {
   const list = loadCustomScripts().filter((s) => s.id !== script.id);
   list.unshift(script);
-  saveCustomScripts(list);
-  return list;
+  const ok = saveCustomScripts(list);
+  return {
+    ok,
+    list,
+    error: ok ? null : '浏览器存储空间不足，剧本没有保存成功。',
+  };
 }
 export function removeCustomScript(id) {
   const list = loadCustomScripts().filter((s) => s.id !== id);

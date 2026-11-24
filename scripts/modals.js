@@ -40,6 +40,18 @@ const THUMB = {
   track:      'linear-gradient(160deg,#141a34,#5a2a2a 52%,#f0b070)',
 };
 
+/** 只接受 base64 图片 data URL，避免把任意字符串塞进 style 属性 */
+const SAFE_IMG = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+/** 有封面就用封面图铺满缩略图，否则回落到渐变底 */
+function coverStyle(s) {
+  const url = String((s && s.coverImage) || '');
+  if (SAFE_IMG.test(url)) {
+    return `background-image:url('${url}');background-size:cover;background-position:center`;
+  }
+  const scene = s && s.cover ? s.cover.scene : '';
+  return `background:${THUMB[scene] || THUMB.classroom}`;
+}
+
 /** 曲目卡可直接用原图做封面：漩涡 =《星月夜》，月光 =《悲怆》第二乐章乐谱。 */
 const SERIES_COVER = {
   vortex: "linear-gradient(180deg, rgba(18,22,38,0.10), rgba(18,22,38,0.58)), url('./assets/images/starry-night.jpg') center/cover no-repeat",
@@ -97,12 +109,15 @@ function singleCard(s) {
   return `
     <div class="script-card" data-id="${esc(s.id)}" tabindex="0">
       ${s.builtin ? '' : '<span class="badge-custom">已导入</span>'}
-      <div class="script-thumb" style="background:${THUMB[s.cover.scene] || THUMB.classroom}"></div>
+      <div class="script-thumb" style="${coverStyle(s)}"></div>
       <div class="script-body">
         <div class="script-name">${esc(s.title)}</div>
         <span class="script-tag">${esc(s.tag || SCENES[s.cover.scene]?.label || '剧本')}</span>
         <div class="script-brief">${esc(s.summary)}</div>
-        ${s.builtin ? '' : `<div class="script-actions"><button class="mini-btn danger" data-del="${esc(s.id)}">移除</button></div>`}
+        ${s.builtin ? '' : `<div class="script-actions">
+          <button class="mini-btn" data-export="${esc(s.id)}">导出 .mumu</button>
+          <button class="mini-btn danger" data-del="${esc(s.id)}">移除</button>
+        </div>`}
       </div>
     </div>`;
 }
@@ -110,9 +125,13 @@ function singleCard(s) {
 function seriesCard(g) {
   const first = g.chapters[0];
   const chips = g.chapters.map((c) => `<span class="chapter-chip">${esc((c.tag || '').split(' · ')[0] || `第${c.chapterNo || ''}章`)}</span>`).join('');
+  // 内置曲目用固定原图封面；导入的曲目包用自己的封面图
+  const cover = SERIES_COVER[g.key]
+    ? `background:${SERIES_COVER[g.key]}`
+    : coverStyle({ coverImage: first.coverImage, cover: first.cover });
   return `
     <div class="script-card series-card" data-series="${esc(g.key)}" tabindex="0">
-      <div class="script-thumb" style="background:${SERIES_COVER[g.key] || THUMB[first.cover.scene] || THUMB.classroom}">
+      <div class="script-thumb" style="${cover}">
         <span class="series-badge">合订本 · 全 ${g.chapters.length} 章</span>
       </div>
       <div class="script-body">
@@ -120,21 +139,27 @@ function seriesCard(g) {
         <span class="script-tag">曲目 · ${g.chapters.length} 章</span>
         <div class="script-brief">${esc(g.brief)}</div>
         <div class="chapter-chips">${chips}</div>
+        <div class="script-actions">
+          <button class="mini-btn" data-export-series="${esc(g.key)}">导出整本</button>
+        </div>
       </div>
     </div>`;
 }
 
 /** 选完曲目后进入的章节选择页。 */
-export function openChapters(group, onPlay, onBack) {
+export function openChapters(group, onPlay, onBack, onExport) {
   const rows = group.chapters.map((c) => `
-    <button class="chapter-item" data-id="${esc(c.id)}">
-      <span class="chapter-no">${String(c.chapterNo || 0).padStart(2, '0')}</span>
-      <span class="chapter-main">
-        <span class="chapter-name">${esc(c.tag || c.title)}</span>
-        <span class="chapter-brief">${esc(c.summary)}</span>
-      </span>
-      <span class="chapter-go">进入 ▸</span>
-    </button>`).join('');
+    <div class="chapter-row">
+      <button class="chapter-item" data-id="${esc(c.id)}">
+        <span class="chapter-no">${String(c.chapterNo || 0).padStart(2, '0')}</span>
+        <span class="chapter-main">
+          <span class="chapter-name">${esc(c.tag || c.title)}</span>
+          <span class="chapter-brief">${esc(c.summary)}</span>
+        </span>
+        <span class="chapter-go">进入 ▸</span>
+      </button>
+      <button class="mini-btn chapter-export" data-export="${esc(c.id)}">导出</button>
+    </div>`).join('');
   const m = openModal(`《${group.title}》`, `
     <div class="chapter-head">
       <button class="mini-btn" data-back>← 返回曲目</button>
@@ -150,9 +175,16 @@ export function openChapters(group, onPlay, onBack) {
       onPlay(sc);
     });
   });
+  m.querySelectorAll('[data-export]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const sc = group.chapters.find((x) => x.id === el.dataset.export);
+      if (sc && onExport) onExport({ kind: 'work', script: sc });
+    });
+  });
 }
 
-export function openLibrary({ scripts, onPlay, onDelete }) {
+export function openLibrary({ scripts, onPlay, onDelete, onExport }) {
   const entries = groupScripts(scripts);
   const cards = entries.map((e) => (e.kind === 'series' ? seriesCard(e) : singleCard(e.script))).join('');
   const m = openModal('选择剧本', `<div class="script-grid">${cards}</div>`, true);
@@ -161,8 +193,11 @@ export function openLibrary({ scripts, onPlay, onDelete }) {
   m.querySelectorAll('.series-card').forEach((el) => {
     const group = entries.find((e) => e.kind === 'series' && e.key === el.dataset.series);
     if (!group) return;
-    const go = () => openChapters(group, onPlay, () => openLibrary({ scripts, onPlay, onDelete }));
-    el.addEventListener('click', go);
+    const go = () => openChapters(group, onPlay, () => openLibrary({ scripts, onPlay, onDelete, onExport }), onExport);
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-export-series]')) return;   // 导出按钮不进入章节列表
+      go();
+    });
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === el) go(); });
   });
 
@@ -171,10 +206,26 @@ export function openLibrary({ scripts, onPlay, onDelete }) {
     const go = () => { const sc = scripts.find((x) => x.id === el.dataset.id); closeModal(); onPlay(sc); };
     el.addEventListener('click', (e) => {
       const del = e.target.closest('[data-del]');
+      const exp = e.target.closest('[data-export]');
       if (del) { e.stopPropagation(); onDelete(del.dataset.del); return; }
+      if (exp) {
+        e.stopPropagation();
+        const sc = scripts.find((x) => x.id === exp.dataset.export);
+        if (sc && onExport) onExport({ kind: 'work', script: sc });
+        return;
+      }
       go();
     });
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === el) go(); });
+  });
+
+  // 曲目卡上的「导出整本」
+  m.querySelectorAll('[data-export-series]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const group = entries.find((e) => e.kind === 'series' && e.key === el.dataset.exportSeries);
+      if (group && onExport) onExport({ kind: 'series', scripts: group.chapters });
+    });
   });
 }
 
@@ -206,14 +257,14 @@ export function openSaves({ saves, titleOf, onLoad, onDelete }) {
 }
 
 /* ---------------- 导入剧本 ---------------- */
-export function openImport({ onImported }) {
+export function openImport({ onImported, onPackage }) {
   const body = `
     <div class="drop-zone" id="dz">
       <span class="di">✦</span>
       <div class="dt">拖入剧本文件，或点击选择</div>
-      <div class="dh">支持 .txt / .md / .json / .docx，或打包为 .zip<br/>
+      <div class="dh">支持 .txt / .md / .json / .docx / .zip，或暮幕作品包 .mumu<br/>
         字数 ${LIMITS.minChars}–${LIMITS.maxChars.toLocaleString()} 字 · 文件不超过 5MB</div>
-      <input id="file-in" type="file" accept=".txt,.md,.json,.docx,.zip" hidden />
+      <input id="file-in" type="file" accept=".txt,.md,.json,.docx,.zip,.mumu" hidden />
     </div>
     <div id="import-msg" class="dh" style="margin-top:14px;min-height:20px;font-size:13px"></div>
     <div class="format-box">
@@ -239,12 +290,20 @@ export function openImport({ onImported }) {
 
   const handle = async (file) => {
     if (!file) return;
+    const name = file.name || '';
+    const ext = (name.split('.').pop() || '').toLowerCase();
     msg.style.color = 'rgba(255,244,230,0.7)';
     msg.textContent = '正在解析…';
     try {
-      const sc = await readFileToScript(file);
-      onImported(sc);
-      closeModal();
+      if (ext === 'mumu') {
+        if (!onPackage) throw new Error('当前入口不支持作品包导入。');
+        await onPackage(file);
+        closeModal();
+      } else {
+        const sc = await readFileToScript(file);
+        onImported(sc);
+        closeModal();
+      }
     } catch (e) {
       msg.style.color = '#ff9a8a';
       msg.textContent = e.userFacing ? e.message : '解析失败：' + (e.message || '未知错误');

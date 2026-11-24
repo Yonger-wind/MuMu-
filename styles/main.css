@@ -337,6 +337,9 @@ html, body {
 }
 .chapter-count { font-size:12.5px; color:rgba(255,244,230,0.55); letter-spacing:0.04em; }
 .chapter-list { display:flex; flex-direction:column; gap:10px; }
+.chapter-row { display:flex; align-items:center; gap:8px; }
+.chapter-row .chapter-item { flex:1; min-width:0; }
+.chapter-export { flex:0 0 auto; }
 .chapter-item {
   display:flex; align-items:center; gap:16px; width:100%; text-align:left; cursor:pointer;
   padding:15px 18px; border-radius:14px; font-family:inherit;

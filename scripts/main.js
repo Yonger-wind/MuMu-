@@ -9,6 +9,7 @@ import { createCharacterManager } from './character-manager.js';
 import { preloadPortraits } from './portraits.js';
 import { loadBuiltinScripts } from './builtin.js';
 import { loadCustomScripts, addCustomScript, removeCustomScript, loadSaves, upsertSave, removeSave, makeId } from './storage.js';
+import { exportPackage, downloadPackage, importPackage } from './package.js';
 import { openLibrary, openSaves, openImport, openHow, closeModal } from './modals.js';
 
 const $ = (id) => document.getElementById(id);
@@ -34,13 +35,25 @@ function nextChapterOf(sc) {
   return at >= 0 ? chapters[at + 1] || null : null;
 }
 
-let toastTimer = null;
+let toastBusy = false;
+const toastQueue = [];
+/** 依次显示提示：导出 / 导入的警告不能被后一条消息顶掉 */
 function toast(text) {
-  const t = $('toast');
-  t.textContent = text;
-  t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+  toastQueue.push(String(text));
+  if (toastBusy) return;
+  toastBusy = true;
+  const showNext = () => {
+    const msg = toastQueue.shift();
+    if (msg === undefined) { toastBusy = false; return; }
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => {
+      t.classList.remove('show');
+      setTimeout(showNext, 280);
+    }, 2400);
+  };
+  showNext();
 }
 
 /* ---------------- 屏幕切换 ---------------- */
@@ -142,6 +155,53 @@ $('stage-save').addEventListener('click', () => {
 });
 
 /* ---------------- 首页按钮 ---------------- */
+/** 同一包内的章序必须连续且唯一：优先用作品自带章序，缺失或非法时按顺序补位；
+ *  一旦出现重复或缺口就整体重排，免得 README 里出现「2. 甲 / 2. 乙」。 */
+function chapterNosOf(works) {
+  const nums = works.map((w, i) => {
+    const n = Number(w.chapterNo);
+    return Number.isInteger(n) && n > 0 ? n : i + 1;
+  });
+  const contiguous = nums.every((n, i) => n === i + 1);
+  return contiguous ? nums : works.map((_, i) => i + 1);
+}
+
+/** 导出作品包：kind='work' 导单章，kind='series' 导整本。 */
+async function handleExport({ kind, script, scripts }) {
+  try {
+    const isSeries = kind === 'series';
+    const works = (isSeries ? (scripts || []) : (script ? [script] : [])).filter(Boolean);
+    if (!works.length) { toast('没有可导出的作品'); return; }
+    const chapterNos = chapterNosOf(works);
+    const { bytes, filename, warnings } = await exportPackage({
+      kind,
+      // 整本导出时 id 就是曲目 id，series 恒为 null；单章导出时 id 是作品 id
+      id: isSeries ? (works[0].series || works[0].id) : works[0].id,
+      title: isSeries ? (works[0].seriesTitle || works[0].title) : works[0].title,
+      summary: works[0].summary || '',
+      author: works[0].author || '',
+      series: isSeries
+        ? null
+        : (works[0].series ? { id: works[0].series, title: works[0].seriesTitle || works[0].title } : null),
+      license: null,
+      coverImage: works[0].coverImage || null,
+      works: works.map((w, i) => ({
+        id: w.id, title: w.title, tag: w.tag || '', chapterNo: chapterNos[i],
+        source: w.source || null, script: w,
+      })),
+    });
+    downloadPackage(bytes, filename);
+    toast(`已导出《${filename}》`);
+    // 早期导入的剧本没有保留原文，导出走的是重建文本，要如实告诉用户
+    if (!works.some((w) => typeof w.source === 'string' && w.source.trim())) {
+      toast('该剧本没有原文，导出为重建文本（内容可能与原文略有差异）。');
+    }
+    for (const w of warnings) toast(w);
+  } catch (e) {
+    toast(e.userFacing ? e.message : '导出失败：' + (e.message || '未知错误'));
+  }
+}
+
 function showLibrary() {
   openLibrary({
     scripts: allScripts(),
@@ -151,6 +211,7 @@ function showLibrary() {
       toast('已移除该剧本');
       showLibrary();
     },
+    onExport: handleExport,
   });
 }
 function showSaves() {
@@ -171,8 +232,25 @@ function showImport() {
       sc.id = makeId('custom');
       sc.tag = '我的剧本';
       sc.builtin = false;
-      addCustomScript(sc);
+      const res = addCustomScript(sc);
+      if (!res.ok) { toast(res.error || '浏览器存储空间不足，剧本没有保存成功。'); return; }
       toast(`已导入《${sc.title}》，现已列入“选择剧本”`);
+      setTimeout(showLibrary, 500);
+    },
+    onPackage: async (file) => {
+      const buf = await file.arrayBuffer();
+      const res = await importPackage(buf, { existing: [...builtins, ...loadCustomScripts()] });
+      if (!res.works.length) throw new Error('作品包里没有作品。');
+      let failed = 0;
+      for (const w of res.works) {
+        if (!addCustomScript(w).ok) failed += 1;
+      }
+      if (failed) {
+        toast(`浏览器存储空间不足，${res.works.length} 章中有 ${failed} 章没有保存成功。`);
+        return;
+      }
+      toast(`已导入《${res.title}》，共 ${res.works.length} 章`);
+      for (const w of res.warnings) toast(w);
       setTimeout(showLibrary, 500);
     },
   });
