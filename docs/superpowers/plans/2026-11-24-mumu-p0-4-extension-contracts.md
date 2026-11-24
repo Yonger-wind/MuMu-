@@ -448,7 +448,7 @@ export async function loadCardManifest(url = './assets/cards/manifest.json', opt
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `node --test tests/cards.test.mjs`
-Expected: PASS —— 15 tests, 0 fail
+Expected: PASS —— 16 tests, 0 fail
 
 - [ ] **Step 5: 提交**
 
@@ -804,7 +804,7 @@ Expected: PASS —— 11 tests, 0 fail
 
 再跑全量确认没有碰坏别处：
 Run: `node --test`
-Expected: PASS —— 265 tests（254 + 11），0 fail
+Expected: PASS —— 281 tests（254 基线 + 16 cards + 11 slots），0 fail
 
 - [ ] **Step 5: 提交**
 
@@ -909,7 +909,7 @@ UI = 新增模块 + `mountTo('<slot>', node)`；视觉只使用 `styles/tokens.c
 - [ ] **Step 4: 收尾验证**
 
 Run: `node --test`
-Expected: PASS —— 265 tests, 0 fail
+Expected: PASS —— 281 tests, 0 fail
 
 Run: `node tools/lint.js --builtin`
 Expected: `通过：内置 15 章 未发现问题。`，exit 0
@@ -939,4 +939,4 @@ git commit -m "docs(P0-4): 扩展点接口文档、素材约定与 README 接线
 
 - **Spec coverage**：注册表（§2.2→T1）、检视契约（§2.3→T1 注释 + T5 文档）、清单/加载器（§2.4→T2）、槽位（§3.1→T3）、挂载 API（§3.2→T3）、令牌（§3.3→T4）、悬浮层（§3.4→T4）、素材约定（§4→T5）、测试策略（§6→T1–T4 测试 + T5 回归）。`#ui-layer` 在 T3 用 `data-slot`、T4 补元素与样式，顺序无冲突。
 - **Placeholder scan**：无 TBD / TODO；全部代码为字面内容。
-- **Type consistency**：`SLOT_NAMES` 四槽（无 toast）贯穿 spec / T3 / T4 测试；`parseCardManifest` 返回 `{ key, module, title?, image? }`；`applyCardManifest` 返回 `string[]`；测试计数 T1=7、T2 累计 15、T3=5、T4 累计 11、全量 265。
+- **Type consistency**：`SLOT_NAMES` 四槽（无 toast）贯穿 spec / T3 / T4 测试；`parseCardManifest` 返回 `{ key, module, title?, image? }`；`applyCardManifest` 返回 `string[]`；测试计数 T1=7、T2 累计 16、T3=5、T4 累计 11、全量 281。
