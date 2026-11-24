@@ -1287,21 +1287,58 @@ test('B5：包级没有 summary 时回落到剧本内的简介', async () => {
   assert.equal(res.works[0].summary, '一段用于测试的短剧。');
 });
 
-test('C1：单章文本超过 30000 字上限时导入被拒绝，且报中文 userFacing 错误', async () => {
+test('C1：单章文本超过字数上限时导入被拒绝，且报中文 userFacing 错误', async () => {
   const longText = `${SAMPLE}\n\n${'放学的教室里只剩下窗外的蝉鸣，磁带在书包里轻轻响着。'.repeat(2000)}`;
   assert.ok(countChars(longText) > LIMITS.maxChars);
-  const sc = parseScriptText(longText, 'long.txt');
-  const { bytes } = await exportPackage({
-    kind: 'work', id: 'w1', title: '超长剧', summary: '', author: '',
-    series: null, license: null, coverImage: null,
-    works: [{ id: 'w1', title: '超长剧', tag: '第一章', chapterNo: 1, source: longText, script: sc }],
-  });
+  // 直接造包（绕过导出侧的同口径上限），验证导入侧确实会拦
+  const bytes = await packWithManifest({
+    format: PACKAGE_FORMAT, formatVersion: FORMAT_VERSION, schemaVersion: SCHEMA_VERSION,
+    kind: 'work', id: 'w1', title: '超长剧',
+    works: [{ id: 'w1', title: '超长剧', tag: '第一章', chapterNo: 1, file: 'script.txt', format: 'text', chars: countChars(longText) }],
+    assets: [],
+  }, [{ name: 'script.txt', data: longText }]);
   await assert.rejects(
     () => importPackage(ab(bytes), { existing: [] }),
     (e) => {
       assert.equal(e.userFacing, true);
-      assert.match(e.message, /超过上限 30000 字/);
+      assert.match(e.message, new RegExp(`超过上限 ${LIMITS.maxChars} 字`));
       return true;
     },
   );
+});
+
+test('C2：导出超过字数上限的章节被拒绝，报中文 userFacing 错误', async () => {
+  const longText = `${SAMPLE}\n\n${'放学的教室里只剩下窗外的蝉鸣，磁带在书包里轻轻响着。'.repeat(2000)}`;
+  const sc = parseScriptText(longText, 'long.txt');
+  await assert.rejects(
+    () => exportPackage({
+      kind: 'work', id: 'w1', title: '超长剧', summary: '', author: '',
+      series: null, license: null, coverImage: null,
+      works: [{ id: 'w1', title: '超长剧', tag: '第一章', chapterNo: 1, source: longText, script: sc }],
+    }),
+    (e) => {
+      assert.equal(e.userFacing, true);
+      assert.match(e.message, /超过上限 \d+ 字/);
+      assert.match(e.message, /请精简后再导出/);
+      return true;
+    },
+  );
+});
+
+test('C3：字数正好等于上限时可导出（边界不误伤）', async () => {
+  // 造一段字数正好等于 LIMITS.maxChars 的文本
+  const base = '蝉鸣止于逢魔时，教室里只剩下窗外的蝉鸣。';
+  const n = Math.ceil(LIMITS.maxChars / countChars(base));
+  let text = base.repeat(n);
+  const over = countChars(text) - LIMITS.maxChars;
+  if (over > 0) text = text.slice(0, text.length - over);
+  assert.equal(countChars(text), LIMITS.maxChars);
+  const sc = parseScriptText(text, 'edge.txt');
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'w1', title: '边界剧', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'w1', title: '边界剧', tag: '第一章', chapterNo: 1, source: text, script: sc }],
+  });
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.works.length, 1);
 });

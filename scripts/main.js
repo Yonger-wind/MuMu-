@@ -194,7 +194,7 @@ async function handleExport({ kind, script, scripts } = {}) {
   try {
     const isSeries = kind === 'series';
     const works = (isSeries ? (scripts || []) : (script ? [script] : [])).filter(Boolean);
-    if (!works.length) { toast('没有可导出的作品'); return; }
+    if (!works.length) { toast('没有可导出的作品。'); return; }
     const chapterNos = chapterNosOf(works);
     const { bytes, filename, warnings } = await exportPackage({
       kind,

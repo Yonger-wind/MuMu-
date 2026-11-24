@@ -327,14 +327,23 @@ export async function exportPackage(opts) {
   // 章节按 chapterNo 稳定升序：文件序号与 manifest.works 顺序保持一致，
   // 调用方传乱序章节也不会让包内章节错位
   const ordered = sortByChapterNo(works);
-  const entries = ordered.map((d, i) => ({
-    id: d.work.id,
-    title: d.work.title || '',
-    tag: d.work.tag || '',
-    chapterNo: d.chapterNo,
-    file: kind === 'series' ? `chapters/${String(i + 1).padStart(2, '0')}.txt` : 'script.txt',
-    chars: countChars(workText(d.work)),
-  }));
+  const entries = ordered.map((d, i) => {
+    const text = workText(d.work);
+    const chars = countChars(text);
+    // 字数上限：与导入侧同口径，保证「导出的包一定能被自己导回来」
+    if (chars > LIMITS.maxChars) {
+      const name = d.work.title || d.work.tag || `第 ${i + 1} 章`;
+      throw pkgFail(`《${name}》的剧本有 ${chars} 字，超过上限 ${LIMITS.maxChars} 字，请精简后再导出。`);
+    }
+    return {
+      id: d.work.id,
+      title: d.work.title || '',
+      tag: d.work.tag || '',
+      chapterNo: d.chapterNo,
+      file: kind === 'series' ? `chapters/${String(i + 1).padStart(2, '0')}.txt` : 'script.txt',
+      chars,
+    };
+  });
 
   const assets = [];
   const files = [];
