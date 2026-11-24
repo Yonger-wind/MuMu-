@@ -60,10 +60,11 @@ function makeFaded(key, img) {
 
 const PORTRAIT_IDLE_BATCH = 4;
 
-/** 把 keys 按 size 切成批次（纯函数，供单测）。 */
+/** 把 keys 按 size 切成批次（纯函数，供单测）；size 非法时退回 1，避免步长为 0 死循环。 */
 export function planPortraitBatches(keys, size = PORTRAIT_IDLE_BATCH) {
+  const step = Math.max(1, size | 0);
   const out = [];
-  for (let i = 0; i < keys.length; i += size) out.push(keys.slice(i, i + size));
+  for (let i = 0; i < keys.length; i += step) out.push(keys.slice(i, i + step));
   return out;
 }
 
@@ -74,7 +75,11 @@ function loadPortrait(key) {
   const entry = { img, faded: null, ready: false };
   images.set(key, entry);
   img.onload = () => makeFaded(key, img);
-  img.onerror = () => console.error('立绘加载失败', PORTRAITS[key].src);
+  img.onerror = () => {
+    console.error('立绘加载失败', PORTRAITS[key].src);
+    // 失败条目移出缓存：显式 preloadPortraits() 才能重新发起请求，而不是拿到 ready:false 的空壳
+    images.delete(key);
+  };
   img.src = PORTRAITS[key].src;
 }
 
@@ -112,7 +117,13 @@ export function portraitOf(key) {
 }
 
 export function portraitImage(key) {
-  return images.get(portraitOf(key)) || null;
+  const k = portraitOf(key);
+  const entry = images.get(k);
+  if (entry) return entry;
+  // 按需兜底：空闲分批在后台标签页可能被节流，首次绘制的人像就地补一次加载，
+  // 本帧仍返回 null（不画半个立绘），下一帧起正常走 drawPortrait。
+  loadPortrait(k);
+  return null;
 }
 
 function hexA(hex, a) {
