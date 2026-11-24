@@ -4,7 +4,7 @@ import {
   PACKAGE_FORMAT, FORMAT_VERSION, SCHEMA_VERSION,
   MAX_PACKAGE_BYTES, MAX_ASSET_BYTES, MIGRATIONS, pkgFail,
   makeManifest, migrateManifest, validateManifest,
-  exportPackage, dataUrlToBytes, bytesToDataUrl,
+  exportPackage, dataUrlToBytes, bytesToDataUrl, checkPackageSize,
 } from '../scripts/package.js';
 import { readZipEntries } from '../scripts/zip.js';
 import { parseScriptText, countChars, readFileToScript } from '../scripts/parser.js';
@@ -514,5 +514,176 @@ test('内置剧本保留 DSL 原文且可再次解析', () => {
     assert.ok(sc.source.startsWith('标题：'));
     const back = parseScriptText(sc.source, 'x.txt');
     assert.ok(back.nodes.some((n) => n.t === 'say'));
+  }
+});
+
+/* ---------- 修补轮 R1 · F1：章节序号按 chapterNo 而非数组下标 ---------- */
+
+test('整本导出：章节文件序号按 chapterNo 升序，与传入顺序无关', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { bytes } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [
+      { id: 'c4', title: '曲目', tag: '第四章', chapterNo: 4, source: '第四章内容', script: sc },
+      { id: 'c2', title: '曲目', tag: '第二章', chapterNo: 2, source: '第二章内容', script: sc },
+      { id: 'c3', title: '曲目', tag: '第三章', chapterNo: 3, source: '第三章内容', script: sc },
+      { id: 'c1', title: '曲目', tag: '第一章', chapterNo: 1, source: '第一章内容', script: sc },
+    ],
+  });
+  const entries = await readZipEntries(ab(bytes));
+  const dec = new TextDecoder();
+  const manifest = JSON.parse(dec.decode(entries.get('manifest.json')));
+  assert.deepEqual(manifest.works.map((w) => w.chapterNo), [1, 2, 3, 4]);
+  assert.deepEqual(manifest.works.map((w) => w.file), [
+    'chapters/01.txt', 'chapters/02.txt', 'chapters/03.txt', 'chapters/04.txt',
+  ]);
+  assert.equal(dec.decode(entries.get('chapters/01.txt')), '第一章内容');
+  assert.equal(dec.decode(entries.get('chapters/02.txt')), '第二章内容');
+  assert.equal(dec.decode(entries.get('chapters/03.txt')), '第三章内容');
+  assert.equal(dec.decode(entries.get('chapters/04.txt')), '第四章内容');
+});
+
+test('整本导出：章节号相同时保持传入顺序', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { bytes } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [
+      { id: 'a', title: '曲目', tag: '甲', chapterNo: 2, source: '甲内容', script: sc },
+      { id: 'b', title: '曲目', tag: '乙', chapterNo: 2, source: '乙内容', script: sc },
+      { id: 'c', title: '曲目', tag: '丙', chapterNo: 1, source: '丙内容', script: sc },
+    ],
+  });
+  const entries = await readZipEntries(ab(bytes));
+  const dec = new TextDecoder();
+  assert.equal(dec.decode(entries.get('chapters/01.txt')), '丙内容');
+  assert.equal(dec.decode(entries.get('chapters/02.txt')), '甲内容');
+  assert.equal(dec.decode(entries.get('chapters/03.txt')), '乙内容');
+});
+
+test('整本导出：chapterNo 缺失或非法时按传入顺序处理，文件名不含 NaN', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { bytes } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [
+      { id: 'a', title: '曲目', tag: '甲', chapterNo: undefined, source: '甲内容', script: sc },
+      { id: 'b', title: '曲目', tag: '乙', chapterNo: 'x', source: '乙内容', script: sc },
+      { id: 'c', title: '曲目', tag: '丙', chapterNo: 3, source: '丙内容', script: sc },
+    ],
+  });
+  const entries = await readZipEntries(ab(bytes));
+  const dec = new TextDecoder();
+  const manifest = JSON.parse(dec.decode(entries.get('manifest.json')));
+  assert.ok([...entries.keys()].every((k) => !k.includes('NaN')));
+  assert.deepEqual(manifest.works.map((w) => w.file), [
+    'chapters/01.txt', 'chapters/02.txt', 'chapters/03.txt',
+  ]);
+  manifest.works.forEach((w) => assert.equal(typeof w.chapterNo, 'number'));
+  assert.equal(dec.decode(entries.get('chapters/01.txt')), '甲内容');
+  assert.equal(dec.decode(entries.get('chapters/02.txt')), '乙内容');
+  assert.equal(dec.decode(entries.get('chapters/03.txt')), '丙内容');
+});
+
+/* ---------- 修补轮 R1 · F2：整包 32MB 上限 ---------- */
+
+test('checkPackageSize 对超限字节给出中文 userFacing 错误', () => {
+  assert.throws(
+    () => checkPackageSize(new Uint8Array(MAX_PACKAGE_BYTES + 1)),
+    (e) => e.userFacing === true && e.message.includes('32MB'),
+  );
+  assert.doesNotThrow(() => checkPackageSize(new Uint8Array(8)));
+});
+
+test('导出结果超过 32MB 时导出失败并给出中文 userFacing 错误', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const oversized = new Uint8Array(MAX_PACKAGE_BYTES + 1);
+  await assert.rejects(
+    () => exportPackage({
+      kind: 'work', id: 'w1', title: '测试剧', summary: '', author: '',
+      series: null, license: null, coverImage: null,
+      zipWriter: async () => oversized,
+      works: [{ id: 'w1', title: '测试剧', tag: '', chapterNo: 1, source: SAMPLE, script: sc }],
+    }),
+    (e) => e.userFacing === true && e.message.includes('32MB'),
+  );
+});
+
+test('正常导出的包不超过 32MB', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'w1', title: '测试剧', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'w1', title: '测试剧', tag: '', chapterNo: 1, source: SAMPLE, script: sc }],
+  });
+  assert.ok(bytes.length <= MAX_PACKAGE_BYTES);
+});
+
+/* ---------- 修补轮 R1 · F3：文件名边界 ---------- */
+
+const exportName = async (title) => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { filename } = await exportPackage({
+    kind: 'work', id: 'w1', title, summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    // 作品标题也留空，确保 manifest.title 就是传入的 title
+    works: [{ id: 'w1', title: '', tag: '', chapterNo: 1, source: SAMPLE, script: sc }],
+  });
+  return filename;
+};
+
+test('导出文件名：标题为空或全空格时用默认名', async () => {
+  assert.equal(await exportName(''), '未命名作品.mumu');
+  assert.equal(await exportName('   '), '未命名作品.mumu');
+});
+
+test('导出文件名：避开 Windows 保留名', async () => {
+  assert.equal(await exportName('CON'), '_CON.mumu');
+  assert.equal(await exportName('con'), '_con.mumu');
+  assert.equal(await exportName('NUL'), '_NUL.mumu');
+  assert.equal(await exportName('COM1'), '_COM1.mumu');
+  assert.equal(await exportName('LPT9'), '_LPT9.mumu');
+  assert.equal(await exportName('CON.txt'), '_CON.txt.mumu');
+});
+
+test('导出文件名：非法字符被替换，结尾的点与空格被去掉', async () => {
+  assert.equal(await exportName('a/b:c*d?e"f<g>h|i'), 'a_b_c_d_e_f_g_h_i.mumu');
+  assert.equal(await exportName('结尾有点.'), '结尾有点.mumu');
+  assert.equal(await exportName('结尾有空格  '), '结尾有空格.mumu');
+});
+
+/* ---------- 修补轮 R1 · F5：manifest 透传与包内自洽 ---------- */
+
+test('导出时 summary / author / series 原样透传到 manifest', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const series = { id: 's1', title: '曲目' };
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'w1', title: '测试剧', summary: '这是一段简介。', author: '作者甲',
+    series, license: null, coverImage: null,
+    works: [{ id: 'w1', title: '测试剧', tag: '', chapterNo: 1, source: SAMPLE, script: sc }],
+  });
+  const entries = await readZipEntries(ab(bytes));
+  const manifest = JSON.parse(new TextDecoder().decode(entries.get('manifest.json')));
+  assert.equal(manifest.summary, '这是一段简介。');
+  assert.equal(manifest.author, '作者甲');
+  assert.deepEqual(manifest.series, series);
+});
+
+test('导出时 manifest.works 里每个 file 都真实存在于包内', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { bytes } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '简介', author: '作者',
+    series: { id: 's1', title: '曲目' }, license: null, coverImage: null,
+    works: [
+      { id: 'c2', title: '曲目', tag: '第二章', chapterNo: 2, source: SAMPLE, script: sc },
+      { id: 'c1', title: '曲目', tag: '第一章', chapterNo: 1, source: SAMPLE, script: sc },
+    ],
+  });
+  const entries = await readZipEntries(ab(bytes));
+  const manifest = JSON.parse(new TextDecoder().decode(entries.get('manifest.json')));
+  assert.ok(manifest.works.length > 0);
+  for (const w of manifest.works) {
+    assert.ok(entries.has(w.file), `包内缺少 ${w.file}`);
   }
 });

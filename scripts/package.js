@@ -228,9 +228,21 @@ const COVER_EXT = {
   'image/webp': 'webp',
 };
 
-/** 文件名里的非法字符替换为 _，并限制长度 */
+/** Windows 保留设备名（忽略大小写，匹配时忽略扩展名部分） */
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+/**
+ * 生成安全的下载文件名（不含扩展名）。
+ * - 首尾空白裁掉；全空时用「未命名作品」兜底
+ * - 结尾的点与空格去掉（Windows 不允许）
+ * - 命中 Windows 保留名（忽略扩展名部分）时加下划线前缀
+ */
 function safeFileName(name) {
-  return String(name || '未命名作品').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) || '未命名作品';
+  let s = String(name || '').trim().replace(/[\\/:*?"<>|]/g, '_');
+  s = s.replace(/[. ]+$/g, '').slice(0, 80).replace(/[. ]+$/g, '');
+  if (!s) return '未命名作品';
+  if (WINDOWS_RESERVED.test(s.split('.')[0])) s = '_' + s;
+  return s;
 }
 
 /** 取作品文本：优先原文，缺失时用序列化兜底 */
@@ -240,10 +252,33 @@ function workText(work) {
   throw pkgFail('《' + (work.title || work.id || '未命名作品') + '》没有可导出的文本内容。');
 }
 
+/** 有效章节号：正整数原样保留，缺失 / 非法时退回传入序号（避免 NaN 破坏排序与文件名） */
+function effectiveChapterNo(work, i) {
+  const n = Number(work && work.chapterNo);
+  return Number.isInteger(n) && n > 0 ? n : i + 1;
+}
+
+/** 按章节号稳定升序排列（相同章节号保持传入顺序） */
+function sortByChapterNo(works) {
+  return works
+    .map((work, i) => ({ work, i, chapterNo: effectiveChapterNo(work, i) }))
+    .sort((a, b) => (a.chapterNo - b.chapterNo) || (a.i - b.i));
+}
+
+/** 整包字节上限校验：导入侧会拒绝超过 32MB 的包，导出侧提前拦截 */
+export function checkPackageSize(bytes) {
+  const len = bytes && typeof bytes.length === 'number' ? bytes.length : 0;
+  if (len > MAX_PACKAGE_BYTES) {
+    throw pkgFail('作品包超过 32MB，请缩减内容后再导出。');
+  }
+  return len;
+}
+
 /**
  * 导出作品包。
  * kind: 'work'（单章）| 'series'（整本）
  * opts.works: [{ id, title, tag, chapterNo, source, script }]
+ * opts.zipWriter: 可选的写包函数（单测注入用，正常路径走 writeZip）
  * 返回 { bytes, filename, warnings }（warnings 是给用户看的提示文案）
  */
 export async function exportPackage(opts) {
@@ -257,13 +292,16 @@ export async function exportPackage(opts) {
   }
 
   const warnings = [];
-  const entries = works.map((w, i) => ({
-    id: w.id,
-    title: w.title || '',
-    tag: w.tag || '',
-    chapterNo: w.chapterNo || i + 1,
+  // 章节按 chapterNo 稳定升序：文件序号与 manifest.works 顺序保持一致，
+  // 调用方传乱序章节也不会让包内章节错位
+  const ordered = sortByChapterNo(works);
+  const entries = ordered.map((d, i) => ({
+    id: d.work.id,
+    title: d.work.title || '',
+    tag: d.work.tag || '',
+    chapterNo: d.chapterNo,
     file: kind === 'series' ? `chapters/${String(i + 1).padStart(2, '0')}.txt` : 'script.txt',
-    chars: countChars(workText(w)),
+    chars: countChars(workText(d.work)),
   }));
 
   const assets = [];
@@ -297,11 +335,11 @@ export async function exportPackage(opts) {
   });
 
   files.push({ name: 'manifest.json', data: JSON.stringify(manifest, null, 2) });
-  works.forEach((w, i) => {
-    files.push({ name: entries[i].file, data: workText(w) });
+  ordered.forEach((d, i) => {
+    files.push({ name: entries[i].file, data: workText(d.work) });
   });
 
-  const chapterList = works.map((w, i) => `${i + 1}. ${entries[i].tag || entries[i].title}`).join('\n');
+  const chapterList = ordered.map((d, i) => `${entries[i].chapterNo}. ${entries[i].tag || entries[i].title}`).join('\n');
   files.push({
     name: 'README.md',
     data: [
@@ -331,7 +369,10 @@ export async function exportPackage(opts) {
     });
   }
 
-  const bytes = await writeZip(files);
+  // zipWriter 供单测注入（正常路径始终走 writeZip）
+  const writer = typeof o.zipWriter === 'function' ? o.zipWriter : writeZip;
+  const bytes = await writer(files);
+  checkPackageSize(bytes);
   return { bytes, filename: `${safeFileName(manifest.title)}.mumu`, warnings };
 }
 
@@ -345,5 +386,6 @@ export function downloadPackage(bytes, filename) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // 慢设备 / 大包时 1 秒可能还没开始下载，延后到 30 秒再释放
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
