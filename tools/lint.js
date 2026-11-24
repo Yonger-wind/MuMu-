@@ -49,6 +49,36 @@ export function matchTable(table, text) {
   return best;
 }
 
+/**
+ * 词表匹配（解析器口径）：这个文本解析器实际会当成什么。
+ * 复刻 scripts/parser.js 的 matchKey 语义：1) 精确别名命中；2) 最长的、作为子串包含在文本里的别名；3) 都没有 → null。
+ * 与 matchTable（作者口径：精确 → 最长前缀）配套：matchTable 决定「要不要报」，
+ * resolveTable 决定「报的时候该怎么说」，两处口径都锁在测试里。
+ */
+export function resolveTable(table, text) {
+  const t = String(text || '').trim().toLowerCase();
+  if (!t) return { key: null, mode: 'none' };
+  const entries = Object.entries(table);
+  for (const [key, def] of entries) {
+    for (const a of def.aliases || []) {
+      if (a.toLowerCase() === t) return { key, mode: 'exact' };
+    }
+  }
+  let best = null;
+  let bestLen = 0;
+  for (const [key, def] of entries) {
+    for (const a of def.aliases || []) {
+      const al = a.toLowerCase();
+      if (al.length > bestLen && t.includes(al)) { best = key; bestLen = al.length; }
+    }
+  }
+  if (best) return { key: best, mode: 'fuzzy' };
+  return { key: null, mode: 'none' };
+}
+
+/** 故事行：只有这几类行在解析器里会产生节点；meta / charRow / label 不产生节点 */
+export const STORY_KINDS = new Set(['dir', 'choice', 'jump', 'say']);
+
 const DIR_TAGS = new Set([
   '场景', '分镜', '镜头', '姿态', '情绪', '动作', '视角', '机位',
   '出场', '登场', '清场', '空场', '无人', '结束', '完',
@@ -142,9 +172,9 @@ export function scanText(text) {
     lines.push({ line, kind: 'say', text: t });
   }
 
-  // 标签 → 其后第一个内容行（标签行本身不产生内容）
+  // 标签 → 其后第一个故事行（标签行本身不产生内容）
   for (const lab of labels) {
-    const next = lines.find((l) => l.kind !== 'label' && l.line > lab.line);
+    const next = lines.find((l) => STORY_KINDS.has(l.kind) && l.line > lab.line);
     lab.targetLine = next ? next.line : null;
   }
   return { lines, chars, labels, meta, sawScene, sawEnd };

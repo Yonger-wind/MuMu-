@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SCENES, TIMES, CAMS, POSES, ACTS, VIEWS, MODELS } from '../scripts/parser.js';
-import { matchTable, scanText, lintText } from '../tools/lint.js';
+import { matchTable, resolveTable, scanText, lintText } from '../tools/lint.js';
 
 const TABLES = { SCENES, TIMES, CAMS, POSES, ACTS, VIEWS };
 
@@ -27,6 +27,12 @@ test('matchTable 对陌生词返回 null', () => {
 test('matchTable 复刻解析器的最长子串口径：火夜 不能被 夜 抢先', () => {
   assert.equal(matchTable(TIMES, '火夜'), 'fire');
   assert.equal(matchTable(TIMES, '夜晚'), 'night');
+});
+
+test('resolveTable 复刻解析器口径：能说出解析器实际会当成什么', () => {
+  assert.deepEqual(resolveTable(TIMES, '火夜'), { key: 'fire', mode: 'exact' });
+  assert.deepEqual(resolveTable(CAMS, '超特写'), { key: 'detail', mode: 'fuzzy' });
+  assert.deepEqual(resolveTable(SCENES, '未识别的场景'), { key: null, mode: 'none' });
 });
 
 test('scanText 逐行分类并保留行号', () => {
@@ -61,6 +67,14 @@ test('scanText 把标签指向其后第一个内容行', () => {
   const s = scanText('[A]\n甲：说话\n[B]\n乙：说话');
   assert.equal(s.labels[0].targetLine, 2);
   assert.equal(s.labels[1].targetLine, 4);
+});
+
+test('scanText 的标签落点只认故事行，不会指向角色行', () => {
+  const s = scanText('标题：x\n角色：\n阿蓝 | 男 | 短发 | 白 | 少年\n\n[A]\n甲：说话');
+  assert.equal(s.labels[0].targetLine, 6);
+  // 标签之后只有 meta 行（不产生节点）时没有落点
+  const s2 = scanText('[A]\n标题：x');
+  assert.equal(s2.labels[0].targetLine, null);
 });
 
 test('lintText 目前返回空 issue 列表（占位，Task 2 填充）', () => {
