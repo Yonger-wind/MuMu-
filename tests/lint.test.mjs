@@ -736,3 +736,64 @@ test('CLI 对 .json 剧本给出中文提示并退出码 2（不走进行级扫�
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('CLI 文件不存在时中文提示并退出码 2', () => {
+  const r = runCli(['tests/fixtures/lint/没有这个文件.txt']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /文件不存在/);
+  assert.equal(r.stdout.trim(), '');
+});
+
+test('CLI 对目录路径给出中文提示并退出码 2（不抛英文堆栈）', () => {
+  const r = runCli(['tests/fixtures/lint']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /不是可校验的剧本文件|无法读取/);
+  assert.doesNotMatch(r.stderr, /EISDIR|Error:/);
+  assert.equal(r.stdout.trim(), '');
+});
+
+test('CLI --json --strict 下 ok 与退出码一致', () => {
+  const r = runCli(['tests/fixtures/lint/warn-only.txt', '--json', '--strict']);
+  assert.equal(r.status, 1);
+  const data = JSON.parse(r.stdout);
+  assert.equal(data.ok, false, '--strict 失败时 ok 不能还是 true');
+  assert.equal(data.summary.errors, 0);
+  assert.ok(data.summary.warnings > 0);
+});
+
+test('CLI 多文件：混合干净与写坏样本时两边都列且计数按文件数', () => {
+  const r = runCli(['tests/fixtures/lint/clean.txt', 'tests/fixtures/lint/bad-text-level.txt']);
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /clean\.txt/);
+  assert.match(r.stdout, /bad-text-level\.txt/);
+  assert.match(r.stdout, /（2 个文件）/);
+});
+
+test('CLI --builtin 与文件混用：作用域如实列出', () => {
+  const r = runCli(['--builtin', 'tests/fixtures/lint/clean.txt', '--json']);
+  assert.equal(r.status, 0);
+  const data = JSON.parse(r.stdout);
+  assert.deepEqual(data.issues, []);
+  assert.ok(data.files.some((f) => /内置/.test(f)));
+  assert.ok(data.files.some((f) => /clean\.txt/.test(f)));
+});
+
+test('CLI 对 .txt 里塞 JSON 的样本同样拒绝（内容嗅探分支）', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mumu-lint-'));
+  const file = join(dir, 'fake.txt');
+  writeFileSync(file, '{"title":"x","nodes":[]}', 'utf8');
+  try {
+    const r = runCli([file]);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /JSON/);
+    assert.equal(r.stdout.trim(), '');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI 文本模式通过行按「、」连接作用域（--builtin 文案可读）', () => {
+  const r = runCli(['--builtin']);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /通过：内置 \d+ 章 未发现问题。/);
+});

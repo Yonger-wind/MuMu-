@@ -8,7 +8,7 @@ import {
   matchModel, parseScriptText,
 } from '../scripts/parser.js';
 import { loadBuiltinScripts } from '../scripts/builtin.js';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -811,10 +811,16 @@ export function lintScript(script, source, fileName = '') {
 
 /** 校验全部内置剧本（15 章），作为回归基线。 */
 export function lintBuiltin() {
+  const scripts = loadBuiltinScripts();
+  // 《月光下的未完奏鸣》第 2–4 章标题相同：同名的章在 issue 的 file 上补章号，
+  // 否则文本模式会把它们的 issue 挤进同一个标题分组。
+  const titleCount = new Map();
+  for (const s of scripts) titleCount.set(s.title, (titleCount.get(s.title) || 0) + 1);
   const issues = [];
-  for (const s of loadBuiltinScripts()) {
+  for (const s of scripts) {
+    const label = titleCount.get(s.title) > 1 ? `${s.title}（第 ${s.chapterNo} 章）` : s.title;
     const r = lintText(s.source || '', s.title || '');
-    for (const it of r.issues) issues.push({ ...it, file: s.title });
+    for (const it of r.issues) issues.push({ ...it, file: label });
   }
   return {
     issues,
@@ -829,35 +835,44 @@ export function lintBuiltin() {
 
 const USAGE = '用法：node tools/lint.js <文件...> | --builtin [--json] [--strict]';
 
-/** 文本输出：按文件分组，逐条列出「第 X 行  E101 原因」与提示。 */
-function formatText(result, files) {
+/**
+ * 文本输出：按校验目标分组，逐条列出「第 X 行  E101 原因」与提示。
+ * scope 是汇总括号与人话里用的作用域（「内置 15 章」「2 个文件」「内置 15 章 + 1 个文件」）。
+ * 多目标时干净的文件也要列出来，否则「混着校验」看不出那份到底有没有被检查。
+ */
+function formatText(result, files, scope) {
   const lines = [];
+  const s = result.summary;
+  if (!result.issues.length) {
+    lines.push(`通过：${scope} 未发现问题。`);
+    return lines.join('\n');
+  }
   const byFile = new Map();
+  for (const f of files) byFile.set(f, []);
   for (const it of result.issues) {
     const key = it.file || '(未命名)';
     if (!byFile.has(key)) byFile.set(key, []);
     byFile.get(key).push(it);
   }
   for (const [file, list] of byFile) {
+    if (!list.length) {
+      lines.push(`${file}（未发现问题）`);
+      continue;
+    }
     lines.push(file);
     for (const it of list) {
       lines.push(`  第 ${it.line} 行  ${it.code} ${it.message}`);
       if (it.hint) lines.push(`      提示：${it.hint}`);
     }
   }
-  const s = result.summary;
-  if (!result.issues.length) {
-    lines.push(`通过：${files} 未发现问题。`);
-  } else {
-    lines.push(`共 ${s.errors} 个错误，${s.warnings} 个警告（${files.length} 个文件）。`);
-  }
+  lines.push(`共 ${s.errors} 个错误，${s.warnings} 个警告（${scope}）。`);
   return lines.join('\n');
 }
 
-/** JSON 输出：{ ok, files, issues, summary }，stdout 必须是纯 JSON。 */
-function formatJson(result, files) {
+/** JSON 输出：{ ok, files, issues, summary }，stdout 必须是纯 JSON；ok 与退出码同义。 */
+function formatJson(result, files, ok) {
   return JSON.stringify({
-    ok: result.summary.errors === 0,
+    ok,
     files,
     issues: result.issues,
     summary: result.summary,
@@ -892,7 +907,20 @@ export function main(argv) {
       console.error(`文件不存在：${f}`);
       return 2;
     }
-    const text = readFileSync(f, 'utf8');
+    let text;
+    try {
+      const st = statSync(f);
+      if (!st.isFile()) throw Object.assign(new Error('目录'), { code: 'EISDIR' });
+      text = readFileSync(f, 'utf8');
+    } catch (err) {
+      // 目录 / EACCES / EPERM 等都要落到中文提示 + 退出码 2，不能抛英文堆栈。
+      // EISDIR 直接写「目录」，避免把 node 的错误码当成用户可见文案。
+      const reason = err && err.code === 'EISDIR'
+        ? '目录'
+        : (err && err.code ? err.code : '读取失败');
+      console.error(`不是可校验的剧本文件：${f}（${reason}）`);
+      return 2;
+    }
     if (/\.json$/i.test(f) || text.trim().startsWith('{')) {
       console.error(`JSON 格式剧本暂不支持内容校验，请改用 .txt / .md：${f}`);
       return 2;
@@ -920,12 +948,17 @@ export function main(argv) {
       warnings: issues.filter((i) => i.severity === 'warning').length,
     },
   };
-  // 诊断一律走 stderr；stdout 只留最终结果（--json 时必须是纯 JSON）。
-  console.log(json ? formatJson(result, files) : formatText(result, files));
+  const scope = [
+    wantBuiltin ? `内置 ${loadBuiltinScripts().length} 章` : null,
+    targets.length ? `${targets.length} 个文件` : null,
+  ].filter(Boolean).join(' + ');
   const failed = result.summary.errors > 0 || (strict && result.summary.warnings > 0);
+  // 诊断一律走 stderr；stdout 只留最终结果（--json 时必须是纯 JSON）。
+  console.log(json ? formatJson(result, files, !failed) : formatText(result, files, scope));
   return failed ? 1 : 0;
 }
 
 const isMain = process.argv[1]
   && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
-if (isMain) process.exit(main(process.argv));
+// 用 exitCode 而不是 process.exit()：Windows 管道下大输出可能被截断。
+if (isMain) process.exitCode = main(process.argv);
