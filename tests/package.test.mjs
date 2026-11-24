@@ -1286,3 +1286,22 @@ test('B5：包级没有 summary 时回落到剧本内的简介', async () => {
   const res = await importPackage(ab(bytes), { existing: [] });
   assert.equal(res.works[0].summary, '一段用于测试的短剧。');
 });
+
+test('C1：单章文本超过 30000 字上限时导入被拒绝，且报中文 userFacing 错误', async () => {
+  const longText = `${SAMPLE}\n\n${'放学的教室里只剩下窗外的蝉鸣，磁带在书包里轻轻响着。'.repeat(2000)}`;
+  assert.ok(countChars(longText) > LIMITS.maxChars);
+  const sc = parseScriptText(longText, 'long.txt');
+  const { bytes } = await exportPackage({
+    kind: 'work', id: 'w1', title: '超长剧', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'w1', title: '超长剧', tag: '第一章', chapterNo: 1, source: longText, script: sc }],
+  });
+  await assert.rejects(
+    () => importPackage(ab(bytes), { existing: [] }),
+    (e) => {
+      assert.equal(e.userFacing, true);
+      assert.match(e.message, /超过上限 30000 字/);
+      return true;
+    },
+  );
+});

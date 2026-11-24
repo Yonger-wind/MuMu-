@@ -642,6 +642,11 @@ export async function importPackage(buffer, opts = {}) {
     }
 
     const text = new TextDecoder('utf-8').decode(bytes);
+    // 字数上限：与文本剧本导入同口径（spec §7「作品文本沿用 LIMITS.maxChars」）
+    const chars = countChars(text);
+    if (chars > LIMITS.maxChars) {
+      throw pkgFail(`第 ${i + 1} 章的剧本有 ${chars} 字，超过上限 ${LIMITS.maxChars} 字，请精简后再导入。`);
+    }
     let script;
     try {
       script = parseScriptText(text, w.title || w.id || '');
