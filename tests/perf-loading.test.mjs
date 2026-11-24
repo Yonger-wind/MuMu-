@@ -52,7 +52,7 @@ test('portraits.js：失败键有限自动重试，显式 preloadPortraits 清�
   assert.match(src, /failedKeys\.set\(key,\s*\{/, 'onerror 应记录次数与时间');
   assert.match(src, /MAX_AUTO_RETRY/, '应有自动重试上限');
   assert.match(src, /RETRY_DELAY_MS/, '应有重试间隔');
-  assert.match(src, /prev\.count >= MAX_AUTO_RETRY/, '超过上限后不再自动重试');
+  assert.match(src, /prev\.count > MAX_AUTO_RETRY/, '超过上限后不再自动重试（上限按失败次数计：首次 + 2 次重试）');
   const preload = src.match(/export function preloadPortraits\(\)\s*\{([\s\S]*?)\n\}/);
   assert.ok(preload, '未找到 preloadPortraits');
   assert.match(preload[1], /failedKeys\.clear\(\)/);

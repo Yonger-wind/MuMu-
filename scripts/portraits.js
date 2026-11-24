@@ -76,12 +76,12 @@ function loadPortrait(key) {
   // 显式全量预加载与空闲分批可能并存；失败键按次数与间隔做有限自动重试，避免每帧发请求
   if (images.has(key)) return;
   const prev = failedKeys.get(key);
-  if (prev && (prev.count >= MAX_AUTO_RETRY || Date.now() - prev.at < RETRY_DELAY_MS)) return;
+  if (prev && (prev.count > MAX_AUTO_RETRY || Date.now() - prev.at < RETRY_DELAY_MS)) return;
   const img = new Image();
   img.decoding = 'async';
   const entry = { img, faded: null, ready: false };
   images.set(key, entry);
-  img.onload = () => makeFaded(key, img);
+  img.onload = () => { failedKeys.delete(key); makeFaded(key, img); };
   img.onerror = () => {
     console.error('立绘加载失败', PORTRAITS[key].src);
     // 失败条目移出缓存并记入失败表：短暂故障 5 秒后自动再试，连续失败则等显式 preloadPortraits()
