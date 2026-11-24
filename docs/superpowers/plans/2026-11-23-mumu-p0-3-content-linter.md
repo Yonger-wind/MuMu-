@@ -1008,9 +1008,15 @@ git commit -m "feat(lint): 控制流规则与解析器交叉验证"
 
 ### Task 4: CLI 入口
 
+> **修订（2026-11-24，Task 3 审阅后）** —— 下列裁决优先于本节代码块：
+> 1. **JSON 源必须显式分流**：本节代码块对每个目标文件直接调 `lintText`，但 `.json` 剧本在解析器里是节点格式（`parseScriptText` 用 `trimmed.startsWith('{')` 分流），行级扫描会把整份 JSON 拆成满屏假 `say`/E101。CLI 遇到 JSON 输入（扩展名 `.json` 或首字符 `{`）应给出中文提示并**退出码 2**，不调 `lintText`。
+> 2. **`--strict` 的用例必须真的能区分 strict 与默认**：本节 `--strict` 用例拿 `bad-control-flow.txt`（3 error + 1 warning）做样本，无论 strict 与否都是退出码 1，证明不了 strict 生效。要另加一个**只有 warning、没有 error** 的样本，断言「默认退出码 0 / `--strict` 退出码 1」。
+> 3. `--json` 的 stdout 必须是**纯 JSON**（诊断信息一律走 stderr）。
+
 **Files:**
 - Modify: `tools/lint.js`
 - Modify: `tests/lint.test.mjs`
+- Create: `tests/fixtures/lint/warn-only.txt`
 
 **Interfaces:**
 - Consumes: Task 1–3 的 `lintText` / `lintBuiltin`。
