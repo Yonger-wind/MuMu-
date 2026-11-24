@@ -120,11 +120,11 @@
 | --- | --- | --- |
 | 不同台词/选择回响 | `?? flag | 角色：…` | 条件跳过 `say` |
 | 光影 | `?? flag | 【场景：操场 | 黄昏 | 远景】` | `scene/time` → `PALETTES`，换场景自动失效图层 |
-| 构图/站位 | `?? flag | 【视角：过肩】`、`?? flag | 【出场：A|B】`、`?? flag | 【清场】` | `actState.view`（`over` 需 ≥2 人）、`cast` |
+| 构图/站位 | `?? flag | 【视角：过肩】`、`?? flag | 【镜头：近景】`、`?? flag | 【出场：A|B】`、`?? flag | 【清场】` | `actState.view`（`over` 需 ≥2 人）、`cam`、`cast` |
 | 特写道具 | `?? flag | 【镜头：特写】` + 下一句条件台词含道具词 | `propText` → `pickProp` |
 | 表情/动作 | `?? flag | 【姿态：…】` / `【动作：…】` | `poses/actions`（既有转发通道） |
 
-说明：`poses`/`actions` 目前渲染器未真正消费（仅转发）；P2-2 不承诺表情差异，演示只使用光影/构图/道具/台词四类可见差异。
+说明：`poses`/`actions` 目前渲染器未真正消费（仅转发）；`view` 只实现了 `over`，`back` 目前与 `normal` 画面相同（`scripts/scene.js:16025` 只有过肩分支）。P2-2 不承诺表情差异，演示只使用光影/构图（过肩、近景）/道具/台词四类可见差异。
 
 ## 8. 演示内容（《蝉鸣止于逢魔时》）
 
@@ -144,7 +144,7 @@
 在 `[dash]` 之后、结尾夜戏之前插入条件段：
 
 - 选择回响：`asked_tape` / `kept_quiet` 各一句白石葵的回应；`asked_why` / `chose_song` 各一句夏目的回应；`picked_papers` / `grabbed_run` 各一句呼应。
-- 构图：`asked_tape` → `【视角：过肩】`；`kept_quiet` → `【视角：背影】`。
+- 构图：`asked_tape` → `【视角：过肩】`；`kept_quiet` → `【镜头：近景】`（`背影` 视角渲染器未实现，不用于演示）。
 - 道具：`picked_papers` → `【镜头：特写】` + “转学文件”台词（`paper`）；`grabbed_run` → `【镜头：特写】` + “随身听/磁带盒”台词（`cassette`），随后各自恢复 `【镜头：中景】`。
 - 光影：`asked_tape` → 插入一段 `【场景：操场 | 黄昏 | 远景】` + `【出场】` + 两句对话；之后**照旧**进入固定的 `【场景：操场 | 夜晚 | 远景】` 与 `【结束】`。
 - 不新增结局、不改 `[ask] [ignore] [fix] [why] [song] [offer] [papers] [run] [dash]` 的收敛关系。
@@ -166,7 +166,7 @@
 
 ```text
 ?? asked_tape | 【视角：过肩】
-?? kept_quiet | 【视角：背影】
+?? kept_quiet | 【镜头：近景】
 ```
 
 第二章其余内容、两条路线与结局均不改。
@@ -244,7 +244,7 @@
 - `tools/lint.js`、`docs/mumu-lint-rules.md`：校验与规则文档。
 - `scripts/builtin.js`：第一章后果段、第二章跨章段。
 - `tests/parser-choice-flags.test.mjs`、`tests/engine-choice-flags.test.mjs`、`tests/serialize-choice-flags.test.mjs`、`tests/lint-choice-flags.test.mjs`。
-- `README.md` / `AGENTS.md`：格式说明与交付自检项。
+- `README.md` / `AGENTS.md` / `docs/mumu-package-spec.md`：格式说明与交付自检项。
 
 ## 15. 裁决记录
 
@@ -253,3 +253,4 @@
 - Ruling: 条件不用于选项/跳转/标签 — 避免控制流图、回退检查点、lint 可达性同时复杂化 — 若判断错，作者需用旗标+普通跳转绕行。
 - Ruling: 跨章只带旗标，不落盘 — 与 P3-1 范围解耦，正常连续游玩可用 — 若判断错，刷新后跨章后果丢失（已写入限制）。
 - Ruling: 不加新 UI，选择回响用台词体现 — 不碰既有布局与交互，风险最低 — 若判断错，评审时需要靠台词/画面辨认后果。
+- Ruling: 演示里「安静路线」用 `【镜头：近景】` 而不是 `【视角：背影】` — 渲染器只实现 `over`，`back` 与常规画面相同，改渲染器超出本阶段 — 若将来实现背影，可把演示改回 `背影` 并补测试。
