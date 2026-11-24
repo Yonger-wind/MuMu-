@@ -298,6 +298,7 @@ export function openImport({ onImported, onPackage }) {
         <li><b>名字（录音）：台词</b> 表示画外音，只显示名字，不让人物出场</li>
         <li>舞台指示：<b>【姿态：难过】</b> <b>【动作：坐下】</b> <b>【视角：过肩】</b>，可写 <b>【姿态：林夏|难过】</b> 只作用于某人</li>
         <li><b>&gt; 选项文字 -&gt; 标签</b> 产生分支，<b>[标签]</b> 定义落点，<b>-&gt; 标签</b> 跳转</li>
+        <li><b>&gt; 选项文字 @flag -&gt; 标签</b> 可写入旗标；<b>?? flag | 台词</b> 或 <b>?? !flag | 【镜头：特写】</b> 条件播放</li>
         <li><b>【结束】</b> 收尾。压缩包内读取第一份文档</li>
       </ul>
       <pre id="ex">${esc(FORMAT_EXAMPLE)}</pre>
