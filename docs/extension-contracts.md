@@ -89,7 +89,10 @@ import {
 ## 2. 检视函数契约
 
 ```js
+// 完整类型（带 context 对象）
 // (host: HTMLElement, context: { cardKey: string, card: object }) => cleanup?: Function
+// 调用方实际以解构形式传入，两种写法等价：
+// (host, { cardKey, card }) => cleanup?
 ```
 
 - `host`：调用方提供的宿主容器，你的实现往里画东西；
@@ -132,6 +135,8 @@ import {
 - `title` / `image`：只有字符串才收；读入时 `trim()`；trim 后为空串就**整个字段丢弃**
   （不会留下 `title: ''`）。其余类型（数字、`null`、对象）当作没写。
 - `module`：`trim()` 后必须非空且以 `.js` 结尾，否则报错；不会补全前缀，按相对路径原样保存。
+  **现状说明**：当前只校验非空且以 `.js` 结尾，**不拒绝**绝对 URL 与 `../` 回溯——加载器会照写解析，
+  请自行保持清单为仓库内相对路径。
 - `key`：原样保存（已通过 `validateCardKey`）。
 - 归一后的条目只有四个可能的键：`key`、`module`、以及可选的 `title`、`image`。
 - 返回顺序 = 清单顺序；重复 `key` 报错并指出是第几张。
@@ -474,7 +479,7 @@ node tools/lint.js --builtin   # 期望：通过：内置 15 章 未发现问题
 
 1. **15 章内置剧本照常播放**：`lint.js --builtin` 必须 exit 0；
 2. **卡牌 / 槽位 / 令牌契约的既有测试照常通过**（`tests/cards.test.mjs`、`tests/ui-slots.test.mjs`）；
-3. **页面视觉零变化**：新增槽位与样式表是「零像素」改动；若你的 UI 挂上来之后首页 / 舞台 /
+3. **页面视觉零变化**：新增槽位与样式表是「无可见像素（透明全屏盒）」的改动；若你的 UI 挂上来之后首页 / 舞台 /
    弹窗出现错位，先检查是否用了非 `--mumu-*` 的变量、是否遮住对话框、是否在 `stage` 槽里忘了
    `stopPropagation()`。
 

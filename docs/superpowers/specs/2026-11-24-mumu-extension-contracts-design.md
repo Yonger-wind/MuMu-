@@ -202,7 +202,7 @@ export function mountTo(name, node, { root } = {});
 | 彩色人物图鉴卡 | `assets/cards/<cardKey>.png` | 透明底；`cardKey` 与检视注册表、清单一致 |
 | 卡牌清单 | `assets/cards/manifest.json` | §2.4 结构 |
 | 卡牌检视实现 | `scripts/cards/<cardKey>.js` | 具名导出 `inspect` |
-| 夜幕模型图 | `assets/images/night/<name>.png` | 缺失时由 P4-2 显示占位符 |
+| 夜幕模型图 | `assets/night/<name>.png` | 缺失时由 P4-2 显示占位符 |
 | 歌单 / 乐谱等既有素材 | `assets/images/`、`assets/models/` | 保持现状，不迁移 |
 
 ### 4.2 `.mumu` 包内 assets

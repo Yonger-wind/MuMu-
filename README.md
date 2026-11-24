@@ -40,7 +40,7 @@ node tools/lint.js 剧本.txt --strict  # 把警告也算失败
 
 ## 扩展接口
 
-第三方卡牌检视、UI 模块与素材的接入契约见 `docs/extension-contracts.md`：
+第三方卡牌检视、UI 模块与素材的接入契约见 [docs/extension-contracts.md](docs/extension-contracts.md)：
 卡牌 = 新增 `scripts/cards/<cardKey>.js` + 在 `assets/cards/manifest.json` 注册；
 UI = 新增模块 + `mountTo('<slot>', node)`；视觉只使用 `styles/tokens.css` 的 `--mumu-*` 令牌。
 
@@ -68,6 +68,7 @@ assets/images/      starry-night.jpg（《星月夜》原图：沙龙展墙、�
                     pathetique-score.png（《悲怆》第二乐章手稿：曲目封面与剧情特写）
                     lujiazui-day.png / lujiazui-night.png（陆家嘴昼/夜：城市远景与写字楼幕墙）
 assets/cards/       卡牌清单 manifest.json 与卡面图（<cardKey>.png）
+assets/night/       夜幕模型（P4 预留，当前目录未建）
 scripts/
   main.js           主控：屏幕切换、按钮装配、音频/渲染器/引擎接线
   sunset.js         首页 Canvas 动态夕阳主视觉

@@ -119,7 +119,7 @@ example-series.mumu
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | string | 资源 id，目前封面为 `cover`。 |
-| `role` | string | 目前仅 `cover`。 |
+| `role` | string | 自由字符串；内置导出当前只写 `cover`，保留 role（`cover` / `card` / `night`）见本节末段。 |
 | `file` | string | 相对包内的资源路径。 |
 | `type` | string | MIME，按扩展名推断（`jpg`/`jpeg`/`png`/`webp`）。 |
 | `bytes` | number | 资源字节数。 |
