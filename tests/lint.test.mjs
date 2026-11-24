@@ -12,7 +12,6 @@ test('matchTable 认得每个表里的全部 label 与 alias', () => {
     for (const def of Object.values(table)) {
       const words = [def.label, ...(def.aliases || [])];
       for (const w of words) {
-        assert.equal(matchTable(table, w), matchTable(table, w), `${name} ${w} 应可识别`);
         assert.notEqual(matchTable(table, w), null, `${name} ${w} 不应判为未知`);
       }
     }
@@ -704,6 +703,8 @@ test('CLI --builtin 对内置 15 章零 issue', () => {
   assert.equal(r.status, 0);
   const data = JSON.parse(r.stdout);
   assert.deepEqual(data.issues, []);
+  // files 与 issues[].file 用同一套 label：内置 15 章就是 15 个条目
+  assert.equal(data.files.length, 15);
 });
 
 test('CLI 用法错误退出码 2', () => {
@@ -775,8 +776,10 @@ test('CLI --builtin 与文件混用：作用域如实列出', () => {
   assert.equal(r.status, 0);
   const data = JSON.parse(r.stdout);
   assert.deepEqual(data.issues, []);
-  assert.ok(data.files.some((f) => /内置/.test(f)));
+  // files = 内置 15 章的章节标签 + 用户目标文件
+  assert.equal(data.files.length, 16);
   assert.ok(data.files.some((f) => /clean\.txt/.test(f)));
+  assert.ok(data.files.some((f) => /蝉鸣止于逢魔时/.test(f)));
 });
 
 test('CLI 对 .txt 里塞 JSON 的样本同样拒绝（内容嗅探分支）', () => {
@@ -821,4 +824,40 @@ test('scripts/ 不得引用 tools/lint.js（离线工具不进运行时）', () 
 test('index.html 不应引用 tools/lint.js', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.equal(html.includes('tools/lint'), false);
+});
+
+/* ============================================================
+   最终整支审阅 · 修复轮：冒号空格兜底、issue 排序、口径修正
+   ============================================================ */
+
+test('冒号前多空格的舞台指示：报 E101，且不抑制 W107', () => {
+  const r = lintText([
+    '标题：x', '【场景 ：教室 | 黄昏 | 远景】', '旁白：一', '【结束】',
+  ].join('\n'));
+  const codes = exact(r);
+  assert.ok(codes.includes('E101@2'), `应报 E101@2，实际 ${codes}`);
+  assert.ok(codes.includes('W107@1'), '解析器不认这一行，场景指示不算数，W107 应照报');
+});
+
+test('重复定义的死标签只报一次 W106', () => {
+  const r = lintText([
+    '标题：x', '【场景：教室 | 黄昏 | 远景】', '[死]', '[死]', '旁白：一', '【结束】',
+  ].join('\n'));
+  assert.equal(r.issues.filter((i) => i.code === 'W106').length, 1);
+});
+
+test('冒号后没有内容的「名字：」按旁白处理，不报 W103', () => {
+  const r = lintText([
+    '标题：x', '【场景：教室 | 黄昏 | 远景】', '小葵：', '【结束】',
+  ].join('\n'));
+  assert.equal(r.issues.filter((i) => i.code === 'W103').length, 0);
+});
+
+test('issue 按行号升序返回', () => {
+  const r = lintText([
+    '标题：x', '【场景：教室 | 黄昏 | 远景】', '[起点]', '旁白：一',
+    '> 回头 -> 起点', '旁白：二', '【结束】',
+  ].join('\n'));
+  const lines = r.issues.map((i) => i.line);
+  assert.deepEqual(lines, [...lines].sort((a, b) => a - b));
 });

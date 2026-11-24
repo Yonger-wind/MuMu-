@@ -244,9 +244,9 @@ export function scanText(text) {
       const key = dirKey(t);
       const value = dirValue(t);
       const raw = dirRaw(t);
-      // 只有「场景/分镜」且带值才算真正的场景指示：
+      // 只有「场景/分镜」且带值、并且解析器真的认领这一行，才算真正的场景指示：
       // 【场景】（缺值）解析器不认，会退化成旁白，不能用来抑制 W107。
-      if ((key === '场景' || key === '分镜') && value) sawScene = true;
+      if ((key === '场景' || key === '分镜') && value && parserDirBranch(t)) sawScene = true;
       if (key === '结束' || key === '完') sawEnd = true;
       lines.push({
         line, kind: 'dir', text: t, name: key, value, raw,
@@ -410,6 +410,13 @@ function applyTextRules(scan) {
           }
         }
       }
+      // 兜底：扫描器认得的写法，解析器未必认得（例如冒号前多了一个空格）。
+      // 解析器不认领的行会整行变成旁白，作者看不到任何提示 —— 这正是 E101 要拦的。
+      if (!parserDirBranch(rec.text)) {
+        issues.push(issue('error', 'E101', rec.line,
+          `舞台指示「${rec.text}」的写法解析器不认，它会被当成旁白。`,
+          '请对照格式说明检查全角 / 半角标点，以及冒号前后不该有空格。'));
+      }
       continue;
     }
 
@@ -462,8 +469,9 @@ function applyTextRules(scan) {
 
     if (rec.kind === 'say') {
       // 与解析器的两种台词形态对齐：「名字（情绪）：内容」与「名字：内容」
-      const dm = rec.text.match(/^([^\s:：【】\[\]>]{1,8})[（(]([^)）]{1,40})[)）][:：]/);
-      const dm2 = dm ? null : rec.text.match(/^([^\s:：【】\[\]>]{1,8})[:：]/);
+      // 冒号后必须有内容（解析器的 /^…[:：]\s*(.+)$/），「小葵：」整行按旁白处理。
+      const dm = rec.text.match(/^([^\s:：【】\[\]>]{1,8})[（(]([^)）]{1,40})[)）][:：]\s*(.+)$/);
+      const dm2 = dm ? null : rec.text.match(/^([^\s:：【】\[\]>]{1,8})[:：]\s*(.+)$/);
       const who = dm ? dm[1].trim() : (dm2 ? dm2[1].trim() : null);
       if (who && who !== '旁白' && !scan.chars.has(who)) {
         // 括号形态复刻解析器的守卫：只有「名字是旁白 / 名字已声明 / 括号内容 ≤ 6 字」
@@ -733,13 +741,14 @@ function applyFlowRules(scan) {
     }
   }
 
-  // W106 死标签
+  // W106 死标签（同名标签可能重复定义，只按第一次定义的行报一次）
+  const seenDead = new Set();
   for (const lab of scan.labels) {
-    if (!refs.has(lab.name)) {
-      issues.push(issue('warning', 'W106', lab.line,
-        `标签「${lab.name}」从未被引用。`,
-        '如果这是废弃的分支，请把标签和它下面的内容一起删掉。'));
-    }
+    if (refs.has(lab.name) || seenDead.has(lab.name)) continue;
+    seenDead.add(lab.name);
+    issues.push(issue('warning', 'W106', lab.line,
+      `标签「${lab.name}」从未被引用。`,
+      '如果这是废弃的分支，请把标签和它下面的内容一起删掉。'));
   }
   // brokenRef / hasSay 交给解析器交叉验证用（去重依据是我们自己算出的事实）
   return { issues, brokenRef, hasSay: g.hasSay };
@@ -790,6 +799,9 @@ export function lintText(text, fileName = '') {
   const flow = applyFlowRules(scan);
   const issues = applyTextRules(scan).concat(flow.issues);
   applyParserCheck(text, fileName, issues, flow);
+  // 报告一律按原文行号升序：两条规则链混在一起时顺序不可预测，
+  // 读者（以及 --json 的消费者）都不该看到「第 6 行」排在「第 5 行」前面。
+  issues.sort((a, b) => a.line - b.line);
   return {
     issues,
     summary: {
@@ -817,13 +829,17 @@ export function lintBuiltin() {
   const titleCount = new Map();
   for (const s of scripts) titleCount.set(s.title, (titleCount.get(s.title) || 0) + 1);
   const issues = [];
+  // files 与 issues[].file 用同一个 label：--json 的 files 必须能和 issue 的 file 对上。
+  const files = [];
   for (const s of scripts) {
     const label = titleCount.get(s.title) > 1 ? `${s.title}（第 ${s.chapterNo} 章）` : s.title;
+    files.push(label);
     const r = lintText(s.source || '', s.title || '');
     for (const it of r.issues) issues.push({ ...it, file: label });
   }
   return {
     issues,
+    files,
     summary: {
       errors: issues.filter((i) => i.severity === 'error').length,
       warnings: issues.filter((i) => i.severity === 'warning').length,
@@ -932,10 +948,12 @@ export function main(argv) {
 
   const issues = [];
   const files = [];
+  let builtinChapters = 0;
   if (wantBuiltin) {
     const r = lintBuiltin();
     issues.push(...r.issues);
-    files.push(`内置 ${loadBuiltinScripts().length} 章`);
+    files.push(...r.files);
+    builtinChapters = r.files.length;
   }
   for (const { file, text } of sources) {
     const r = lintText(text, file);
@@ -951,7 +969,7 @@ export function main(argv) {
     },
   };
   const scope = [
-    wantBuiltin ? `内置 ${loadBuiltinScripts().length} 章` : null,
+    wantBuiltin ? `内置 ${builtinChapters} 章` : null,
     targets.length ? `${targets.length} 个文件` : null,
   ].filter(Boolean).join(' + ');
   const failed = result.summary.errors > 0 || (strict && result.summary.warnings > 0);
