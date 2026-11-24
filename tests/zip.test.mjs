@@ -155,3 +155,76 @@ test('导入 .zip 剧本：非压缩包内容报中文提示且带 userFacing', 
     },
   );
 });
+
+/* ---------------- 解压上限（zip bomb 防护） ---------------- */
+
+/** 改写中央目录里第 index 条的「未压缩大小」（模拟伪造 / 谎报的声明值） */
+function patchCentralUncompressedSize(bytes, index, value) {
+  const u8 = new Uint8Array(bytes);
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= 0; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('找不到 EOCD');
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  for (let i = 0; i < count; i++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('中央目录结构异常');
+    if (i === index) { dv.setUint32(p + 24, value, true); return u8; }
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const cmtLen = dv.getUint16(p + 32, true);
+    p += 46 + nameLen + extraLen + cmtLen;
+  }
+  throw new Error(`中央目录里找不到第 ${index} 条`);
+}
+
+test('中央目录声明的未压缩大小超限时不解压就报错', async () => {
+  const bytes = await writeZip([{ name: 'chapters/01.txt', data: 'x'.repeat(1000) }]);
+  const patched = patchCentralUncompressedSize(bytes, 0, 0xffffffff);
+  await assert.rejects(
+    () => readZipEntries(ab(patched), { maxUnpackedBytes: 1024 }),
+    (e) => {
+      assert.equal(e.userFacing, true);
+      assert.equal(e.unpackedLimit, true);
+      assert.equal(e.message, '压缩包解压后的内容超过 64MB，请缩减内容后再导入。');
+      return true;
+    },
+  );
+});
+
+test('声明值很小但实际解压超限时中断解压并报错', async () => {
+  const bytes = await writeZip([{ name: 'chapters/01.txt', data: '暮'.repeat(100000) }]);
+  // 谎报这条只有 16 字节：快速筛放行，必须靠解压时的实际计数拦住
+  const patched = patchCentralUncompressedSize(bytes, 0, 16);
+  await assert.rejects(
+    () => readZipEntries(ab(patched), { maxUnpackedBytes: 1024 }),
+    (e) => {
+      assert.equal(e.userFacing, true);
+      assert.equal(e.unpackedLimit, true);
+      return true;
+    },
+  );
+});
+
+test('不传 maxUnpackedBytes 时不限制解压体积', async () => {
+  const text = '暮'.repeat(100000);
+  const bytes = await writeZip([{ name: 'chapters/01.txt', data: text }]);
+  const entries = await readZipEntries(ab(bytes));
+  assert.equal(new TextDecoder().decode(entries.get('chapters/01.txt')), text);
+});
+
+test('导入 .zip 剧本：解压体积超限给出中文提示且带 userFacing', async () => {
+  const bytes = await writeZip([{ name: '剧本.txt', data: SAMPLE_SCRIPT }]);
+  const patched = patchCentralUncompressedSize(bytes, 0, 0xffffffff);
+  const file = new File([patched], '剧本.zip', { type: 'application/zip' });
+  await assert.rejects(
+    () => readFileToScript(file),
+    (e) => {
+      assert.equal(e.message, '压缩包解压后的内容超过 64MB，请缩减内容后再导入。');
+      assert.equal(e.userFacing, true);
+      return true;
+    },
+  );
+});

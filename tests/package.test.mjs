@@ -1342,3 +1342,354 @@ test('C3：字数正好等于上限时可导出（边界不误伤）', async () 
   const res = await importPackage(ab(bytes), { existing: [] });
   assert.equal(res.works.length, 1);
 });
+
+/* ============================================================
+   最终修复波 · I1 解压上限前置（zip bomb）
+   ============================================================ */
+
+/** 找到 EOCD 里的中央目录位置与条目数 */
+function centralDirectoryOf(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  for (let i = u8.length - 22; i >= 0; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) {
+      return { off: dv.getUint32(i + 16, true), count: dv.getUint16(i + 10, true) };
+    }
+  }
+  throw new Error('找不到 EOCD');
+}
+
+/** 改写中央目录里第 index 条的「未压缩大小」（模拟伪造 / 谎报的声明值） */
+function patchCentralUncompressedSize(bytes, index, value) {
+  const u8 = new Uint8Array(bytes);
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const { off, count } = centralDirectoryOf(u8);
+  let p = off;
+  for (let i = 0; i < count; i++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('中央目录结构异常');
+    if (i === index) { dv.setUint32(p + 24, value, true); return u8; }
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const cmtLen = dv.getUint16(p + 32, true);
+    p += 46 + nameLen + extraLen + cmtLen;
+  }
+  throw new Error(`中央目录里找不到第 ${index} 条`);
+}
+
+test('I1：中央目录声明的解压体积超限时导入被拒绝（不解压）', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: SAMPLE }]);
+  // 谎报 manifest.json 解压后有 4GB
+  const patched = patchCentralUncompressedSize(bytes, 0, 0xffffffff);
+  await assert.rejects(
+    () => importPackage(ab(patched), { existing: [] }),
+    (e) => {
+      assert.equal(e.userFacing, true);
+      assert.equal(e.message, '作品包解压后的内容超过 64MB，请缩减内容后再导入。');
+      return true;
+    },
+  );
+});
+
+test('I1：声明值很小但实际解压超限时同样被拒绝（硬保证）', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  // 64MB + 1 字节的零字节条目：压缩后只有几十 KB
+  const pad = new Uint8Array(64 * 1024 * 1024 + 1);
+  const bytes = await packWithManifest(manifest, [
+    { name: 'script.txt', data: SAMPLE },
+    { name: 'assets/pad.bin', data: pad },
+  ]);
+  // 把 pad 的声明大小改成 16 字节：快速筛放行，硬保证必须在解压时拦住
+  const patched = patchCentralUncompressedSize(bytes, 2, 16);
+  await assert.rejects(
+    () => importPackage(ab(patched), { existing: [] }),
+    (e) => {
+      assert.equal(e.userFacing, true);
+      assert.equal(e.message, '作品包解压后的内容超过 64MB，请缩减内容后再导入。');
+      return true;
+    },
+  );
+});
+
+/* ============================================================
+   最终修复波 · I2 本章简介优先于包级简介
+   ============================================================ */
+
+const CH_WITH_SUMMARY = (title, summary, line) => `标题：${title}
+简介：${summary}
+角色：
+阿蓝 | 女 | 长发 | 白 | 少女（2）
+
+【场景：教室 | 黄昏 | 远景】
+放学的教室里只剩下窗外的蝉鸣。
+
+【场景：教室 | 黄昏 | 中景】
+阿蓝：${line}
+【结束】`;
+
+const CH_NO_SUMMARY = (title, line) => `标题：${title}
+角色：
+阿蓝 | 女 | 长发 | 白 | 少女（2）
+
+【场景：教室 | 黄昏 | 远景】
+放学的教室里只剩下窗外的蝉鸣。
+
+【场景：教室 | 黄昏 | 中景】
+阿蓝：${line}
+【结束】`;
+
+test('I2：整本各章自带简介时，导入后每章简介是它自己那句', async () => {
+  const ch1 = CH_WITH_SUMMARY('曲目', '第一章自己的简介。', '今天也卡带了。');
+  const ch2 = CH_WITH_SUMMARY('曲目', '第二章自己的简介。', '这卷带子还没听完。');
+  const a = parseScriptText(ch1, 'a.txt');
+  const b = parseScriptText(ch2, 'b.txt');
+  const { bytes } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '包级简介', author: '',
+    series: null, license: null, coverImage: null,
+    works: [
+      { id: 's1_01', title: '曲目', tag: '第一章', chapterNo: 1, source: ch1, script: a },
+      { id: 's1_02', title: '曲目', tag: '第二章', chapterNo: 2, source: ch2, script: b },
+    ],
+  });
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.works.length, 2);
+  assert.equal(res.works[0].summary, '第一章自己的简介。');
+  assert.equal(res.works[1].summary, '第二章自己的简介。');
+  assert.notEqual(res.works[0].summary, res.works[1].summary);
+});
+
+test('I2：本章没写简介时用包级 summary', async () => {
+  const ch = CH_NO_SUMMARY('曲目', '今天也卡带了。');
+  const sc = parseScriptText(ch, 'a.txt');
+  const { bytes } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '包级简介', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 's1_01', title: '曲目', tag: '第一章', chapterNo: 1, source: ch, script: sc }],
+  });
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.works[0].summary, '包级简介');
+});
+
+test('I2：本章与包级都没有简介时用解析器兜底那句', async () => {
+  const ch = CH_NO_SUMMARY('曲目', '今天也卡带了。');
+  const sc = parseScriptText(ch, 'a.txt');
+  const { bytes } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 's1_01', title: '曲目', tag: '第一章', chapterNo: 1, source: ch, script: sc }],
+  });
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.equal(res.works[0].summary, sc.summary);
+  assert.ok(res.works[0].summary.length > 0);
+});
+
+test('I2：解析结果带 summaryAuto 标记', () => {
+  const withLine = parseScriptText(CH_WITH_SUMMARY('甲', '一句简介。', '今天也卡带了。'), 'a.txt');
+  assert.equal(withLine.summaryAuto, false);
+  assert.equal(withLine.summary, '一句简介。');
+  const withoutLine = parseScriptText(CH_NO_SUMMARY('乙', '今天也卡带了。'), 'b.txt');
+  assert.equal(withoutLine.summaryAuto, true);
+  const json = parseScriptText(JSON.stringify({
+    title: 'JSON 剧', summary: '一份以 JSON 写成的剧本。',
+    characters: [{ name: '阿蓝', gender: 'f', hair: 'long', cloth: '白', model: '少女（2）' }],
+    nodes: [{ scene: '教室', time: '黄昏', cam: '中景' }, { say: '今天也卡带了。' }, { end: true }],
+  }), 'c.json');
+  assert.equal(json.summaryAuto, false);
+});
+
+/* ============================================================
+   最终修复波 · I3 冲突结论（spec §5.3）
+   ============================================================ */
+
+test('I3：整本曲目与本地曲目同名时 seriesAction 为 renamed，标题带「（导入）」', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'series',
+    id: 'cicada', title: '蝉鸣止于逢魔时',
+    works: [{ id: 'cicada_01', title: '蝉鸣止于逢魔时', file: 'chapters/01.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [{ name: 'chapters/01.txt', data: SAMPLE }]);
+  const res = await importPackage(ab(bytes), {
+    existing: [{ id: 'builtin_cicada_01', series: 'cicada', builtin: true }],
+  });
+  assert.equal(res.conflicts.seriesAction, 'renamed');
+  assert.equal(res.conflicts.seriesRenamed, true);
+  assert.equal(res.conflicts.seriesTitle, '蝉鸣止于逢魔时（导入）');
+  assert.equal(res.seriesId, 'user:cicada');
+  assert.equal(res.works[0].seriesTitle, '蝉鸣止于逢魔时（导入）');
+  assert.equal(res.title, '蝉鸣止于逢魔时（导入）');
+});
+
+test('I3：同一曲目再次导入时 seriesAction 为 update，章节也全是 update', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'series',
+    id: 's1', title: '曲目',
+    works: [
+      { id: 's1_01', title: '曲目', file: 'chapters/01.txt' },
+      { id: 's1_02', title: '曲目', file: 'chapters/02.txt' },
+    ],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [
+    { name: 'chapters/01.txt', data: SAMPLE },
+    { name: 'chapters/02.txt', data: SAMPLE },
+  ]);
+  const res = await importPackage(ab(bytes), {
+    existing: [{ id: 's1_01', series: 's1' }, { id: 's1_02', series: 's1' }],
+  });
+  assert.equal(res.conflicts.seriesAction, 'update');
+  assert.equal(res.conflicts.seriesRenamed, false);
+  assert.deepEqual(res.conflicts.workActions, ['update', 'update']);
+  assert.equal(res.conflicts.updated, 2);
+  assert.equal(res.conflicts.renamed, 0);
+  assert.equal(res.conflicts.newCount, 0);
+});
+
+test('I3：单章包与内置作品冲突时 workActions 为 renamed', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'builtin_cicada_01', title: '测试剧',
+    works: [{ id: 'builtin_cicada_01', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: SAMPLE }]);
+  const res = await importPackage(ab(bytes), {
+    existing: [{ id: 'builtin_cicada_01', builtin: true }],
+  });
+  assert.equal(res.conflicts.seriesAction, 'new');
+  assert.deepEqual(res.conflicts.workActions, ['renamed']);
+  assert.equal(res.conflicts.renamed, 1);
+  assert.equal(res.conflicts.updated, 0);
+  assert.equal(res.conflicts.newCount, 0);
+});
+
+test('I3：单章包与本地已导入作品同 id 时 workActions 为 update', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: SAMPLE }]);
+  const res = await importPackage(ab(bytes), { existing: [{ id: 'w1' }] });
+  assert.deepEqual(res.conflicts.workActions, ['update']);
+  assert.equal(res.conflicts.updated, 1);
+});
+
+test('I3：全新作品包 workActions 全是 new', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: SAMPLE }]);
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.deepEqual(res.conflicts.workActions, ['new']);
+  assert.equal(res.conflicts.newCount, 1);
+  assert.equal(res.conflicts.renamed, 0);
+  assert.equal(res.conflicts.updated, 0);
+});
+
+test('I3：单章包归属别的曲目时 workActions 为 renamed', async () => {
+  const manifest = {
+    format: 'mumu-package', formatVersion: 1, schemaVersion: 2, kind: 'work',
+    id: 'w1', title: '测试剧',
+    works: [{ id: 'w1', title: '测试剧', file: 'script.txt' }],
+    assets: [],
+  };
+  const bytes = await packWithManifest(manifest, [{ name: 'script.txt', data: SAMPLE }]);
+  const res = await importPackage(ab(bytes), { existing: [{ id: 'w1', series: 'other' }] });
+  assert.deepEqual(res.conflicts.workActions, ['renamed']);
+  assert.equal(res.works[0].id, 'user:w1');
+});
+
+/* ============================================================
+   最终修复波 · I4 导出端章序连续化
+   ============================================================ */
+
+test('I4：整本导出时章序重排为连续的 1..N', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { bytes, chapterNos } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [
+      { id: 'c5', title: '曲目', tag: '第五章', chapterNo: 5, source: '第五章内容', script: sc },
+      { id: 'c6', title: '曲目', tag: '第六章', chapterNo: 6, source: '第六章内容', script: sc },
+      { id: 'c7', title: '曲目', tag: '第七章', chapterNo: 7, source: '第七章内容', script: sc },
+    ],
+  });
+  const entries = await readZipEntries(ab(bytes));
+  const dec = new TextDecoder();
+  const manifest = JSON.parse(dec.decode(entries.get('manifest.json')));
+  assert.deepEqual(manifest.works.map((w) => w.chapterNo), [1, 2, 3]);
+  assert.deepEqual(chapterNos, [1, 2, 3]);
+  assert.deepEqual(manifest.works.map((w) => w.file), ['chapters/01.txt', 'chapters/02.txt', 'chapters/03.txt']);
+  assert.equal(dec.decode(entries.get('chapters/01.txt')), '第五章内容');
+  assert.equal(dec.decode(entries.get('chapters/02.txt')), '第六章内容');
+  assert.equal(dec.decode(entries.get('chapters/03.txt')), '第七章内容');
+});
+
+test('I4：章序重复时也重排为连续的 1..N', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { bytes, chapterNos } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [
+      { id: 'a', title: '曲目', tag: '甲', chapterNo: 2, source: '甲内容', script: sc },
+      { id: 'b', title: '曲目', tag: '乙', chapterNo: 2, source: '乙内容', script: sc },
+    ],
+  });
+  const entries = await readZipEntries(ab(bytes));
+  const manifest = JSON.parse(new TextDecoder().decode(entries.get('manifest.json')));
+  assert.deepEqual(manifest.works.map((w) => w.chapterNo), [1, 2]);
+  assert.deepEqual(chapterNos, [1, 2]);
+  assert.equal(new TextDecoder().decode(entries.get('chapters/01.txt')), '甲内容');
+  assert.equal(new TextDecoder().decode(entries.get('chapters/02.txt')), '乙内容');
+});
+
+test('I4：单章导出保留该作品自己的章序', async () => {
+  const sc = parseScriptText(SAMPLE, 'x.txt');
+  const { bytes, chapterNos } = await exportPackage({
+    kind: 'work', id: 'w1', title: '测试剧', summary: '', author: '',
+    series: null, license: null, coverImage: null,
+    works: [{ id: 'w1', title: '测试剧', tag: '第三章', chapterNo: 3, source: SAMPLE, script: sc }],
+  });
+  const entries = await readZipEntries(ab(bytes));
+  const manifest = JSON.parse(new TextDecoder().decode(entries.get('manifest.json')));
+  assert.equal(manifest.works[0].chapterNo, 3);
+  assert.deepEqual(chapterNos, [3]);
+  assert.equal(manifest.works[0].file, 'script.txt');
+});
+
+test('I4：导出的包能被自己导回来，章序连续且简介是本章自己的', async () => {
+  const ch1 = CH_WITH_SUMMARY('曲目', '第一章自己的简介。', '今天也卡带了。');
+  const ch2 = CH_WITH_SUMMARY('曲目', '第二章自己的简介。', '这卷带子还没听完。');
+  const a = parseScriptText(ch1, 'a.txt');
+  const b = parseScriptText(ch2, 'b.txt');
+  const { bytes } = await exportPackage({
+    kind: 'series', id: 's1', title: '曲目', summary: '包级简介', author: '',
+    series: null, license: null, coverImage: null,
+    works: [
+      { id: 's1_01', title: '曲目', tag: '第一章', chapterNo: 5, source: ch1, script: a },
+      { id: 's1_02', title: '曲目', tag: '第二章', chapterNo: 6, source: ch2, script: b },
+    ],
+  });
+  const res = await importPackage(ab(bytes), { existing: [] });
+  assert.deepEqual(res.works.map((w) => w.chapterNo), [1, 2]);
+  assert.equal(res.works[0].summary, '第一章自己的简介。');
+  assert.equal(res.works[1].summary, '第二章自己的简介。');
+  assert.deepEqual(
+    res.works.map((w) => w.nodes.map((n) => n.t)),
+    [a.nodes.map((n) => n.t), b.nodes.map((n) => n.t)],
+  );
+});
