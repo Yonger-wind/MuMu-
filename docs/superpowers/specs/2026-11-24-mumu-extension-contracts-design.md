@@ -116,6 +116,7 @@ export async function loadCardManifest(url = './assets/cards/manifest.json', opt
 
 - **只认具名导出 `inspect`**，不认 default 包装，避免两种写法并存。
 - `loadModule` 可注入：测试用假模块，不落盘临时 js 文件。
+- 无 `document` 环境（Node / 测试）回落到站点根 `new URL('../../', import.meta.url)`。
 - 加载顺序 = 清单顺序；中途失败即抛错，已注册的条目保留（文档写明，调用方可重试前自行清理）。
 
 ---

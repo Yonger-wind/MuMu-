@@ -8,9 +8,14 @@ import { validateCardKey, cardInspections } from './registry.js';
 
 const fail = (msg) => { throw new Error(`卡牌清单无效：${msg}`); };
 
-/** 清单 / 模块路径按站点根解析（浏览器里相对 document.baseURI）。 */
+/**
+ * 清单 / 模块路径的解析基址。
+ * 浏览器里用 document.baseURI；无 document 环境（Node / 测试 / worker）
+ * 回落到站点根：本文件位于 scripts/cards/，两级回根。
+ */
 function siteBase() {
-  return (globalThis.document && globalThis.document.baseURI) || import.meta.url;
+  if (globalThis.document && globalThis.document.baseURI) return globalThis.document.baseURI;
+  return new URL('../../', import.meta.url).href;
 }
 
 /** 校验并归一清单；任何问题抛中文 Error（带第 N 张卡定位）。 */
@@ -40,8 +45,10 @@ export function parseCardManifest(input) {
       fail(`${at}（${key}）的 module 必须是以 .js 结尾的非空路径。`);
     }
     const entry = { key, module };
-    if (typeof card.title === 'string') entry.title = card.title;
-    if (typeof card.image === 'string') entry.image = card.image;
+    const title = typeof card.title === 'string' ? card.title.trim() : '';
+    if (title) entry.title = title;
+    const image = typeof card.image === 'string' ? card.image.trim() : '';
+    if (image) entry.image = image;
     return entry;
   });
 }
@@ -50,15 +57,28 @@ export function parseCardManifest(input) {
 export async function applyCardManifest(manifest, opts = {}) {
   const o = opts && typeof opts === 'object' ? opts : {};
   const entries = parseCardManifest(manifest);
-  const base = siteBase();
-  const loadModule = o.loadModule || ((path) => import(new URL(path, base).href));
-  const registry = o.registry || cardInspections;
+  // 键存在即视为注入：{ loadModule: 0 } / { registry: null } 必须报错，不得静默回落。
+  const hasOpt = (name) => Object.prototype.hasOwnProperty.call(o, name);
+  // 默认实现保持惰性：只有真的没注入时才需要解析基址。
+  const loadModule = hasOpt('loadModule')
+    ? o.loadModule
+    : (path) => import(new URL(path, siteBase()).href);
+  const registry = hasOpt('registry') ? o.registry : cardInspections;
   if (typeof loadModule !== 'function') {
     throw new Error('applyCardManifest 需要 loadModule 函数。');
   }
+  if (!registry || typeof registry.register !== 'function') {
+    throw new Error('applyCardManifest 需要一个带 register 函数的注册表。');
+  }
   const loaded = [];
   for (const entry of entries) {
-    const mod = await loadModule(entry.module);
+    let mod;
+    try {
+      mod = await loadModule(entry.module);
+    } catch (e) {
+      const detail = e && e.message ? e.message : String(e);
+      throw new Error(`卡牌「${entry.key}」的模块 ${entry.module} 加载失败：${detail}`);
+    }
     const inspect = mod && mod.inspect;
     if (typeof inspect !== 'function') {
       throw new Error(`卡牌「${entry.key}」的模块 ${entry.module} 没有导出 inspect 函数。`);

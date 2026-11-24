@@ -11,7 +11,7 @@ import {
 } from '../scripts/cards/registry.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { parseCardManifest, applyCardManifest } from '../scripts/cards/loader.js';
+import { parseCardManifest, applyCardManifest, loadCardManifest } from '../scripts/cards/loader.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
@@ -221,4 +221,64 @@ test('注册表：从不调用检视函数', () => {
   assert.doesNotThrow(() => reg.get('boom'));
   assert.doesNotThrow(() => reg.has('boom'));
   assert.doesNotThrow(() => reg.list());
+});
+
+/* ---------------- 契约加固（Task 2 修复轮 1） ---------------- */
+
+test('加载器：注入 loadModule 假值时中文报错，不回落真实 import', async () => {
+  await assert.rejects(
+    applyCardManifest(
+      { version: 1, cards: [{ key: 'k', module: 'k.js' }] },
+      { loadModule: 0, registry: createInspectionRegistry() }
+    ),
+    /需要 loadModule 函数/
+  );
+});
+
+test('加载器：注入非法 registry 时中文报错且不写入默认注册表', async () => {
+  const key = 'probe-registry-null';
+  for (const registry of [null, {}]) {
+    await assert.rejects(
+      applyCardManifest(
+        { version: 1, cards: [{ key, module: 'probe.js' }] },
+        { loadModule: async () => ({ inspect: () => {} }), registry }
+      ),
+      /需要一个带 register 函数的注册表/,
+      String(registry)
+    );
+    assert.equal(cardInspections.has(key), false, String(registry));
+  }
+});
+
+test('加载器：模块加载失败时中文报错并保留原始信息', async () => {
+  await assert.rejects(
+    applyCardManifest(
+      { version: 1, cards: [{ key: 'k', module: 'k.js' }] },
+      {
+        loadModule: async () => { throw new Error('boom'); },
+        registry: createInspectionRegistry(),
+      }
+    ),
+    /卡牌「k」的模块 k\.js 加载失败：boom/
+  );
+});
+
+test('清单加载：网络异常 / HTTP 非 2xx / 坏 JSON 均中文报错', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => { throw new TypeError('network down'); };
+    await assert.rejects(loadCardManifest('./missing.json'), /读取卡牌清单失败/);
+
+    globalThis.fetch = async () => ({ ok: false, status: 404 });
+    await assert.rejects(loadCardManifest('./missing.json'), /读取卡牌清单失败.*404/);
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => { throw new SyntaxError('bad json'); },
+    });
+    await assert.rejects(loadCardManifest('./broken.json'), /无法解析为 JSON/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
