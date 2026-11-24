@@ -36,8 +36,10 @@ export const PORTRAITS = {
 };
 
 const images = new Map();
-// 加载失败的键：按需兜底会每帧重试，失败后必须先记住，等显式 preloadPortraits() 才重来
-const failedKeys = new Set();
+// 加载失败的键：按需兜底会每帧重试，记下尝试次数与时间，做有限次自动重试
+const failedKeys = new Map();
+const MAX_AUTO_RETRY = 2;     // 失败后再自动重试 2 次（间隔 ≥5s），之后交给显式 preloadPortraits()
+const RETRY_DELAY_MS = 5000;
 
 function makeFaded(key, img) {
   const c = document.createElement('canvas');
@@ -71,8 +73,10 @@ export function planPortraitBatches(keys, size = PORTRAIT_IDLE_BATCH) {
 }
 
 function loadPortrait(key) {
-  // 显式全量预加载与空闲分批可能并存；失败键不再自动重试，避免按需兜底每帧发请求
-  if (images.has(key) || failedKeys.has(key)) return;
+  // 显式全量预加载与空闲分批可能并存；失败键按次数与间隔做有限自动重试，避免每帧发请求
+  if (images.has(key)) return;
+  const prev = failedKeys.get(key);
+  if (prev && (prev.count >= MAX_AUTO_RETRY || Date.now() - prev.at < RETRY_DELAY_MS)) return;
   const img = new Image();
   img.decoding = 'async';
   const entry = { img, faded: null, ready: false };
@@ -80,9 +84,10 @@ function loadPortrait(key) {
   img.onload = () => makeFaded(key, img);
   img.onerror = () => {
     console.error('立绘加载失败', PORTRAITS[key].src);
-    // 失败条目移出缓存并记入失败表：显式 preloadPortraits() 才能重新发起请求
+    // 失败条目移出缓存并记入失败表：短暂故障 5 秒后自动再试，连续失败则等显式 preloadPortraits()
     images.delete(key);
-    failedKeys.add(key);
+    const f = failedKeys.get(key);
+    failedKeys.set(key, { count: (f ? f.count : 0) + 1, at: Date.now() });
   };
   img.src = PORTRAITS[key].src;
 }
