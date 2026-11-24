@@ -1,8 +1,8 @@
 # 暮幕 MuMU · 本地创作平台推进计划表
 
-- 版本：v1.5
+- 版本：v1.6
 - 日期：2026-11-24
-- 状态：评审通过，执行中（P0-1、P0-2、P0-3、P0-4 已完成；本表为后续唯一推进依据）
+- 状态：评审通过，执行中（P0-1、P0-2、P0-3、P0-4、P0-5 已完成；本表为后续唯一推进依据）
 - 适用范围：暮幕主仓库 `C:\Users\Wind\Desktop\Qoder`
 - 部署口径：**最终网站由 Qoder 部署到 Qoder Sites**（唯一部署目标，见 §7）
 
@@ -53,7 +53,7 @@
 | P0-2 | 作品包 `.mumu` 与 manifest | 包规范（manifest + script + assets + license + README）；导入/导出；版本号与 schema 版本 | P0-1 | ☑ 导出的包可在另一台浏览器导入并原样播放；schema 版本可迁移 | 已完成 |
 | P0-3 | 内容校验器 | `tools/lint.js`：标签存在性、跳转目标、结局闭合、不可达节点、未知场景/模型、角色出场一致性 | P0-1 | ☑ 对 15 章内置剧本零报错；对故意写坏的小样本能报出行号与原因 | 已完成 |
 | P0-4 | 扩展点契约 | 卡牌“特殊检视”注册表（`scripts/cards/`）；UI 挂载点与设计令牌（`styles/tokens.css`）；用户素材目录约定 | — | ☑ 你的代码接入时只需新增文件与注册，无需改动核心；接口文档写进创作手册 | 已完成 |
-| P0-5 | 性能基线与分片 | scene.js 按场景拆分 / 懒加载（可延后）；首屏、FPS、资源体积基线记录 | — | 首屏可交互时间与体积有实测数字；拆分分批做，每批截图对比，不破坏既有画面 | 未开始 |
+| P0-5 | 性能基线与分片 | `tools/perf-baseline.cjs` + `docs/perf-baseline.md` 首屏/FPS/体积基线与前后对比；立绘与场景大图改为交互后按需加载（scene.js 按场景拆分延后） | — | ☑ 首屏可交互 383 → 247 ms、首屏体积 5806 → 1280 KB 有实测数字；分批改动逐批截图对比，画面未变 | 已完成 |
 | P0-6 | 文档同步 | README、AGENTS.md、创作手册 v2（DSL v2 / JSON v2 / 作品包规范 / 创作流程） | P0-2 | 新 Agent 拉库后能按文档继续推进，不依赖本次对话 | 未开始 |
 
 ### P1 · 创作闭环（M2）
@@ -210,5 +210,6 @@ P0 完成后可并行推进，用于尽早拿到可见反馈：
 | v1.3 | 2026-11-23 | 部署口径确定：**最终网站由 Qoder 部署到 Qoder Sites**（唯一部署目标）；P6-2 交付物收窄为 Qoder Sites 静态部署；§7 增列部署约束（零构建静态形态、部署由 Qoder 执行、作品与存档仍留本地、部署前须过回归与性能基线）；页首增「部署口径」行 |
 | v1.4 | 2026-11-24 | P0-3 完成：`tools/lint.js` 合入 main（文本级扫描器，17 条规则码，`--builtin` 零 issue，全仓 254 用例）；回填 P0-3 状态与完成定义 |
 | v1.5 | 2026-11-24 | P0-4 完成：扩展点契约落地 —— 卡牌检视注册表（`scripts/cards/registry.js`）+ 清单加载器（`loader.js` + 空清单）+ 四个 UI 命名槽位（`scripts/ui/slots.js`，`data-slot` = home/stage/modal/overlay）+ 设计令牌（`styles/tokens.css`）+ 悬浮层（`styles/extensions.css` 与 `#ui-layer`）+ 素材目录与 `.mumu` role 约定 + 接口文档 `docs/extension-contracts.md`；分支 `feature/p0-4-extension-contracts`（`95118ff` 起，10+ commits，见分支），运行时页面视觉零变化、零依赖零构建不变；全仓 302 用例通过，`node tools/lint.js --builtin` 15 章通过；§9 夜幕模型位置同步为 `assets/night/`；回填 P0-4 状态与完成定义 |
+| v1.6 | 2026-11-24 | P0-5 完成：首屏性能基线落地 —— `tools/perf-baseline.cjs`（headless Edge + CDP，首屏可交互 / 请求数 / 体积 / 首页与舞台 FPS，3 次中位数）+ `docs/perf-baseline.md` 前后对比；立绘改为首页空闲后分批预加载、失败有限重试，四张场景大图改为首次交互后按需加载；首屏可交互 383 → 247 ms、首屏体积 5806 → 1280 KB、首屏图片请求 32 → 0，FPS 持平；scene.js 按场景拆分延后；全仓 311 用例通过，`node tools/lint.js --builtin` 15 章通过；回填 P0-5 状态与完成定义 |
 
 计划表变更需经确认后更新本文件并递增版本号；后续所有实现以最新版本为准。

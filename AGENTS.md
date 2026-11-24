@@ -17,6 +17,8 @@ node serve.js        # → http://localhost:5173
 ```
 
 - 单元测试：仓库根目录执行 `node --test`（Node 内置测试运行器，零依赖）；用例在 `tests/*.test.mjs`。
+- 性能基线：`PORT=5199 node serve.js` 后 `node tools/perf-baseline.cjs --runs=3 --stage`；
+  数字口径见 `docs/perf-baseline.md`（同机同版本 Edge 前后对比才有意义）。
 - 必须走 HTTP，且 `serve.js` 不发缓存头：改完代码一定强制刷新（ignoreCache / Ctrl+F5）。
 - 首次进入需点击一次遮罩（解锁音频），否则弹窗会被遮罩盖住。
 - 每次改动后先确认入口：首页「开始体验」应打开「选择剧本」，库中有四张曲目卡

@@ -38,6 +38,18 @@ node tools/lint.js 剧本.txt --strict  # 把警告也算失败
 每条问题都带**行号 + 规则码 + 原因 + 修法提示**；退出码 0 = 通过，1 = 有错误（`--strict` 时 warning 也算），2 = 用法错误。
 规则码表见 [docs/mumu-lint-rules.md](docs/mumu-lint-rules.md)。
 
+## 性能基线
+
+首屏与舞台的性能可以用同一套零依赖采集器复跑（先 `PORT=5199 node serve.js`）：
+
+```bash
+node tools/perf-baseline.cjs --runs=3 --stage --out=.tmp-perf/after.json
+```
+
+口径（首屏可交互 = `load` + 字体就绪 + 连续两帧 rAF、体积按 `transferSize` 汇总、FPS 采样 3 秒）、
+改动前后的对比数字与已知噪音见 [docs/perf-baseline.md](docs/perf-baseline.md)；
+只有同一台机器、同一 Edge 版本的两次结果才有可比性。
+
 ## 扩展接口
 
 第三方卡牌检视、UI 模块与素材的接入契约见 [docs/extension-contracts.md](docs/extension-contracts.md)：
@@ -101,6 +113,8 @@ tools/png-alpha.js  离线素材工具：白底/透明底人物 → 去底裁边
                     六张国风新立绘会压平内部白色线稿，只留深紫黑剪影
 tools/cdp-shoot.cjs 零依赖截图回归工具（headless Edge + CDP）：按 steps JSON 导航、
                     执行脚本、截图，供改场景后做视觉比对；不参与游戏运行
+tools/perf-baseline.cjs 首屏性能基线采集（headless Edge + CDP，零依赖）：首屏可交互 /
+                    请求数 / 体积 / 首页与舞台 FPS，冷缓存 3 次取中位数；不参与游戏运行
 ```
 
 ## 剧本格式速查
