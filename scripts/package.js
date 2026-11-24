@@ -1,8 +1,12 @@
 /* ============================================================
    暮幕 · 作品包（.mumu）
    包 = ZIP 容器：manifest.json + 剧本文本 + 可选资源
-   本模块不依赖 DOM（封面缩放除外，失败时降级），可在 Node 单测中运行
+   本模块不依赖 DOM（downloadPackage 除外），可在 Node 单测中运行
    ============================================================ */
+
+import { countChars } from './parser.js';
+import { writeZip } from './zip.js';
+import { serializeScript } from './serialize.js';
 
 export const PACKAGE_FORMAT = 'mumu-package';
 export const FORMAT_VERSION = 1;
@@ -182,4 +186,164 @@ export function validateManifest(input) {
   if (!m.author) m.author = '';
   if (!m.kind) m.kind = m.works.length > 1 ? 'series' : 'work';
   return m;
+}
+
+/* ---------- data URL 与字节 ---------- */
+
+/** 字节 → data URL（浏览器与 Node 均有 btoa） */
+export function bytesToDataUrl(bytes, mime) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || 0);
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < u8.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
+  }
+  return `data:${mime || 'application/octet-stream'};base64,${btoa(bin)}`;
+}
+
+/** data URL → { bytes, mime }；不是合法 data URL 时返回 null */
+export function dataUrlToBytes(dataUrl) {
+  const m = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(String(dataUrl || ''));
+  if (!m) return null;
+  const mime = m[1] || 'application/octet-stream';
+  try {
+    if (m[2]) {
+      const bin = atob(m[3]);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return { bytes, mime };
+    }
+    return { bytes: new TextEncoder().encode(decodeURIComponent(m[3])), mime };
+  } catch (e) {
+    return null;
+  }
+}
+
+/* ---------- 导出 ---------- */
+
+/** 封面 MIME → 文件扩展名（spec：扩展名与 assets[].type 的实际 MIME 一致） */
+const COVER_EXT = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+};
+
+/** 文件名里的非法字符替换为 _，并限制长度 */
+function safeFileName(name) {
+  return String(name || '未命名作品').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) || '未命名作品';
+}
+
+/** 取作品文本：优先原文，缺失时用序列化兜底 */
+function workText(work) {
+  if (typeof work.source === 'string' && work.source.trim()) return work.source;
+  if (work.script) return serializeScript(work.script);
+  throw pkgFail('《' + (work.title || work.id || '未命名作品') + '》没有可导出的文本内容。');
+}
+
+/**
+ * 导出作品包。
+ * kind: 'work'（单章）| 'series'（整本）
+ * opts.works: [{ id, title, tag, chapterNo, source, script }]
+ * 返回 { bytes, filename, warnings }（warnings 是给用户看的提示文案）
+ */
+export async function exportPackage(opts) {
+  const o = opts && typeof opts === 'object' ? opts : {};
+  const kind = o.kind === 'series' ? 'series' : 'work';
+  const works = Array.isArray(o.works) ? o.works : [];
+  if (!works.length) throw pkgFail('没有可导出的作品。');
+  // 单章包只有一个 script.txt，多作品会互相覆盖
+  if (kind === 'work' && works.length > 1) {
+    throw pkgFail('单章导出只支持一个作品，请改为导出整本。');
+  }
+
+  const warnings = [];
+  const entries = works.map((w, i) => ({
+    id: w.id,
+    title: w.title || '',
+    tag: w.tag || '',
+    chapterNo: w.chapterNo || i + 1,
+    file: kind === 'series' ? `chapters/${String(i + 1).padStart(2, '0')}.txt` : 'script.txt',
+    chars: countChars(workText(w)),
+  }));
+
+  const assets = [];
+  const files = [];
+  if (o.coverImage) {
+    const cover = dataUrlToBytes(o.coverImage);
+    const ext = cover ? COVER_EXT[String(cover.mime).toLowerCase()] : '';
+    if (!ext) {
+      warnings.push('封面图片格式无法识别，已跳过封面。');
+    } else if (cover.bytes.length > MAX_ASSET_BYTES) {
+      warnings.push('封面图片超过 4MB，已跳过封面。');
+    } else {
+      assets.push({
+        id: 'cover', role: 'cover', file: `assets/cover.${ext}`,
+        type: cover.mime, bytes: cover.bytes.length,
+      });
+      files.push({ name: `assets/cover.${ext}`, data: cover.bytes });
+    }
+  }
+
+  const manifest = makeManifest({
+    kind,
+    id: o.id || entries[0].id,
+    title: o.title || entries[0].title,
+    summary: o.summary || '',
+    author: o.author || '',
+    series: o.series || null,
+    license: o.license || null,
+    works: entries,
+    assets,
+  });
+
+  files.push({ name: 'manifest.json', data: JSON.stringify(manifest, null, 2) });
+  works.forEach((w, i) => {
+    files.push({ name: entries[i].file, data: workText(w) });
+  });
+
+  const chapterList = works.map((w, i) => `${i + 1}. ${entries[i].tag || entries[i].title}`).join('\n');
+  files.push({
+    name: 'README.md',
+    data: [
+      `# ${manifest.title}`,
+      '',
+      manifest.summary || '',
+      '',
+      '## 章节',
+      chapterList,
+      '',
+      '## 说明',
+      '这是一个暮幕（MuMU）作品包，导入暮幕后可直接播放。',
+      '剧本文本格式见暮幕「导入」弹窗中的格式说明。',
+      '',
+      `许可证：${manifest.license.type}${manifest.license.holder ? '（' + manifest.license.holder + '）' : ''}`,
+      `生成工具：${manifest.generator} · 包格式 v${manifest.formatVersion} · 内容版本 v${manifest.schemaVersion}`,
+    ].join('\n'),
+  });
+  if (manifest.license && manifest.license.type && manifest.license.type !== '未指定') {
+    files.push({
+      name: 'LICENSE.txt',
+      data: [
+        manifest.license.type,
+        manifest.license.holder ? `权利人：${manifest.license.holder}` : '',
+        manifest.license.allowRemix ? '允许改编（改编需保留来源署名）' : '不允许改编',
+      ].filter(Boolean).join('\n'),
+    });
+  }
+
+  const bytes = await writeZip(files);
+  return { bytes, filename: `${safeFileName(manifest.title)}.mumu`, warnings };
+}
+
+/** 浏览器端触发下载（DOM 只出现在这个函数体内） */
+export function downloadPackage(bytes, filename) {
+  const blob = new Blob([bytes], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

@@ -1908,6 +1908,7 @@ export function loadBuiltinScripts() {
       sc.series = s.series;
       sc.seriesTitle = s.seriesTitle;
       sc.chapterNo = s.chapterNo;
+      sc.source = s.text;   // 保留原文，供作品包导出使用
       list.push(sc);
     } catch (e) {
       console.error('内置剧本解析失败', s.id, e);

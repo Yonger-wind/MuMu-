@@ -471,7 +471,15 @@ export async function readFileToScript(file) {
 
   const script = parseScriptText(text, name);
   script.chars = n;
+  // 保留原文，供作品包导出使用。
+  // JSON 源不是暮幕 DSL，写进包里的 script.txt 会导致导入必然失败，故不保留原文。
+  script.source = isJSONSource(text) ? null : text;
   return script;
+}
+
+/** 源文本是否以 `{` 开头（与 parseScriptText 的 JSON 分支判定保持一致） */
+export function isJSONSource(text) {
+  return String(text || '').trim().startsWith('{');
 }
 
 /* ---------------- ZIP 读取（实现见 scripts/zip.js） ---------------- */
