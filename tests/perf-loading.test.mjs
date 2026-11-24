@@ -46,3 +46,12 @@ test('portraits.js：加载失败会移除缓存条目，供显式预加载重�
   assert.ok(body, '未找到 onerror 处理');
   assert.match(body[1], /images\.delete\(key\)/);
 });
+
+test('portraits.js：失败键不自动重试，显式 preloadPortraits 清空失败表', () => {
+  const src = read('scripts/portraits.js');
+  assert.match(src, /failedKeys\.add\(key\)/, 'onerror 应记入失败表');
+  assert.match(src, /failedKeys\.has\(key\)/, 'loadPortrait 应跳过失败键，避免每帧重试');
+  const preload = src.match(/export function preloadPortraits\(\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(preload, '未找到 preloadPortraits');
+  assert.match(preload[1], /failedKeys\.clear\(\)/);
+});
