@@ -1,0 +1,2047 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>星月夜 · 会呼吸的画（2D 固定镜头）</title>
+<meta name="description" content="纯 2D 分层插画 + 动态油画笔触的《星月夜》实时艺术场景，固定镜头，含五段画面苏醒过程。零依赖单文件。" />
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #04081c;
+    color: #cfd9ea;
+    font-family: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", Georgia, serif;
+    overflow: hidden;
+  }
+  /* 舞台：固定镜头，任何 transform / scale 都不允许出现在这里 */
+  #stage { position: fixed; inset: 0; }
+  #paint { display: block; width: 100%; height: 100%; }
+
+  /* ── 极简 UI：不参与画面，不做 HUD ───────────────── */
+  .sig {
+    position: fixed; left: 22px; bottom: 20px; z-index: 5;
+    font-size: 12px; letter-spacing: .34em; line-height: 1.9;
+    color: rgba(206, 219, 236, .40);
+    user-select: none; pointer-events: none;
+    transition: opacity .8s ease;
+  }
+  .sig b { display: block; font-size: 15px; font-weight: 400; letter-spacing: .5em; color: rgba(224, 232, 245, .62); }
+
+  .acts { position: fixed; right: 20px; bottom: 20px; z-index: 6; display: flex; gap: 10px; }
+  .acts button {
+    appearance: none; border: 1px solid rgba(178, 198, 228, .22);
+    background: rgba(9, 16, 40, .42); color: rgba(214, 226, 242, .74);
+    font: inherit; font-size: 12px; letter-spacing: .2em;
+    padding: 7px 14px; border-radius: 2px; cursor: pointer;
+    transition: border-color .25s, color .25s, background .25s;
+  }
+  .acts button:hover { border-color: rgba(226, 208, 138, .55); color: #f0e6c8; background: rgba(16, 26, 58, .6); }
+
+  /* 调参面板：默认收起，按 C 或点「调参」展开 */
+  #panel {
+    position: fixed; right: 20px; top: 20px; z-index: 7; width: 232px;
+    padding: 14px 16px 12px; border-radius: 3px;
+    border: 1px solid rgba(178, 198, 228, .16);
+    background: rgba(6, 12, 32, .68); backdrop-filter: blur(6px);
+    font-size: 12px; letter-spacing: .06em;
+    opacity: 0; transform: translateY(-6px); pointer-events: none;
+    transition: opacity .3s ease, transform .3s ease;
+  }
+  #panel.on { opacity: 1; transform: none; pointer-events: auto; }
+  #panel h4 { margin: 0 0 10px; font-size: 12px; font-weight: 400; letter-spacing: .28em; color: rgba(226, 214, 176, .78); }
+  #panel label { display: block; margin: 0 0 9px; }
+  #panel .row { display: flex; justify-content: space-between; color: rgba(200, 213, 232, .68); margin-bottom: 3px; }
+  #panel .row i { font-style: normal; color: rgba(226, 214, 176, .85); font-variant-numeric: tabular-nums; }
+  #panel input[type=range] { width: 100%; height: 3px; appearance: none; background: rgba(150, 175, 210, .28); border-radius: 2px; }
+  #panel input[type=range]::-webkit-slider-thumb {
+    appearance: none; width: 11px; height: 11px; border-radius: 50%;
+    background: #e6d18b; cursor: pointer;
+  }
+  #panel .tip { margin-top: 8px; color: rgba(178, 194, 216, .44); line-height: 1.7; }
+
+  #fps { position: fixed; left: 22px; top: 20px; z-index: 6; font-size: 11px; letter-spacing: .18em;
+         color: rgba(190, 206, 228, .34); font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .3s; }
+  #fps.on { opacity: 1; }
+
+  @media (max-width: 640px) {
+    .sig { left: 14px; bottom: 58px; font-size: 10px; }
+    .sig b { font-size: 13px; }
+    .acts { right: 14px; bottom: 16px; }
+    #panel { right: 12px; top: 12px; width: 208px; }
+  }
+
+  /* ── 正式展示只保留画面 ────────────────────────────────
+     签名、按钮、调参面板、帧率读数全部属于开发层；
+     只有 URL 带 ?dev=1（或按 C / F）时才出现，不影响艺术画面。 */
+  body:not(.dev) .sig,
+  body:not(.dev) .acts,
+  body:not(.dev) #panel,
+  body:not(.dev) #fps { display: none !important; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="paint"></canvas></div>
+
+<div class="sig"><b>星月夜</b>THE WORLD AWAKENS · 2D FIXED CAMERA</div>
+<div id="fps"></div>
+<div class="acts">
+  <button id="btn-tune" type="button">调参</button>
+  <button id="btn-replay" type="button">重播苏醒</button>
+</div>
+
+<div id="panel">
+  <h4>动画调参</h4>
+  <label>
+    <div class="row"><span>星云流速</span><i id="v-flow">1.00×</i></div>
+    <input id="k-flow" type="range" min="0" max="2.5" step="0.05" value="1" />
+  </label>
+  <label>
+    <div class="row"><span>笔触密度</span><i id="v-dens">1.00×</i></div>
+    <input id="k-dens" type="range" min="0.35" max="2.2" step="0.05" value="1" />
+  </label>
+  <label>
+    <div class="row"><span>光粒子数量</span><i id="v-mote">90</i></div>
+    <input id="k-mote" type="range" min="0" max="260" step="5" value="90" />
+  </label>
+  <label>
+    <div class="row"><span>苏醒节奏</span><i id="v-time">1.00×</i></div>
+    <input id="k-time" type="range" min="0.5" max="2" step="0.05" value="1" />
+  </label>
+  <div class="tip">密度改动会重建笔触流线；流速与粒子即时生效。快捷键 C 面板 · F 帧率 · R 重播。</div>
+</div>
+
+<script>
+'use strict';
+/* ==========================================================================
+   星月夜 · 会呼吸的画
+   纯 2D 固定镜头动态艺术场景（零依赖 / 单文件 / Canvas 2D + rAF）
+
+   分层（严格按 Layer1→Layer6 顺序合成，全程无镜头位移）：
+     L1 夜空背景      —— 烘焙：渐变 + 手绘纹理
+     L2 动态星云      —— 沿「旋涡闭合流线 / S 形带状流线」 advect 的油画笔触
+     L3 星与月        —— 径向渐变柔光呼吸 + 月相微亮变化
+     L4 远景山脉      —— 烘焙：手绘轮廓 + 顺山势的排线
+     L5 村庄          —— 烘焙：房舍体块 + 动态暖窗不规则明暗
+     L6 前景树        —— 逐帧局部形变的深色柏树火焰笔触
+     ＋ 光粒子 / 画布颗粒 / 暗角 / 五段苏醒
+
+   可调参数集中在 CONFIG 与右上角「调参」面板。
+   ========================================================================== */
+
+/* ── 可调参数 ───────────────────────────────────────────────── */
+const CONFIG = {
+  flowSpeed: 1.00,        // 星云笔触整体流速倍率
+  strokeDensity: 1.00,    // 笔触密度倍率（改动需重建）
+  particleCount: 40,      // 光点数量（刻意保持很少：它们是"骑在星云上的光"，不是粒子雨）
+  awakeningSpeed: 1.00,   // 苏醒节奏倍率
+  dprCap: 2,              // 设备像素比上限
+  baseSpeed: 0.016,       // 基础流速 = baseSpeed × 舞台宽（px/s）——比上一轮更慢更克制
+  strokeBase: 760,        // 动态星云笔触数（画面质感靠烘焙厚涂，不靠动态笔触堆量）
+  impastoBase: 5200,      // 烘焙厚涂碎笔基数（油画质感的主来源）
+  glowFraction: 0.12,     // 动态笔触中「发光」的比例，其余全部是实色颜料
+  moteMaxLife: 26,
+  grainAlpha: 0.05,
+  reducedMotion: false,
+  dev: false
+};
+
+/* 苏醒时间轴（秒）：五段绘画显现
+   P1 深蓝画布浮现 → P2 山脉与树木以笔触显形 → P3 星云由多方向蓝笔构建
+   → P4 月、星、村灯依次点亮 → P5 融成完整油画并进入持续动态 */
+const T = { canvas: 3.0, land: 6.2, nebula: 7.6, light: 4.6, fuse: 2.6 };
+const P2 = T.canvas, P3 = P2 + T.land, P4 = P3 + T.nebula, P5 = P4 + T.light, P6 = P5 + T.fuse;
+
+/* ── 调色板（深蓝 / 群青 / 湖蓝 / 金黄）─────────────────────
+   索引 0→11 明度递增。画面以 1~6 为主体，7~8 只做少量高光，
+   10~11 暖黄严格限量（只出现在星光附近与窗灯）。 */
+const PAL = {
+  nightTop: '#081838', nightMid: '#0f2a5c', nightLow: '#17417f', horizon: '#27609f',
+  veil: '#03061a',
+  stroke: [
+    [10, 24, 62], [17, 38, 92], [26, 56, 130], [36, 76, 166],
+    [52, 104, 196], [78, 138, 214], [116, 176, 228], [160, 205, 238],
+    [205, 226, 244], [150, 176, 168], [232, 206, 128], [248, 232, 176]
+  ],
+  /* 烘焙厚涂取色权重：中段（群青—湖蓝）占大头，暗部与高光都留足量 */
+  strokeW: [0.10, 0.15, 0.16, 0.15, 0.13, 0.11, 0.08, 0.05, 0.02, 0.03, 0.015, 0.005],
+  /* 动态笔触取色：深蓝—群青是主体，湖蓝只做局部提亮，浅蓝压到最低。
+     上一版把 5~7 号当默认色，天空读成一片碎瓷；现在亮色只归涡体与主带。 */
+  flowW: [0.03, 0.10, 0.19, 0.21, 0.18, 0.13, 0.08, 0.04, 0.012, 0.018, 0.016, 0.004],
+  hill: ['#2a5183', '#1f3f6e', '#16305c', '#0f2348'],
+  hillRim: ['rgba(176,212,240,.42)', 'rgba(140,186,226,.34)', 'rgba(104,152,200,.26)'],
+  wall: ['#2c446f', '#33507e', '#24385e', '#3a5a88'],
+  roof: ['#16223d', '#1d2e4c', '#2a3550', '#3d3140', '#24405a'],
+  warm: '#ffd486',
+  smoke: 'rgba(150,180,208,',
+  /* 前景树：深蓝—深青为主，少量暗锈与橄榄，去掉大面积纯黑 */
+  tree: ['#061020', '#0a1a2e', '#0e2340', '#132c4c', '#123252', '#173f60', '#1d4a6c', '#245a80', '#2c6a8e', '#1a2a44']
+};
+
+/* ── 工具 ─────────────────────────────────────────────────── */
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeOut = (t) => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
+const easeInOut = (t) => { t = clamp(t, 0, 1); return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+/** 带偏移的缓动：把全局进度 q 映射到某一段 [from,to] 内的缓动值 */
+const seg = (q, from, to) => easeInOut((q - from) / (to - from));
+
+function rng(seed) { // mulberry32，保证每次刷新画面一致
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), 1 | t);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ── 画布与状态 ───────────────────────────────────────────── */
+const cv = document.getElementById('paint');
+let ctx = cv.getContext('2d', { alpha: false });   // 可临时切到离屏上下文（苏醒通道）
+
+let W = 0, H = 0, DPR = 1, SPEED = 24;
+let sky = null, hill = null, village = null, grainTile = null, moonSpr = null, glowSpr = null, coreSpr = null, starSpr = null, puffSpr = null;
+let vign = null;
+/* 苏醒用：tmp = 当帧完整场景；mask = 已"画上"的颜料覆盖层（只增不减） */
+let tmpCv = null, tmpCtx = null, maskCv = null, maskCtx = null, maskDone = false;
+
+let strokes = [], motes = [], stars = [], vortices = [], windows = [], chimneys = [];
+let geometry = null;      // 山脊 / 房舍 / 树
+let treeStrands = [];
+let grainPat = null;
+
+let clock = 0, last = 0, raf = 0, running = false;
+let fpsAcc = 0, fpsN = 0, fpsShown = 0;
+
+/* ══════════════════════════════════════════════════════════
+   1. 布局与速度场
+   ══════════════════════════════════════════════════════════ */
+function layout() {
+  W = cv.clientWidth || window.innerWidth;
+  H = cv.clientHeight || window.innerHeight;
+  DPR = Math.min(window.devicePixelRatio || 1, CONFIG.dprCap);
+  if (W * H > 1_600_000) DPR = Math.min(DPR, 1.5);      // 大屏降 DPR 保帧率
+  DPR = Math.max(1, DPR);
+  cv.width = Math.round(W * DPR);
+  cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  SPEED = Math.max(9, CONFIG.baseSpeed * W);
+  /* 苏醒期用的两张离屏：只在转场中合成，转场结束后完全不再参与绘制 */
+  const mk = () => { const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; return c; };
+  if (!tmpCv) tmpCv = document.createElement('canvas');
+  if (!maskCv) maskCv = document.createElement('canvas');
+  tmpCv.width = cv.width; tmpCv.height = cv.height;
+  maskCv.width = cv.width; maskCv.height = cv.height;
+  tmpCtx = tmpCv.getContext('2d');
+  maskCtx = maskCv.getContext('2d');
+  maskCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  tmpCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+
+/** 天空主带（S 形）中心线，返回归一化 y */
+function bandY(u) {
+  return 0.335 - 0.125 * Math.sin(u * Math.PI * 1.12 + 0.18) + 0.045 * Math.sin(u * 6.1 + 1.2);
+}
+
+/** 区域笔触密度：涡体与主带最密，四角与地平线附近最疏。
+ *  这是「不同区域不同密度」的唯一来源，画面因此不会处处一样。 */
+function densityAt(px, py) {
+  const u = px / W, v = py / H;
+  let d = 0.30 + 0.85 * Math.exp(-Math.pow((v - bandY(u)) / 0.115, 2));
+  for (let i = 0; i < 5; i++) {
+    const vo = vortices[i];
+    const r = Math.hypot(px - vo.cx, (py - vo.cy) / vo.squash) / vo.r;
+    d = Math.max(d, 0.34 + 0.95 * Math.exp(-Math.pow((r - 0.62) / 0.55, 2)));
+  }
+  if (v > 0.60) d *= Math.max(0.15, 1 - (v - 0.60) / 0.22);   // 靠近地平线收疏
+  return clamp(d, 0.10, 1.6);
+}
+
+/** 区域"节拍"：不同区域用不同的运动快慢，避免整片天空同步移动 */
+function tempoAt(px, py) {
+  const u = px / W, v = py / H;
+  return 0.62 + 0.46 * Math.sin(u * 2.3 + 0.4) + 0.30 * Math.sin(v * 3.1 + u * 1.7 + 2.2);
+}
+
+function buildVortices() {
+  const R = W * 0.001;
+  vortices = [
+    { cx: 0.425 * W, cy: 0.275 * H, r: 165 * R, k: 2.05, spin: 1, squash: 0.70 },   // 大旋涡
+    { cx: 0.655 * W, cy: 0.400 * H, r: 118 * R, k: 1.55, spin: -1, squash: 0.72 },  // 次旋涡
+    { cx: 0.858 * W, cy: 0.168 * H, r: 96 * R, k: 1.15, spin: 1, squash: 0.80 },    // 月晕涡
+    { cx: 0.235 * W, cy: 0.470 * H, r: 74 * R, k: 0.85, spin: -1, squash: 0.66 },
+    { cx: 0.085 * W, cy: 0.330 * H, r: 58 * R, k: 0.62, spin: 1, squash: 0.74 }
+  ];
+  // 亮星周围的小涡：让附近笔触自然绕出「有机光晕」，而不是画同心圆
+  for (const s of stars) vortices.push({ cx: s.x, cy: s.y, r: s.glow * 1.7, k: 0.40, spin: s.spin, squash: 0.92 });
+}
+
+/** 速度场（px/s），时间无关 → 流线可预计算 */
+const _f = [0, 0];
+function fieldAt(x, y) {
+  const u = x / W, v = y / H;
+  let vx = SPEED * (0.82 + 0.42 * Math.sin(v * 5.1 + u * 1.7 + 0.6));
+  let vy = SPEED * (0.32 * Math.sin(u * 6.3 - v * 2.3 + 1.1) + 0.18 * Math.cos(u * 3.2 + 0.4));
+  const dy = bandY(u) - v;
+  vy += SPEED * 0.50 * Math.tanh(dy * 7);
+  vx += SPEED * 0.42 * Math.exp(-Math.abs(dy) * 6);
+  for (let i = 0; i < vortices.length; i++) {
+    const vo = vortices[i];
+    const dx = x - vo.cx, dyy = (y - vo.cy) / vo.squash;
+    const d = Math.hypot(dx, dyy) + 1e-6;
+    const g = Math.exp(-(d * d) / (vo.r * vo.r));
+    const s = (vo.k * SPEED) * g;
+    const tx = -dyy / d * vo.spin, ty = dx / d * vo.spin;
+    vx += tx * s - (dx / d) * s * 0.15;
+    vy += ty * s - (dyy / d) * s * 0.15 * 0.6;
+  }
+  _f[0] = vx; _f[1] = vy;
+  return _f;
+}
+
+/* ── 路径重采样为等距点列（含单位法线） ─────────────────── */
+const STEP_PX = 5;
+function resample(pts, closed) {
+  const n = pts.length;
+  if (n < 2) return null;
+  const cum = [0];
+  for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  if (closed) cum.push(cum[n - 1] + Math.hypot(pts[0].x - pts[n - 1].x, pts[0].y - pts[n - 1].y));
+  const total = cum[cum.length - 1];
+  if (total < STEP_PX * 2) return null;
+  const m = Math.max(2, Math.round(total / STEP_PX) + (closed ? 0 : 1));
+  const out = new Float32Array(m * 4);
+  let j = 0;
+  for (let i = 0; i < m; i++) {
+    const target = closed ? (i / m) * total : (i / (m - 1)) * total;
+    while (j < cum.length - 2 && cum[j + 1] < target) j++;
+    const a = pts[j % n], b = pts[(j + 1) % n];
+    const segLen = (cum[j + 1] - cum[j]) || 1;
+    const t = clamp((target - cum[j]) / segLen, 0, 1);
+    out[i * 4] = lerp(a.x, b.x, t);
+    out[i * 4 + 1] = lerp(a.y, b.y, t);
+  }
+  for (let i = 0; i < m; i++) {
+    const p = i, nx = (i + 1) % m, pv = (i - 1 + m) % m;
+    let tx = out[nx * 4] - out[pv * 4], ty = out[nx * 4 + 1] - out[pv * 4 + 1];
+    if (!closed && i === 0) { tx = out[1 * 4] - out[0]; ty = out[1 * 4 + 1] - out[1]; }
+    if (!closed && i === m - 1) { tx = out[(m - 1) * 4] - out[(m - 2) * 4]; ty = out[(m - 1) * 4 + 1] - out[(m - 2) * 4 + 1]; }
+    const L = Math.hypot(tx, ty) || 1;
+    out[i * 4 + 2] = -ty / L;          // 法线 x
+    out[i * 4 + 3] = tx / L;           // 法线 y
+  }
+  return { d: out, m, len: total, closed: !!closed };
+}
+
+/** 沿场积分一条开放流线 */
+function integrateStream(x0, y0, steps, dt) {
+  const pts = [];
+  let x = x0, y = y0;
+  const back = [];
+  for (let i = 0; i < steps; i++) {
+    back.push({ x, y });
+    const f = fieldAt(x, y); const fx = f[0], fy = f[1];
+    x -= fx * dt; y -= fy * dt;
+  }
+  back.reverse();
+  pts.push(...back);
+  x = x0; y = y0;
+  for (let i = 0; i < steps; i++) {
+    const f = fieldAt(x, y); const fx = f[0], fy = f[1];
+    x += fx * dt; y += fy * dt;
+    pts.push({ x, y });
+  }
+  return resample(pts, false);
+}
+
+/** 绕涡心的闭合有机环线（保证笔触循环运动无缝）。
+ *  每条环线由 seed 派生出独立的偏心量 / 转角 / 扁率 / 谐波相位，
+ *  使同一涡心附近的环线彼此错位穿插，而不是干净的嵌套同心环。 */
+function vortexLoopPts(vo, radMul, seed, wob) {
+  const pts = [];
+  const base = vo.r * radMul;
+  const h = (k) => { const v = Math.sin(seed * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
+  const p1 = h(1) * 6.2832, p2 = h(2) * 6.2832, p3 = h(3) * 6.2832, p4 = h(4) * 6.2832;
+  const rot = h(5) * Math.PI;
+  const ex = (h(6) - 0.5) * vo.r * 0.55, ey = (h(7) - 0.5) * vo.r * 0.40;
+  const sq = clamp(vo.squash + (h(8) - 0.5) * 0.46, 0.40, 1.06);
+  const cosr = Math.cos(rot), sinr = Math.sin(rot);
+  for (let i = 0; i < 64; i++) {
+    const a = i / 64 * Math.PI * 2;
+    const rr = base * (1 + wob * (0.15 * Math.sin(a * 2 + p1) + 0.11 * Math.sin(a * 3 + p2)
+      + 0.07 * Math.sin(a * 5 + p3) + 0.045 * Math.sin(a * 7 + p4)));
+    const bx = Math.cos(a) * rr, by = Math.sin(a) * rr * sq;
+    pts.push({ x: vo.cx + ex + bx * cosr - by * sinr, y: vo.cy + ey + bx * sinr + by * cosr });
+  }
+  return pts;
+}
+function vortexLoop(vo, radMul, seed, wob) {
+  return resample(vortexLoopPts(vo, radMul, seed, wob), true);
+}
+/** 螺旋臂：从内半径旋到外半径，梵高涡体的真实形态 */
+function spiralPts(vo, r0, r1, turns, phase, wob) {
+  const pts = [];
+  const N = 84;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const a = phase + t * turns * Math.PI * 2;
+    const rr = lerp(r0, r1, t) * (1 + wob * (0.10 * Math.sin(a * 3 + phase) + 0.06 * Math.sin(a * 5 + phase * 2)));
+    pts.push({ x: vo.cx + Math.cos(a) * rr, y: vo.cy + Math.sin(a) * rr * vo.squash });
+  }
+  return pts;
+}
+
+/* ══════════════════════════════════════════════════════════
+   2. 笔触（星云）—— 三种形状 + 四种运动 + 实色/发光分流
+   ══════════════════════════════════════════════════════════ */
+/** 按权重表取调色板索引 */
+function pickWeighted(w, r) {
+  let acc = 0;
+  for (let i = 0; i < w.length; i++) { acc += w[i]; if (r < acc) return i; }
+  return w.length - 1;
+}
+/* 形状族：dash 短促厚点 / comma 弧形逗号笔 / arc 长弧笔 / brush 饱笔（一头钝一头提走）
+   长弧笔给方向感，饱笔给厚涂的"一笔到底"，短点只做破笔——
+   碎瓷感来自两端都收尖的羽毛形占比过高，真实画笔落笔钝、收笔尖，这里补上不对称笔形。
+   n 是每支笔沿流线采样的点数：采得太少，多边形边缘会露出锯齿（放大看像撕破的布条）。 */
+const SHAPE = {
+  dash: { n: 3, prof: [0.30, 1.00, 0.24], len: [5, 13], wr: [0.30, 0.54], curve: [0.10, 0.42] },
+  comma: { n: 7, prof: [0.14, 0.52, 0.86, 1.00, 0.72, 0.40, 0.12], len: [18, 40], wr: [0.14, 0.30], curve: [0.34, 0.92] },
+  arc: { n: 11, prof: [0.08, 0.28, 0.52, 0.76, 0.94, 1.00, 0.86, 0.66, 0.42, 0.20, 0.07], len: [40, 78], wr: [0.06, 0.14], curve: [0.12, 0.46] },
+  brush: { n: 9, prof: [0.66, 1.00, 0.96, 0.84, 0.66, 0.46, 0.28, 0.14, 0.06], len: [26, 60], wr: [0.11, 0.22], curve: [0.18, 0.62] }
+};
+
+function buildStrokes() {
+  const R = rng(20261125);
+  const area = clamp((W * H) / (1440 * 900), 0.62, 2.2);   // 竖屏按面积线性缩减会太稀
+  const count = Math.round(CONFIG.strokeBase * CONFIG.strokeDensity * area);
+  strokes = [];
+  let guard = 0;
+  while (strokes.length < count && guard++ < count * 14) {
+    /* ① 按区域密度采样落点：涡体与主带密，四角与地平线疏 */
+    const px = R() * W, py = Math.pow(R(), 0.86) * H * 0.70;
+    if (R() * 1.6 > densityAt(px, py)) continue;
+
+    const kind = R();
+    let path, sp, lenMul = 1;
+    if (kind < 0.40) {                                   // 绕涡：闭合环线（循环无缝）
+      const vo = vortices[Math.floor(R() * Math.min(vortices.length, 6))];
+      const rm = (0.14 + R() * R() * 0.98) * (0.86 + R() * 0.30);
+      // 每条自己的半径再抖 ±15%：同心环之所以读得出，是因为半径成整齐的一族
+      path = vortexLoop(vo, rm, R(), 1.0 + R() * 1.3);
+      sp = (0.7 + R() * 0.8) * (1 / (0.5 + rm));
+      lenMul = 1.0;
+    } else if (kind < 0.80) {                            // 顺带：沿 S 带的开放流线
+      const u = R();
+      const y = (bandY(u) + (R() - 0.5) * 0.34) * H;
+      path = integrateStream(u * W, y, 20, 0.32);
+      sp = 0.6 + R() * 1.1;
+      lenMul = 1.35;
+    } else {                                             // 外围：薄雾短笔
+      const u = R(), v = R() * 0.60;
+      path = integrateStream(u * W, v * H, 9, 0.28);
+      sp = 0.30 + R() * 0.5;
+      lenMul = 0.72;
+    }
+    if (!path || path.m < 4) continue;
+
+    /* ② 形状族：短点 / 逗号弧 / 长弧 / 饱笔，各取自己的长度与宽长比 */
+    const sr = R();
+    const sh = sr < 0.16 ? SHAPE.dash : sr < 0.40 ? SHAPE.comma : sr < 0.60 ? SHAPE.arc : SHAPE.brush;
+    const len0 = lerp(sh.len[0], sh.len[1], Math.pow(R(), 1.1)) * lenMul * (W / 1440);
+    /* 同族里再拉开尺度：多数是中笔，少数拖成一支长笔，少数只剩一点颜料。
+       长短一致才会读出"整齐的鱼鳞阵列"，拉开才有厚涂的随意感。 */
+    const sizeMul = 0.62 + Math.pow(R(), 1.8) * 1.15;
+    /* 闭合环上的笔不许缠过环周的 1/10：小半径环上缠多了会读成一弯"亮色贴片"，
+       而不是撂在涡上的一笔。 */
+    const len = path.closed ? Math.min(len0 * sizeMul, path.len * 0.10) : len0 * sizeMul;
+    const wr = lerp(sh.wr[0], sh.wr[1], R()) / Math.pow(sizeMul, 0.45);
+    /* 长笔必须收窄（宽长比 ≤0.15）：又长又宽就是一面旗，不是一支笔。
+       短点不受此限——它的身份本来就是"厚颜料的一点"。 */
+    const wrCap = len > 34 * (W / 1440) ? Math.min(wr, 0.15) : wr;
+    const w = Math.max(1.0, len * wrCap);
+
+    /* ③ 运动分四类：静止 / 慢 / 中 / 快，并叠加所属区域的节拍 */
+    const mr = R();
+    const motion = mr < 0.26 ? 0 : mr < 0.58 ? 1 : mr < 0.86 ? 2 : 3;
+    const mul = motion === 0 ? 0 : motion === 1 ? 0.22 + R() * 0.26 : motion === 2 ? 0.55 + R() * 0.45 : 1.05 + R() * 0.7;
+
+    /* ④ 取色：明度跟着区域走。涡体与主带提亮，四角与地平线压暗——
+       处处一样亮会把天空读成一片碎瓷，厚涂要靠明暗层才读得出来。 */
+    const lit = clamp((densityAt(px, py) - 0.40) / 0.90, 0, 1);
+    let ci = pickWeighted(PAL.flowW, R());
+    ci = clamp(Math.round(ci * (0.56 + 0.58 * lit) + lit * 1.05), 1, 8);
+    const nearStar = stars.reduce((b, s) => Math.min(b, Math.hypot(px - s.x, py - s.y)), 1e9);
+    if (nearStar < 46 && R() < 0.26) ci = R() < 0.4 ? 10 : 7;
+    const glow = ci >= 7 && R() < CONFIG.glowFraction * (ci >= 10 ? 3.2 : 1);
+    const al = glow ? 0.09 + R() * 0.17
+      : clamp((0.17 + Math.pow(R(), 0.85) * 0.44) * (ci <= 3 ? 1.16 : 0.90), 0, 0.70);
+
+    strokes.push({
+      p: path, u: R() * path.len, len, w, ci, al, glow,
+      sp: sp * mul * tempoAt(px, py),
+      ph: R() * 6.28,
+      per: 3.4 + R() * 7.2,                              // 每支笔触自己的摆动周期
+      bend: lerp(sh.curve[0], sh.curve[1], R()) * (0.5 + R()),
+      prof: sh.prof, n: sh.n,
+      xs: new Float64Array(sh.n * 2), ys: new Float64Array(sh.n * 2)
+    });
+  }
+}
+
+/* 分桶：同一（颜色 × 透明度档 × 实色/发光）一次 fill，避免上千次 draw call */
+const A_LEVELS = 6;
+function drawNebula(alpha, flow) {
+  if (alpha <= 0.004) return;
+  const t = clock;
+  const buckets = new Map();
+  for (let i = 0; i < strokes.length; i++) {
+    const s = strokes[i], p = s.p, d = p.d, m = p.m;
+    if (s.al < 0.02) continue;
+    // 沿流线推进：闭合环线无缝循环；开放流线两端淡出后回卷（不出现折返滑动）
+    let u = s.u + t * SPEED * s.sp * flow;
+    u = ((u % p.len) + p.len) % p.len;
+    const fade = p.closed ? 1 : clamp(Math.min(u, p.len - u) / (p.len * 0.17), 0, 1);
+    const a = s.al * fade;
+    if (a < 0.035) continue;
+    const level = clamp(Math.round(a * A_LEVELS), 1, A_LEVELS);
+    const key = (s.ci * 8 + level) | (s.glow ? 4096 : 0);
+    let arr = buckets.get(key);
+    if (!arr) { arr = []; buckets.set(key, arr); }
+
+    /* 笔触本体：沿切线铺开 n 个采样点，宽度按 prof 收尖，
+       法线方向叠加「笔肚弯曲 + 缓慢摆动」→ 读作油画笔触而非直线 */
+    const n = s.n, xs = s.xs, ys = s.ys, half = s.len / 2;
+    /* 弯度封顶：一笔最多弯到自身长度的两成，再弯就成了钩子/贴片而不是笔触 */
+    const bendK = Math.min(s.bend * s.w, s.len * 0.20);
+    const bend = bendK * (Math.sin(t / s.per * 6.2832 + s.ph) * 0.55 + 0.55);
+    let ok = true;
+    for (let q = 0; q < n; q++) {
+      let pos = u - half + s.len * (q / (n - 1));
+      let k;
+      if (p.closed) {
+        pos = ((pos % p.len) + p.len) % p.len;
+        k = Math.floor(pos / STEP_PX) % m;
+      } else {
+        if (pos < 0 || pos > p.len - 1) { ok = false; break; }
+        k = Math.min(m - 1, Math.floor(pos / STEP_PX));
+      }
+      const k2 = Math.min(m - 1, k + 1), f = clamp(pos / STEP_PX - k, 0, 1);
+      const px = lerp(d[k * 4], d[k2 * 4], f), py = lerp(d[k * 4 + 1], d[k2 * 4 + 1], f);
+      const nx = d[k * 4 + 2], ny = d[k * 4 + 3];
+      const bow = Math.sin(Math.PI * (q / (n - 1))) * bend;      // 弧形（逗号笔）
+      const hw = s.w * s.prof[q] * 0.5;
+      xs[q] = px + nx * (hw + bow); ys[q] = py + ny * (hw + bow);
+      xs[2 * n - 1 - q] = px - nx * (hw - bow * 0.55); ys[2 * n - 1 - q] = py - ny * (hw - bow * 0.55);
+    }
+    if (!ok) continue;
+    arr.push(xs, ys);
+  }
+  /* 先铺实色颜料（source-over），再补极少数发光笔触 —— 明暗虚实靠实色层，
+     发光只是零星高光，画面才不会读成"发光线条" */
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.globalCompositeOperation = pass ? 'lighter' : 'source-over';
+    for (const [key, arr] of buckets) {
+      const isGlow = (key & 4096) !== 0;
+      if (isGlow !== !!pass) continue;
+      const c = PAL.stroke[(key >> 3) & 15];
+      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.globalAlpha = alpha * ((key & 7) / A_LEVELS) * (isGlow ? 0.55 : 1);
+      ctx.beginPath();
+      for (let k = 0; k < arr.length; k += 2) {
+        const xs = arr[k], ys = arr[k + 1], cnt = xs.length;
+        ctx.moveTo(xs[0], ys[0]);
+        for (let q = 1; q < cnt; q++) ctx.lineTo(xs[q], ys[q]);
+        ctx.closePath();
+      }
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ══════════════════════════════════════════════════════════
+   3. 星与月
+   ══════════════════════════════════════════════════════════ */
+const STAR_DEF = [
+  [0.108, 0.062, 1.00, 1], [0.232, 0.032, 0.55, -1], [0.335, 0.042, 0.72, 1],
+  [0.418, 0.062, 0.50, -1], [0.608, 0.078, 0.86, 1], [0.700, 0.222, 0.62, -1],
+  [0.330, 0.328, 0.58, 1], [0.352, 0.528, 1.00, -1], [0.128, 0.472, 0.66, 1],
+  [0.040, 0.448, 0.42, -1], [0.228, 0.168, 0.74, 1], [0.520, 0.196, 0.44, -1],
+  [0.790, 0.420, 0.40, 1], [0.905, 0.322, 0.46, -1]
+];
+function buildStars() {
+  const R = rng(77123);
+  stars = STAR_DEF.map((s, i) => ({
+    x: s[0] * W, y: s[1] * H,
+    scale: s[2], spin: s[3],
+    core: (2.4 + s[2] * 4.0) * (W / 1440),
+    glow: (17 + s[2] * 30) * (W / 1440),          // 星体半径收紧：靠旋笔画出来，不靠光晕撑
+    per: 2.7 + R() * 4.2,                          // 各自周期，绝不同步
+    per2: 5.3 + R() * 7.7,
+    ph: R() * 6.28,
+    warm: 0.55 + R() * 0.45
+  }));
+}
+function makeGlow(size, r, g, b, stops) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const x = c.getContext('2d');
+  const gr = x.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  for (const s of stops) gr.addColorStop(s[0], `rgba(${r},${g},${b},${s[1]})`);
+  x.fillStyle = gr; x.fillRect(0, 0, size, size);
+  return c;
+}
+/** 油画星：柔光底 + 一圈顺旋的短弧笔（原画里的星是"用颜料堆出来的旋涡"，不是光点） */
+function makeStarSprite(size, seed) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const x = c.getContext('2d');
+  const R = rng(seed);
+  const g = x.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(252,244,206,.92)'); g.addColorStop(.18, 'rgba(244,222,132,.52)');
+  g.addColorStop(.40, 'rgba(206,196,126,.20)'); g.addColorStop(.68, 'rgba(150,164,124,.07)');
+  g.addColorStop(1, 'rgba(120,140,110,0)');
+  x.fillStyle = g; x.fillRect(0, 0, size, size);
+  x.lineCap = 'round';
+  const cx = size / 2, cy = size / 2;
+  /* 星体周围是"乱旋的颜料"，不是同心圆：
+     以放射短笔为主，少量弧且圆心各自偏移、半径收紧，避免读出环。 */
+  for (let i = 0; i < 44; i++) {
+    const a = R() * 6.2832;
+    const warm = R() < 0.66;
+    const al = 0.10 + Math.pow(R(), 1.4) * 0.30;
+    x.strokeStyle = warm
+      ? `rgba(${240 + R() * 15 | 0},${212 + R() * 30 | 0},${116 + R() * 70 | 0},${al})`
+      : `rgba(${170 + R() * 50 | 0},${204 + R() * 34 | 0},238,${al * 0.7})`;
+    x.lineWidth = Math.max(1.1, size * (0.016 + R() * 0.030));
+    if (R() < 0.58) {                                   // 放射笔：光向外炸开
+      const r0 = size * (0.04 + R() * 0.12), r1 = r0 + size * (0.06 + R() * 0.15);
+      const bend = 0.30 + R() * 0.5;
+      x.beginPath();
+      x.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      x.quadraticCurveTo(
+        cx + Math.cos(a + bend * 0.5) * (r0 + r1) * 0.52,
+        cy + Math.sin(a + bend * 0.5) * (r0 + r1) * 0.52,
+        cx + Math.cos(a + bend) * r1, cy + Math.sin(a + bend) * r1);
+      x.stroke();
+    } else {                                            // 短弧：圆心抖动，不成环
+      const rr = size * (0.05 + Math.pow(R(), 1.5) * 0.22);
+      const ox = (R() - 0.5) * size * 0.18, oy = (R() - 0.5) * size * 0.18;
+      x.beginPath();
+      x.arc(cx + ox, cy + oy, rr, a, a + 0.2 + R() * 0.9);
+      x.stroke();
+    }
+  }
+  const gc = x.createRadialGradient(cx, cy, 0, cx, cy, size * 0.11);
+  gc.addColorStop(0, 'rgba(255,252,232,.95)'); gc.addColorStop(.5, 'rgba(252,236,168,.5)'); gc.addColorStop(1, 'rgba(240,214,120,0)');
+  x.fillStyle = gc; x.beginPath(); x.arc(cx, cy, size * 0.11, 0, 6.2832); x.fill();
+  return c;
+}
+function buildSprites() {
+  glowSpr = makeGlow(192, 250, 226, 150, [[0, .90], [.12, .42], [.30, .15], [.58, .045], [1, 0]]);
+  coreSpr = makeGlow(96, 255, 248, 214, [[0, 1], [.22, .80], [.45, .24], [1, 0]]);
+  starSpr = makeStarSprite(160, 4242);
+  // 烟雾精灵：冷灰蓝柔块，边缘不规则
+  puffSpr = (() => {
+    const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+    const x = c.getContext('2d'); const R = rng(9091);
+    for (let i = 0; i < 7; i++) {
+      const px = S * (0.34 + R() * 0.32), py = S * (0.34 + R() * 0.32), rr = S * (0.14 + R() * 0.20);
+      const g = x.createRadialGradient(px, py, 0, px, py, rr);
+      g.addColorStop(0, 'rgba(158,186,212,.30)'); g.addColorStop(.6, 'rgba(132,162,192,.12)'); g.addColorStop(1, 'rgba(120,150,180,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(px, py, rr, 0, 6.2832); x.fill();
+    }
+    return c;
+  })();
+  // 月：径向柔光 + 干净月牙 + 月体周围的旋笔（绝不画同心圆环）
+  const S = Math.round(clamp(W * 0.155, 130, 260));
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const x = c.getContext('2d');
+  const g1 = x.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g1.addColorStop(0, 'rgba(253,236,168,.80)'); g1.addColorStop(.14, 'rgba(248,220,124,.36)');
+  g1.addColorStop(.34, 'rgba(214,182,100,.13)'); g1.addColorStop(.60, 'rgba(160,140,90,.045)');
+  g1.addColorStop(1, 'rgba(120,110,80,0)');
+  x.fillStyle = g1; x.fillRect(0, 0, S, S);
+  const r = S * 0.155, cx = S * 0.52, cy = S * 0.48;
+  const R = rng(1717);
+  x.lineCap = 'round';
+  for (let i = 0; i < 68; i++) {                       // 月体周围的暖黄旋笔
+    /* 用颜料块而不是通长的放射线：线跑到精灵边界会被切平，读成一束烟花刺。
+       短笔各自换圆心、跨度不一 ⇒ 读作"围绕月亮的涡"，既不是环也不是刺。 */
+    const a = R() * 6.2832;
+    const warm = R() < 0.72;
+    const rr = r * (0.95 + Math.pow(R(), 1.2) * 1.85);
+    const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr * 0.94;
+    const len = S * (0.055 + R() * 0.105);
+    const wid = len * (0.20 + R() * 0.34);
+    const ang = a + Math.PI / 2 + (R() - 0.5) * 1.15;   // 顺切线为主，偶尔斜挑出去
+    daub(x, px, py, ang, len, wid, (R() - 0.5) * 1.6,
+      warm ? (R() < 0.5 ? [246, 220, 138] : [250, 236, 178]) : [196, 220, 240],
+      warm ? 0.07 + R() * 0.19 : 0.05 + R() * 0.12);
+  }
+  x.fillStyle = 'rgba(251,232,152,.97)';
+  x.beginPath(); x.arc(cx, cy, r, 0, 6.2832); x.fill();
+  x.globalCompositeOperation = 'destination-out';
+  x.beginPath(); x.arc(cx - r * 0.52, cy - r * 0.20, r * 0.98, 0, 6.2832); x.fill();
+  x.globalCompositeOperation = 'source-over';
+  const g2 = x.createRadialGradient(cx + r * 0.34, cy + r * 0.10, 0, cx + r * 0.34, cy + r * 0.10, r * 1.5);
+  g2.addColorStop(0, 'rgba(255,247,206,.72)'); g2.addColorStop(.45, 'rgba(250,222,128,.22)'); g2.addColorStop(1, 'rgba(240,200,110,0)');
+  x.fillStyle = g2; x.beginPath(); x.arc(cx + r * 0.34, cy + r * 0.10, r * 1.5, 0, 6.2832); x.fill();
+  moonSpr = c;
+}
+function drawStars(aStar, aMoon, breathe) {
+  if (aStar <= 0.004) return;
+  const t = clock;
+  ctx.globalCompositeOperation = 'lighter';
+  for (const s of stars) {
+    const b = 0.74 + 0.15 * Math.sin(t / s.per * 6.2832 + s.ph) + 0.11 * Math.sin(t / s.per2 * 6.2832 + s.ph * 2.1);
+    const br = lerp(1, b, breathe);
+    /* 先落"颜料星体"（旋笔精灵），再叠一层很轻的柔光：
+       星是画出来的，不是打出来的光 */
+    const g = s.glow * (1 + 0.05 * (br - 0.85));
+    ctx.globalAlpha = aStar * 0.62 * br;
+    ctx.drawImage(starSpr, s.x - g, s.y - g, g * 2, g * 2);
+    ctx.globalAlpha = aStar * 0.20 * br * s.warm;
+    const hg = g * 1.5;
+    ctx.drawImage(glowSpr, s.x - hg, s.y - hg, hg * 2, hg * 2);
+    ctx.globalAlpha = aStar * 0.70 * br;
+    const c = s.core * (1 + 0.08 * (br - 0.85));
+    ctx.drawImage(coreSpr, s.x - c * 2.0, s.y - c * 2.0, c * 4.0, c * 4.0);
+  }
+  if (aMoon > 0.004) {
+    const S = moonSpr.width, mb = 1 + 0.045 * Math.sin(t / 9.3 * 6.2832) * breathe;
+    const mx = 0.862 * W, my = 0.163 * H;
+    ctx.globalAlpha = aMoon * 0.42 * mb;
+    const hg = S * 0.92;
+    ctx.drawImage(glowSpr, mx - hg, my - hg, hg * 2, hg * 2);
+    ctx.globalAlpha = aMoon * (0.90 + 0.08 * (mb - 1));
+    ctx.drawImage(moonSpr, mx - S / 2, my - S / 2, S, S);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ══════════════════════════════════════════════════════════
+   4. 场景几何（山脉 / 村庄 / 树）
+   ══════════════════════════════════════════════════════════ */
+function ridge(fn, from, to, steps) {
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const u = from + (to - from) * (i / steps);
+    pts.push({ x: u * W, y: fn(u) * H });
+  }
+  return pts;
+}
+/* 山脊轮廓：多频不可公度正弦叠加 + 局部高斯丘峰与缺口，
+   故意做成"不规则"，避免读成均匀波浪（原画的山是一条起伏很长的斜脊） */
+const bump = (u, c, w, a) => a * Math.exp(-Math.pow((u - c) / w, 2));
+const ridgeA = (u) => 0.588
+  - 0.058 * Math.sin(u * 2.31 + 0.55) - 0.031 * Math.sin(u * 5.13 + 2.10)
+  - 0.017 * Math.sin(u * 9.71 + 0.90) - 0.009 * Math.sin(u * 17.30 + 4.20)
+  - bump(u, 0.70, 0.11, 0.070) - bump(u, 0.28, 0.075, 0.034) + bump(u, 0.48, 0.055, 0.026)
+  - 0.118 * Math.pow(clamp((u - 0.56) / 0.44, 0, 1), 1.25);
+const ridgeB = (u) => 0.668
+  - 0.044 * Math.sin(u * 3.07 + 2.20) - 0.024 * Math.sin(u * 6.71 + 0.50)
+  - 0.013 * Math.sin(u * 12.90 + 3.10)
+  - bump(u, 0.83, 0.09, 0.052) - bump(u, 0.15, 0.08, 0.028) + bump(u, 0.52, 0.06, 0.020);
+const ridgeC = (u) => 0.726
+  - 0.030 * Math.sin(u * 4.11 + 1.10) - 0.017 * Math.sin(u * 8.90 + 2.70)
+  - 0.008 * Math.sin(u * 15.70 + 0.40)
+  - bump(u, 0.62, 0.10, 0.036) + bump(u, 0.34, 0.07, 0.018);
+/* 右侧暗岩：原画右缘那块近乎黑色的山体，给画面一个"压角"的重量 */
+const rockR = (u) => 0.505 + 0.055 * Math.sin(u * 7.1 + 1.4) + 0.026 * Math.sin(u * 19.3);
+
+function buildGeometry() {
+  const R = rng(4242);
+  const houses = [];
+  windows = [];
+  chimneys = [];
+  // 村庄：教堂居中，房舍成簇（保留原布局，只提高辨识度与高度差）
+  const church = { x: 0.545 * W, w: 0.052 * W, body: 0.845 * H, top: 0.795 * H, spire: 0.675 * H, sw: 0.014 * W };
+  const ROOF_TYPES = ['gable', 'hip', 'steep', 'barn', 'stepped'];
+  for (let i = 0; i < 34; i++) {
+    const u = 0.30 + R() * 0.62;
+    const depth = R();
+    const base = lerp(0.800, 0.985, depth) * H;
+    const tall = R() < 0.26;                              // 少数窄高屋，拉开高度差
+    const w = (tall ? 0.014 + R() * 0.014 : 0.020 + R() * 0.032) * W * lerp(0.8, 1.25, depth);
+    const h = (tall ? 0.058 + R() * 0.030 : 0.026 + R() * 0.034) * H * lerp(0.8, 1.3, depth);
+    const type = ROOF_TYPES[Math.floor(R() * (R() < 0.62 ? 3 : 5))];
+    const roofH = h * (type === 'steep' ? 0.72 + R() * 0.42 : type === 'barn' ? 0.30 + R() * 0.16 : 0.40 + R() * 0.30);
+    const hs = { x: u * W, base, w, h, roofH, type, ci: Math.floor(R() * 4), ri: Math.floor(R() * 5), z: depth };
+    hs.wallPts = wallOutline(hs);
+    hs.roofPts = roofOutline(hs);
+    houses.push(hs);
+  }
+  houses.sort((a, b) => a.z - b.z);
+
+  for (const hs of houses) {
+    const t = hs.base - hs.h;
+    const cols = hs.w > 0.030 * W ? 3 : 2;
+    for (let c = 0; c < cols; c++) {
+      if (R() < 0.30) continue;
+      windows.push({
+        x: hs.x - hs.w / 2 + (c + 0.5) * (hs.w / cols),
+        y: t + hs.h * (0.30 + R() * 0.44),
+        w: Math.max(1.8, hs.w * 0.15), h: Math.max(2.4, hs.h * 0.19),
+        base: 0.34 + R() * 0.48, p1: 3.1 + R() * 6.7, p2: 7.9 + R() * 12.3, ph: R() * 6.28,
+        dip: R() < 0.30 ? (13 + R() * 24) : 0,
+        warm: 0.55 + R() * 0.45, z: hs.z
+      });
+    }
+    // 烟囱：只给较近的房屋，少量即可（烟雾是环境运动，不是主角）
+    if (hs.z > 0.42 && R() < 0.30) {
+      const cw = Math.max(2.2, hs.w * 0.16);
+      const cx = hs.x + (R() < 0.5 ? -1 : 1) * hs.w * (0.18 + R() * 0.20);
+      const cy = hs.base - hs.h - hs.roofH * (0.45 + R() * 0.35);
+      chimneys.push({ x: cx, y: cy, w: cw, h: Math.max(4, hs.h * 0.30), z: hs.z, ph: R() * 6.28, rate: 0.55 + R() * 0.5 });
+    }
+  }
+
+  // 前景柏树：主树 + 副树（火焰状剪影，由大量纵向卷曲笔触组成；位置与剪影沿用上一轮）
+  const trees = [
+    { x: 0.158 * W, base: 1.06 * H, top: 0.055 * H, half: 0.062 * W, lean: 0.026, strands: 132, curl: 0.030 },
+    { x: 0.262 * W, base: 1.06 * H, top: 0.470 * H, half: 0.030 * W, lean: -0.018, strands: 64, curl: 0.021 },
+    { x: 0.948 * W, base: 1.06 * H, top: 0.560 * H, half: 0.021 * W, lean: 0.010, strands: 40, curl: 0.014 }
+  ];
+  treeStrands = [];
+  trees.forEach((tr, ti) => {
+    for (let i = 0; i < tr.strands; i++) {
+      const off = (i / (tr.strands - 1)) * 2 - 1;                  // -1..1 横向位置
+      const cph = rng(i * 97 + ti * 13)() * 6.28;                   // 每束自己的卷曲相位
+      const cw = 0.6 + rng(i * 53 + ti * 7)() * 1.5;
+      const pts = [];
+      const N = 18;
+      for (let k = 0; k <= N; k++) {
+        const h = k / N;                                            // 0 底 → 1 顶
+        // 火焰形：下部宽厚、中部鼓出、上部收尖（指数放缓，避免读成草叶）
+        const taper = Math.pow(1 - h, 0.42) * (0.80 + 0.34 * Math.sin(h * 6.2 + off * 1.9 + cph * 0.3))
+          * (1 + 0.30 * Math.exp(-Math.pow((h - 0.30) / 0.19, 2)));
+        const spine = tr.x + tr.lean * W * Math.pow(h, 1.7)
+          + tr.curl * W * Math.sin(h * 3.4 + cph * 0.5) * (0.6 + h)
+          + Math.sin(h * 5.2 + cph) * tr.half * 0.14 * cw;
+        const x = spine + off * tr.half * taper;
+        const y = lerp(tr.base, tr.top, h) + Math.abs(off) * tr.half * 0.20 * Math.sin(h * 5.1 + cph * 0.4);
+        pts.push({ x, y });
+      }
+      // 受光侧（朝向画面右上的月与星）用较亮的深青，背光侧用深蓝黑 → 体积感
+      // 色相只在"深蓝—深青"之间，不引入绿与锈，避免树读成草丛
+      const lit = clamp(0.5 + off * 0.5, 0, 1);
+      treeStrands.push({
+        tree: ti, pts, off, lit,
+        w: (7.0 + Math.abs(off) * 3.5 + rng(i * 7 + ti)() * 9.0) * (W / 1440),
+        ci: Math.min(6, Math.floor(rng(i * 13 + ti * 5)() * 4 + lit * 3)),
+        ph: rng(i * 31 + ti)() * 6.28,
+        amp: (0.26 + rng(i * 17 + ti * 3)() * 0.80) * (W / 1440),
+        al: 0.40 + rng(i * 23 + ti * 9)() * 0.48,
+        xs: new Float64Array(N + 1), ys: new Float64Array(N + 1)   // 复用，避免每帧分配
+      });
+    }
+  });
+
+  geometry = {
+    church, houses, trees,
+    ridgeA: ridge(ridgeA, 0, 1, 150), ridgeB: ridge(ridgeB, 0, 1, 150), ridgeC: ridge(ridgeC, 0, 1, 150),
+    rock: ridge(rockR, 0.855, 1.02, 40)
+  };
+}
+/** 墙体轮廓（各屋顶类型共用） */
+function wallOutline(hs) {
+  const l = hs.x - hs.w / 2, r = hs.x + hs.w / 2, b = hs.base, t = hs.base - hs.h;
+  if (hs.type === 'gable' || hs.type === 'steep') return [{ x: l, y: b }, { x: l, y: t }, { x: r, y: t }, { x: r, y: b }];
+  if (hs.type === 'hip') return [{ x: l, y: b }, { x: l + hs.w * 0.12, y: t }, { x: r - hs.w * 0.12, y: t }, { x: r, y: b }];
+  if (hs.type === 'barn') return [{ x: l, y: b }, { x: l, y: t + hs.h * 0.12 }, { x: hs.x, y: t }, { x: r, y: t + hs.h * 0.12 }, { x: r, y: b }];
+  return [{ x: l, y: b }, { x: l, y: t }, { x: r, y: t }, { x: r, y: b }];   // stepped
+}
+/** 屋顶脊线（用于厚涂斜笔与轮廓） */
+function roofOutline(hs) {
+  const l = hs.x - hs.w / 2, r = hs.x + hs.w / 2, t = hs.base - hs.h;
+  switch (hs.type) {
+    case 'gable': return [{ x: l - hs.w * .08, y: t + 1.5 }, { x: hs.x, y: t - hs.roofH }, { x: r + hs.w * .08, y: t + 1.5 }];
+    case 'steep': return [{ x: l - hs.w * .06, y: t + 1.5 }, { x: hs.x - hs.w * .10, y: t - hs.roofH }, { x: hs.x + hs.w * .10, y: t - hs.roofH }, { x: r + hs.w * .06, y: t + 1.5 }];
+    case 'hip': return [{ x: l - hs.w * .07, y: t + 1.5 }, { x: l + hs.w * .12, y: t - hs.roofH * .72 }, { x: r - hs.w * .12, y: t - hs.roofH * .72 }, { x: r + hs.w * .07, y: t + 1.5 }];
+    case 'barn': return [{ x: l - hs.w * .08, y: t + hs.h * .16 }, { x: l + hs.w * .16, y: t - hs.roofH * .55 }, { x: r - hs.w * .16, y: t - hs.roofH * .55 }, { x: r + hs.w * .08, y: t + hs.h * .16 }];
+    default: return [{ x: l - hs.w * .07, y: t + 1.5 }, { x: hs.x, y: t - hs.roofH }, { x: r + hs.w * .07, y: t + 1.5 }];
+  }
+}
+
+/* ── 烘焙：夜空（Layer1：渐变 + 厚涂底层结构 + 手绘纹理） ── */
+/** 锥形缎带：整条路径一次填充（两侧变宽的多边形），
+ *  避免逐段描边时圆头端点在节点处叠加出「珠链」亮斑 */
+function ribbonTaper(x, pts, wMax, col, a, closed) {
+  const n = pts.length;
+  if (n < 3) return;
+  const L = [], Rv = [];
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    const prof = closed ? 1 : Math.pow(Math.sin(Math.PI * Math.pow(t, 0.85)), 0.75);
+    const hw = Math.max(0.4, wMax * (0.32 + 0.68 * prof)) * 0.5;
+    const p = pts[i];
+    const q = pts[i === 0 ? (closed ? n - 1 : 1) : i - 1];
+    const r = pts[i === n - 1 ? (closed ? 0 : n - 2) : i + 1];
+    let dx = r.x - q.x, dy = r.y - q.y;
+    const dl = Math.hypot(dx, dy) || 1;
+    const nx = -dy / dl, ny = dx / dl;
+    L.push({ x: p.x + nx * hw, y: p.y + ny * hw });
+    Rv.push({ x: p.x - nx * hw, y: p.y - ny * hw });
+  }
+  x.beginPath();
+  x.moveTo(L[0].x, L[0].y);
+  for (let i = 1; i < n; i++) x.lineTo(L[i].x, L[i].y);
+  if (closed) x.lineTo(L[0].x, L[0].y);
+  for (let i = n - 1; i >= 0; i--) x.lineTo(Rv[i].x, Rv[i].y);
+  if (closed) x.lineTo(Rv[0].x, Rv[0].y);
+  x.closePath();
+  x.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${a})`;
+  x.fill();
+}
+/** 单支油画笔触（颜料块）：沿 ang 方向铺开，宽度按 prof 收尖，
+ *  curve 让整支笔弯曲，两端一粗一细 → 读作"下笔"而不是"线段" */
+function daub(x, px, py, ang, len, wid, curve, col, alpha, loaded) {
+  const n = 5;
+  /* loaded：饱笔——落笔钝、收笔提走。默认是两头收尖的逗号笔，
+     两种混用才不会让整幅厚涂读成同一种"羽毛"。 */
+  const prof = loaded ? [0.62, 1.00, 0.90, 0.54, 0.13] : [0.20, 0.70, 1.00, 0.62, 0.15];
+  const dx = Math.cos(ang), dy = Math.sin(ang), nx = -dy, ny = dx;
+  x.beginPath();
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1) - 0.5;
+    const bow = Math.sin(Math.PI * (t + 0.5)) * curve * wid * 2.1;
+    const cx = px + dx * len * t + nx * bow, cy = py + dy * len * t + ny * bow;
+    const hw = Math.max(0.35, wid * prof[i]) * 0.5;
+    const X = cx + nx * hw, Y = cy + ny * hw;
+    i ? x.lineTo(X, Y) : x.moveTo(X, Y);
+  }
+  for (let i = n - 1; i >= 0; i--) {
+    const t = i / (n - 1) - 0.5;
+    const bow = Math.sin(Math.PI * (t + 0.5)) * curve * wid * 2.1;
+    const cx = px + dx * len * t + nx * bow, cy = py + dy * len * t + ny * bow;
+    const hw = Math.max(0.35, wid * prof[i]) * 0.5;
+    x.lineTo(cx - nx * hw, cy - ny * hw);
+  }
+  x.closePath();
+  x.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+  x.fill();
+}
+/** 该点的「笔触脊线」强度：越靠近主带与涡环越亮 */
+function crestAt(x, y) {
+  const u = x / W, v = y / H;
+  let c = Math.exp(-Math.pow((v - bandY(u)) / 0.062, 2)) * 0.9;
+  for (let i = 0; i < 5; i++) {
+    const vo = vortices[i];
+    const d = Math.hypot(x - vo.cx, (y - vo.cy) / vo.squash);
+    c = Math.max(c, Math.exp(-Math.pow((d - vo.r * 0.72) / (vo.r * 0.42), 2)) * 1.0);
+  }
+  return clamp(c, 0, 1);
+}
+function bakeSky() {
+  const c = document.createElement('canvas'); c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
+  const x = c.getContext('2d'); x.scale(DPR, DPR);
+  const S = W / 1440;
+
+  /* ── 底色：深蓝→群青→地平线处提亮，比上一轮整体提高明度 ── */
+  const g = x.createLinearGradient(0, 0, 0, H * 0.80);
+  g.addColorStop(0, PAL.nightTop); g.addColorStop(0.34, PAL.nightMid);
+  g.addColorStop(0.70, PAL.nightLow); g.addColorStop(1, PAL.horizon);
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  const g2 = x.createLinearGradient(0, H * 0.40, 0, H * 0.76);
+  g2.addColorStop(0, 'rgba(126,176,212,0)'); g2.addColorStop(1, 'rgba(176,210,222,.26)');
+  x.fillStyle = g2; x.fillRect(0, H * 0.40, W, H * 0.38);
+
+  const R = rng(9001);
+  const skyH = H * 0.76;
+
+  /* ── ① 大结构：主带与涡体的宽笔厚涂（画面骨架，稳定不动） ── */
+  const bandPts = [];
+  for (let i = 0; i <= 110; i++) { const u = i / 110; bandPts.push({ x: u * W, y: bandY(u) * H }); }
+  /* 主带的宽笔：切成一段一段，绝不是一条通长的带子。
+     通长平行带在竖屏会读成一族同心弧（工程图感），断开后才是一笔一笔撂出来的。 */
+  const bandChunk = (pts, wid, col, al, jitter) => {
+    let i = 0;
+    while (i < pts.length - 6) {
+      const e = Math.min(pts.length, i + 7 + Math.floor(R() * 15));
+      const seg = pts.slice(i, e).map((p) => ({ x: p.x, y: p.y + (R() - 0.5) * jitter }));
+      ribbonTaper(x, seg, wid * (0.62 + R() * 0.85), col, al * (0.70 + R() * 0.75));
+      i = e + Math.floor(3 + R() * 11);
+    }
+  };
+  /* 带子的取色压在群青以下（≤4 号）：主带正好穿过大旋涡，
+     一旦用浅蓝宽笔，就在涡心撂出几片"亮色贴片"，读成图案而不是颜料。 */
+  for (let k = 0; k < 7; k++) {
+    const off = (k - 3) * H * 0.030;
+    const p = bandPts.map((q, i) => ({ x: q.x, y: q.y + off + Math.sin(i * 0.12 + k) * H * 0.007 }));
+    const dark = k % 3 === 0;
+    bandChunk(p, (13 + R() * 15) * S, dark ? PAL.stroke[1 + (k % 2)] : PAL.stroke[2 + (k % 3)],
+      dark ? 0.24 + R() * 0.14 : 0.13 + R() * 0.10, H * 0.017);
+  }
+  for (let k = 0; k < 5; k++) {
+    const p = bandPts.map((q, i) => ({ x: q.x, y: q.y + (k - 2) * H * 0.056 + Math.sin(i * 0.09 + k * 1.7) * H * 0.011 }));
+    bandChunk(p, (8 + R() * 9) * S, PAL.stroke[3 + (k % 2)], 0.09 + R() * 0.08, H * 0.022);
+  }
+  /* 涡体：螺旋臂为骨 + 少量错位开口弧（半径彼此不等距，避免"环笼"）*/
+  for (let i = 0; i < 5; i++) {
+    const vo = vortices[i];
+    const arms = i === 2 ? 9 : 7;
+    for (let k = 0; k < arms; k++) {
+      const phase = k / arms * Math.PI * 2 + i * 0.6 + R() * 0.6;
+      const pts = spiralPts(vo, vo.r * (0.14 + R() * 0.20), vo.r * (0.88 + R() * 0.60),
+        1.1 + R() * 0.9, phase, 0.8 + R() * 1.2);
+      const dark = k % 3 === 0;
+      /* 螺旋臂也断成几截：一条通长的臂是"线"，断成三四截才是"笔"。
+         截段再抖一下：不抖的话每一截都是光滑弧带，读成贴在涡上的亮片。 */
+      for (let q = 0; q < 3; q++) {
+        const s0 = Math.floor(R() * pts.length * 0.6);
+        const e0 = Math.min(pts.length, s0 + Math.floor(pts.length * (0.12 + R() * 0.18)));
+        const seg = pts.slice(s0, e0).map((p) => ({ x: p.x, y: p.y + (R() - 0.5) * H * 0.012 }));
+        ribbonTaper(x, seg, (6 + R() * 11) * S,
+          dark ? PAL.stroke[1 + (k % 3)] : PAL.stroke[2 + (k % 3)],
+          dark ? 0.22 + R() * 0.15 : 0.12 + R() * 0.11);
+      }
+    }
+    for (let k = 0; k < 7; k++) {
+      const rad = 0.50 + k * 0.31 + R() * 0.75;                   // 半径彼此不等距
+      const full = vortexLoopPts(vo, rad, R() * 40, 1.1 + R() * 1.3);
+      const s = Math.floor(R() * 22), e = s + Math.floor(full.length * (0.07 + R() * 0.13));
+      /* 取色压在中低明度：通长的高亮弧带会读成"剪纸贴片"，
+         只有把它当普通一笔颜料压暗，涡体才有厚薄而不是图案。 */
+      ribbonTaper(x, full.slice(s, Math.min(e, full.length)), (4 + R() * 9) * S,
+        PAL.stroke[1 + (k % 4)], 0.09 + R() * 0.11);
+    }
+    /* 涡心压暗：让旋涡有深度，而不是一团发光 */
+    for (let k = 0; k < 16; k++) {
+      const a = R() * 6.2832, rr = vo.r * (0.05 + R() * 0.30);
+      daub(x, vo.cx + Math.cos(a) * rr, vo.cy + Math.sin(a) * rr * vo.squash,
+        a + Math.PI / 2 * vo.spin, (10 + R() * 20) * S, (3 + R() * 7) * S, 0.6 + R() * 0.8,
+        PAL.stroke[R() < 0.6 ? 0 : 1], 0.16 + R() * 0.16);
+    }
+  }
+
+  /* ── ② 厚涂碎笔：按区域密度铺开，长短粗细与虚实都拉开 ── */
+  const total = Math.round(CONFIG.impastoBase * clamp(CONFIG.strokeDensity, 0.5, 1.8)
+    * clamp((W * H) / (1440 * 900), 0.60, 1.6));   // 竖屏天空占比更大，不能按面积线性缩减
+  let laid = 0, tries = 0;
+  while (laid < total && tries++ < total * 6) {
+    const px = R() * W, py = Math.pow(R(), 0.9) * skyH;
+    if (R() * 1.6 > densityAt(px, py)) continue;
+    laid++;
+    const f = fieldAt(px, py); const fx = f[0], fy = f[1];
+    const ang = Math.atan2(fy, fx) + (R() - 0.5) * 0.34;
+    const cr = crestAt(px, py);
+    const shape = R();
+    const len = (shape < 0.20 ? 6 + R() * 11 : shape < 0.60 ? 14 + R() * 28 : 30 + R() * 46) * S;
+    /* 长笔必须又窄又直：一笔撂出去半米还带大弯，就弯成了"钩子/贴片"，
+       短笔才允许胖和卷。 */
+    const long = shape >= 0.60;
+    const wid = len * (long ? 0.10 + R() * 0.12 : 0.16 + R() * 0.28);
+    const curl = (R() - 0.5) * (long ? 0.55 : 1.5);
+    /* 明度跟随脊线：脊上亮、槽内暗，形成明显的深浅层次。
+       上限压在湖蓝（6 号）——浅蓝只留给少数亮笔，天空才不会整片发白。 */
+    const ci = clamp(Math.round(0.7 + cr * 4.6 + (R() - 0.5) * 2.8), 0, 6);
+    daub(x, px, py, ang, len, wid, curl, PAL.stroke[ci], 0.15 + R() * 0.28 + cr * 0.14,
+      R() < 0.45);
+  }
+
+  /* ── ③ 深色沟槽：multiply 压出笔触之间的暗缝，避免平涂 ── */
+  x.globalCompositeOperation = 'multiply';
+  for (let i = 0; i < Math.round(total * 0.26); i++) {
+    const px = R() * W, py = R() * skyH;
+    const f = fieldAt(px, py);
+    const ang = Math.atan2(f[1], f[0]) + (R() - 0.5) * 0.3;
+    const len = (14 + R() * 34) * S;
+    daub(x, px, py, ang, len, len * (0.18 + R() * 0.22), (R() - 0.5) * 1.1, [14, 26, 62], 0.22 + R() * 0.30);
+  }
+  x.globalCompositeOperation = 'source-over';
+
+  /* ── ④ 亮笔与暖黄：数量严格受限，只作高光点缀，不发光成"线条" ── */
+  x.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < Math.round(total * 0.055); i++) {
+    const px = R() * W, py = R() * skyH;
+    const cr = crestAt(px, py);
+    if (R() > 0.25 + cr * 0.7) continue;
+    const f = fieldAt(px, py);
+    const ang = Math.atan2(f[1], f[0]) + (R() - 0.5) * 0.4;
+    const len = (10 + R() * 26) * S;
+    daub(x, px, py, ang, len, len * (0.14 + R() * 0.20), (R() - 0.5) * 1.2,
+      PAL.stroke[R() < 0.7 ? 7 : 8], 0.10 + R() * 0.20);
+  }
+  /* 星光附近的极少量暖黄反射 */
+  for (const s of stars) {
+    for (let i = 0; i < 7; i++) {
+      const a = R() * 6.2832, rr = s.glow * (1.05 + R() * 1.5);
+      const px = s.x + Math.cos(a) * rr, py = s.y + Math.sin(a) * rr * 0.9;
+      const f = fieldAt(px, py);
+      daub(x, px, py, Math.atan2(f[1], f[0]), (8 + R() * 16) * S, (2 + R() * 4) * S, (R() - .5) * 1.4,
+        PAL.stroke[R() < 0.5 ? 10 : 11], 0.08 + R() * 0.14);
+    }
+  }
+  x.globalCompositeOperation = 'source-over';
+
+  /* ── ⑤ 天地过渡：沿远山脊线上方压一排向下勾的笔，
+         与山脉里向上勾的笔咬合，地平线就不是"贴边" ── */
+  const rp = geometry.ridgeA;
+  for (let i = 0; i < rp.length - 1; i += 2) {
+    const p = rp[i];
+    if (p.y > skyH) continue;
+    for (let k = 0; k < 3; k++) {
+      const px = p.x + (R() - 0.5) * W * 0.02;
+      const py = p.y - (2 + R() * 22) - k * 6;
+      daub(x, px, py, Math.PI / 2 + (R() - 0.5) * 0.7, (10 + R() * 20) * S, (2.4 + R() * 4.4) * S,
+        (R() - 0.5) * 1.6, PAL.stroke[5 + Math.floor(R() * 3)], 0.12 + R() * 0.16);
+    }
+  }
+
+  /* ── ⑥ 画布颗粒烘进底层，省掉每帧全屏 overlay 混合 ── */
+  applyGrain(x, W, H, 0.17);
+  return c;
+}
+/** 把 512 图块平铺为画布织纹（soft-light），烘焙进各静态层 */
+function applyGrain(x, w, h, alpha) {
+  const pat = x.createPattern(grainTile, 'repeat');
+  x.save();
+  x.globalCompositeOperation = 'soft-light';
+  x.globalAlpha = alpha;
+  x.fillStyle = pat; x.fillRect(0, 0, w, h);
+  x.restore();
+}
+
+/* ── 烘焙：山脉（Layer4：远/中/近三层 + 右侧暗岩 + 成簇排线） ── */
+/** 冷暖局部偏移：同一层里有的坡面偏紫灰、有的偏青绿，避免整片一个色温 */
+function hillWarm(px) { return 0.5 + 0.5 * Math.sin(px / W * 2.6 + 1.1) * Math.cos(px / W * 1.3 - 0.4); }
+/** 成簇排线：先选「笔簇」中心，再在簇内连续下笔 → 疏密自然，不是均匀噪点。
+ *  dens 按层给：远山稀而淡（退得远），近山密而重（压得住）。 */
+function hillCluster(x, R, pts, depth, pal, S, skyLine, dens) {
+  const n = pts.length;
+  const clusters = Math.round(760 * dens * clamp((W * H) / (1440 * 900), 0.4, 1.8));
+  for (let ci = 0; ci < clusters; ci++) {
+    const k = Math.floor(R() * (n - 2));
+    const p = pts[k], q = pts[k + 1];
+    let tx = q.x - p.x, ty = q.y - p.y; const tl = Math.hypot(tx, ty) || 1;
+    tx /= tl; ty /= tl;
+    const off0 = Math.pow(R(), 1.5) * depth * H;
+    const cx0 = p.x + (R() - 0.5) * W * 0.05, cy0 = p.y + off0;
+    if (cy0 > H + 20) continue;
+    const cnt = 5 + Math.floor(R() * 12);
+    const wc = hillWarm(cx0);
+    for (let j = 0; j < cnt; j++) {
+      const px = cx0 + (R() - 0.5) * W * 0.034;
+      const py = cy0 + (R() - 0.5) * H * 0.022 + j * depth * H * 0.010;
+      if (py > H + 10) continue;
+      const near = clamp((py - p.y) / (depth * H), 0, 1);          // 越往下越暗（体积）
+      /* 低频明暗面：整片坡被几个大缓波分成就光面与背光面，笔触跟着明暗走
+         才读得出"体块"——均匀铺小笔只会变成一块噪点地毯（规格明令禁止的做法）。 */
+      const plane = 0.5 + 0.5 * Math.sin(px / W * 4.1 + py / H * 2.6 + wc * 1.4)
+        * Math.cos(px / W * 1.7 - py / H * 3.3);
+      const lr = R();
+      const len = (lr < 0.60 ? 11 + R() * 21 : lr < 0.86 ? 24 + R() * 34 : 44 + R() * 62)
+        * S * (1 - near * 0.22);
+      const wid = len * (0.10 + R() * 0.22) + 1.2 * S;
+      const ang = Math.atan2(ty, tx) + (R() - 0.5) * (lr > 0.86 ? 0.34 : 0.80);
+      const dark = R() < (0.56 - plane * 0.34);
+      const col = dark
+        ? [10 + wc * 14, 18 + wc * 12, 44 + wc * 10]
+        : pal[Math.min(pal.length - 1, Math.floor(R() * pal.length + plane * 1.25))];
+      const a = dark ? 0.18 + R() * 0.24
+        : (0.15 + R() * 0.25) * (1.16 - near * 0.5) * (0.72 + plane * 0.55);
+      daub(x, px, py, ang, len, wid, (R() - 0.5) * 1.3, col, a, R() < 0.40);
+      /* 山脊上方少量向上勾的亮笔：与天空笔触咬合，天地不脱节 */
+      if (skyLine && py < p.y + 8 && R() < 0.34) {
+        daub(x, px, py - 4, ang - Math.PI * 0.14, len * 0.85, wid * 0.95, 0.8 + R() * 0.9,
+          [126 + wc * 40, 168 + wc * 26, 212], 0.14 + R() * 0.16);
+      }
+    }
+  }
+}
+function bakeHills() {
+  const c = document.createElement('canvas'); c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
+  const x = c.getContext('2d'); x.scale(DPR, DPR);
+  const R = rng(5150);
+  const S = W / 1440;
+  x.lineCap = 'round';
+
+  /* 远山之上的空气透视：很淡的一条，不做硬边雾带 */
+  const haze = x.createLinearGradient(0, H * 0.52, 0, H * 0.66);
+  haze.addColorStop(0, 'rgba(60,108,158,0)');
+  haze.addColorStop(0.6, 'rgba(66,116,164,.20)');
+  haze.addColorStop(1, 'rgba(34,64,108,.06)');
+  x.fillStyle = haze; x.fillRect(0, H * 0.52, W, H * 0.15);
+
+  const layers = [
+    { pts: geometry.ridgeA, depth: 0.20, top: '#2f5c92', bot: '#1c3c6a', pal: [[46, 86, 140], [32, 64, 118], [62, 110, 160], [84, 132, 172]], seed: 0.0, rimA: 1.0, sky: true, dens: 0.50 },
+    { pts: geometry.ridgeB, depth: 0.17, top: '#22456f', bot: '#152c52', pal: [[38, 72, 122], [26, 52, 96], [56, 96, 146], [66, 90, 122]], seed: 2.1, rimA: 0.82, sky: false, dens: 0.95 },
+    { pts: geometry.ridgeC, depth: 0.20, top: '#16305a', bot: '#0b1c3e', pal: [[24, 48, 90], [16, 34, 66], [38, 70, 112], [30, 66, 72]], seed: 4.4, rimA: 0.62, sky: false, dens: 1.20 }
+  ];
+  for (const L of layers) {
+    x.beginPath(); x.moveTo(L.pts[0].x, L.pts[0].y);
+    for (const p of L.pts) x.lineTo(p.x, p.y);
+    x.lineTo(W, H); x.lineTo(0, H); x.closePath();
+    const g = x.createLinearGradient(0, L.pts[0].y, 0, H);
+    g.addColorStop(0, L.top); g.addColorStop(1, L.bot);
+    x.fillStyle = g; x.fill();
+    hillCluster(x, R, L.pts, L.depth, L.pal, S, L.sky, L.dens);
+    /* 脊线：断成一截一截的亮笔，明度随起伏走。
+       连续等粗的亮线是"工程线"的来源，这里刻意留缺口。 */
+    for (let i = 1; i < L.pts.length - 1; i += 2) {
+      if (R() < 0.20) continue;                          // 缺口
+      const p = L.pts[i], q = L.pts[i + 1];
+      const ang = Math.atan2(q.y - p.y, q.x - p.x);
+      const t = 0.5 + 0.5 * Math.sin(i * 0.31 + L.seed) * Math.cos(i * 0.11 + L.seed * 1.7);
+      daub(x, (p.x + q.x) / 2, (p.y + q.y) / 2 + 0.8, ang,
+        Math.hypot(q.x - p.x, q.y - p.y) * 2.1,
+        (0.9 + t * 1.9) * S + 0.4, (R() - 0.5) * 0.8,
+        [142 + t * 48, 184 + t * 28, 224], (0.08 + 0.17 * t) * L.rimA);
+    }
+  }
+  /* 右侧暗岩：压住画面右缘，给纵深一个重音。
+     底宽顶窄的"肩"，左界是一条起伏斜线——竖直硬边会读成矩形或帆。 */
+  const rk = geometry.rock;
+  x.beginPath(); x.moveTo(rk[0].x, rk[0].y);
+  for (const p of rk) x.lineTo(p.x, p.y);
+  x.lineTo(W, H * 0.96);
+  for (let i = 26; i >= 0; i--) {
+    const k = i / 26;                                   // 1 底 → 0 顶
+    const xl = lerp(rk[0].x, W * 0.715, Math.pow(k, 0.8))
+      + W * 0.018 * Math.sin(k * 5.3 + 1.1) * k;
+    x.lineTo(xl, lerp(rk[0].y + 6, H * 0.96, k));
+  }
+  x.closePath();
+  const rg = x.createLinearGradient(W * 0.74, H * 0.55, W, H * 0.92);
+  rg.addColorStop(0, '#16305a'); rg.addColorStop(1, '#071429');
+  x.fillStyle = rg; x.fill();
+  for (let i = 0; i < 520; i++) {
+    const px = W * (0.725 + R() * 0.275), py = H * (0.52 + R() * 0.44);
+    daub(x, px, py, -0.42 + (R() - 0.5) * 1.0, (9 + R() * 26) * S, (1.6 + R() * 4.2) * S,
+      (R() - 0.5) * 1.4, R() < 0.58 ? [10, 22, 46] : [42, 70, 114], 0.15 + R() * 0.26);
+  }
+  /* 左界用身后山色打散：硬直边会读成一块帆，被咬过的边才像山岩 */
+  for (let i = 26; i >= 0; i--) {
+    const k = i / 26;
+    const xl = lerp(rk[0].x, W * 0.715, Math.pow(k, 0.8)) + W * 0.018 * Math.sin(k * 5.3 + 1.1) * k;
+    const yl = lerp(rk[0].y + 6, H * 0.96, k);
+    for (let j = 0; j < 11; j++) {
+      daub(x, xl + R() * W * 0.026, yl + (R() - 0.5) * H * 0.034,
+        -0.30 + (R() - 0.5) * 0.9, (13 + R() * 28) * S, (3 + R() * 7) * S,
+        (R() - 0.5) * 1.2, R() < 0.5 ? [40, 76, 124] : [58, 96, 142], 0.34 + R() * 0.38);
+    }
+  }
+
+  /* 近景田地的长笔：横向蜿蜒，与原画下方的条带笔意一致 */
+  for (let band = 0; band < 4; band++) {
+    const yBase = 0.800 + band * 0.052;
+    for (let i = 0; i < 150; i++) {
+      const u = R();
+      const px = u * W;
+      const py = (yBase + 0.016 * Math.sin(u * 5.1 + band * 2.2) + 0.008 * Math.sin(u * 11.3 + band)) * H
+        + (R() - 0.5) * H * 0.020;
+      const wc = hillWarm(px);
+      const warm = R() < 0.14;
+      const col = warm ? [112 + wc * 40, 96 + wc * 30, 52 + wc * 24] : [26 + wc * 22, 54 + wc * 26, 92 + wc * 26];
+      daub(x, px, py, (R() - 0.5) * 0.28, (16 + R() * 46) * S, (1.6 + R() * 4.2) * S,
+        (R() - 0.5) * 0.9, col, 0.12 + R() * 0.22);
+    }
+  }
+  /* 田埂 / 小路的蜿蜒亮线：断成短笔，给前景结构但不出现连续细线 */
+  for (let w = 0; w < 3; w++) {
+    const yBase = 0.818 + w * 0.056;
+    for (let i = 0; i < 90; i += 3) {
+      if (R() < 0.26) continue;
+      const u = i / 90, u2 = (i + 3) / 90;
+      const py = (yBase + 0.020 * Math.sin(u * 5.1 + w * 2.2) + 0.010 * Math.sin(u * 11.3 + w)) * H;
+      const py2 = (yBase + 0.020 * Math.sin(u2 * 5.1 + w * 2.2) + 0.010 * Math.sin(u2 * 11.3 + w)) * H;
+      const wc = hillWarm(u * W);
+      daub(x, u * W, py, Math.atan2(py2 - py, (u2 - u) * W), (u2 - u) * W * 1.7,
+        (2.2 - w * 0.5) * S + 0.5, (R() - 0.5) * 0.5,
+        [120 + wc * 40, 158 + wc * 26, 200], 0.10 - w * 0.02 + R() * 0.05);
+    }
+  }
+  applyGrain(x, W, H, 0.13);
+  return c;
+}
+/* ── 烘焙：村庄（Layer5 体块：实色墙 + 屋顶面 + 灌木 + 烟囱） ── */
+function polyPath(x, pts) {
+  x.beginPath(); x.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) x.lineTo(pts[i].x, pts[i].y);
+  x.closePath();
+}
+function bakeVillage() {
+  const c = document.createElement('canvas'); c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
+  const x = c.getContext('2d'); x.scale(DPR, DPR);
+  const R = rng(3131);
+  const S = W / 1440;
+  x.lineCap = 'round';
+  const ch = geometry.church;
+
+  /* 教堂：体块 + 尖塔（原画里它是画面唯一的高光白，但这里让它保持冷白蓝，
+     避免抢过星空；钟面单独给一点暖色） */
+  const cw = ch.w, cl = ch.x - cw / 2, ct = ch.top, cb = ch.body;
+  x.fillStyle = 'rgba(4,9,24,.42)';
+  x.beginPath(); x.ellipse(ch.x, cb + cw * 0.10, cw * 0.86, cw * 0.14, 0, 0, 6.2832); x.fill();
+  x.fillStyle = '#37527f'; x.fillRect(cl, ct, cw, cb - ct);
+  for (let i = 0; i < 22; i++) {                              // 墙面横排笔
+    const yy = ct + R() * (cb - ct);
+    x.strokeStyle = R() < 0.4 ? `rgba(14,28,56,${0.16 + R() * 0.2})` : `rgba(${130 + R() * 60 | 0},${160 + R() * 50 | 0},${196},${0.10 + R() * 0.16})`;
+    x.lineWidth = 0.9 + R() * 2.0;
+    x.beginPath(); x.moveTo(cl - 2, yy); x.quadraticCurveTo(ch.x, yy + (R() - .5) * 3, cl + cw + 2, yy); x.stroke();
+  }
+  polyPath(x, [{ x: cl - cw * .06, y: ct + 2 }, { x: ch.x, y: ct - cw * .52 }, { x: cl + cw * 1.06, y: ct + 2 }]);
+  x.fillStyle = '#1b2f4f'; x.fill();
+  x.strokeStyle = 'rgba(150,190,226,.22)'; x.lineWidth = 1.1; x.stroke();
+  /* 尖塔 */
+  polyPath(x, [{ x: ch.x - ch.sw / 2, y: ct }, { x: ch.x, y: ch.spire }, { x: ch.x + ch.sw / 2, y: ct }]);
+  const sg = x.createLinearGradient(ch.x - ch.sw, ct, ch.x + ch.sw, ch.spire);
+  sg.addColorStop(0, '#2a4270'); sg.addColorStop(1, '#4a6b9a');
+  x.fillStyle = sg; x.fill();
+  x.strokeStyle = 'rgba(196,220,242,.34)'; x.lineWidth = 1.1 * S + .4; x.stroke();
+  for (let i = 0; i < 12; i++) {                               // 塔身斜笔
+    const yy = ct - R() * (ct - ch.spire);
+    const k = (ct - yy) / (ct - ch.spire);
+    const hw = ch.sw / 2 * (1 - k);
+    x.strokeStyle = `rgba(${120 + R() * 70 | 0},${150 + R() * 60 | 0},196,${0.10 + R() * 0.16})`;
+    x.lineWidth = 0.8 + R() * 1.4;
+    x.beginPath(); x.moveTo(ch.x - hw, yy); x.lineTo(ch.x + hw, yy - 3); x.stroke();
+  }
+  x.strokeStyle = 'rgba(214,226,242,.5)'; x.lineWidth = 1.2 * S + .4;
+  x.beginPath(); x.moveTo(ch.x, ch.spire); x.lineTo(ch.x, ch.spire - 0.020 * H); x.stroke();
+  x.fillStyle = 'rgba(226,200,124,.62)';
+  x.beginPath(); x.arc(ch.x, ch.spire + (ct - ch.spire) * 0.52, Math.max(1.8, ch.sw * 0.36), 0, 6.2832); x.fill();
+
+  /* 房舍：实色墙 + 屋顶面 + 手绘笔触 + 接地阴影 + 远处空气透视 */
+  for (const hs of geometry.houses) {
+    const l = hs.x - hs.w / 2, r = hs.x + hs.w / 2, t = hs.base - hs.h;
+    const far = 1 - hs.z;
+    x.fillStyle = `rgba(4,9,24,${0.26 + hs.z * 0.26})`;
+    x.beginPath();
+    x.ellipse(hs.x, hs.base + hs.h * 0.04, hs.w * 0.78, Math.max(1.6, hs.h * 0.10), 0, 0, 6.2832);
+    x.fill();
+    /* 墙：不透明渐变体块 */
+    polyPath(x, hs.wallPts);
+    const g = x.createLinearGradient(0, t, 0, hs.base);
+    g.addColorStop(0, PAL.wall[hs.ci]);
+    g.addColorStop(1, hs.z > 0.6 ? '#16233f' : '#1c2d50');
+    x.fillStyle = g; x.fill();
+    x.save(); polyPath(x, hs.wallPts); x.clip();
+    for (let i = 0; i < 11; i++) {                             // 横排砖笔
+      const yy = t + R() * hs.h;
+      x.strokeStyle = R() < 0.45
+        ? `rgba(10,18,40,${0.14 + R() * 0.18})`
+        : `rgba(${126 + R() * 62 | 0},${152 + R() * 54 | 0},${198},${0.08 + R() * 0.14})`;
+      x.lineWidth = 0.8 + R() * 1.8;
+      x.beginPath(); x.moveTo(l - 2, yy); x.quadraticCurveTo(hs.x, yy + (R() - .5) * 2.6, r + 2, yy); x.stroke();
+    }
+    for (let i = 0; i < 5; i++) {                              // 竖笔：木纹与阴影
+      const xx = l + R() * hs.w;
+      x.strokeStyle = `rgba(8,15,36,${0.12 + R() * 0.16})`;
+      x.lineWidth = 0.7 + R() * 1.3;
+      x.beginPath(); x.moveTo(xx, t); x.lineTo(xx + (R() - .5) * 2, hs.base); x.stroke();
+    }
+    if (far > 0.45) {                                          // 远房罩一层空气
+      x.fillStyle = `rgba(46,84,132,${far * 0.34})`;
+      x.fillRect(l - 4, t - hs.roofH - 4, hs.w + 8, hs.base - t + hs.roofH + 8);
+    }
+    x.restore();
+    /* 屋顶：先铺实色面，再顺坡向排瓦笔 */
+    polyPath(x, hs.roofPts);
+    const t2 = t - hs.roofH;
+    const rg = x.createLinearGradient(l, t2, r, t);
+    rg.addColorStop(0, PAL.roof[hs.ri]);
+    rg.addColorStop(1, hs.ri % 2 ? '#2f2436' : '#182a44');
+    x.fillStyle = rg; x.fill();
+    x.save(); polyPath(x, hs.roofPts); x.clip();
+    const rp = hs.roofPts;
+    for (let i = 0; i < 14; i++) {
+      const k = R() * (rp.length - 1), ki = Math.floor(k);
+      const a = rp[ki], b = rp[Math.min(rp.length - 1, ki + 1)];
+      const px = lerp(a.x, b.x, k - ki), py = lerp(a.y, b.y, k - ki);
+      const ang = Math.atan2(hs.base - py, hs.x - px) + (R() - 0.5) * 0.5;
+      daub(x, px + (R() - .5) * hs.w * 0.5, py + R() * hs.h * 0.4, ang,
+        (4 + R() * 10) * S * (hs.w / (0.03 * W)), (1.2 + R() * 2.2) * S, (R() - .5) * 0.8,
+        R() < 0.5 ? [182, 200, 226] : [12, 22, 44], 0.10 + R() * 0.20);
+    }
+    x.restore();
+    /* 轮廓：用深色而不是白线，避免"贴纸描边" */
+    polyPath(x, hs.wallPts);
+    x.strokeStyle = `rgba(8,16,36,${0.34 + hs.z * 0.2})`; x.lineWidth = 1.0; x.stroke();
+    polyPath(x, hs.roofPts);
+    x.strokeStyle = `rgba(176,200,228,${0.10 + hs.z * 0.10})`; x.lineWidth = 0.8; x.stroke();
+  }
+  /* 烟囱：小体块，位置由 buildGeometry 决定（烟雾在动态层画） */
+  for (const cm of chimneys) {
+    x.fillStyle = 'rgba(6,12,30,.5)';
+    x.fillRect(cm.x - cm.w / 2 + 1, cm.y - cm.h, cm.w, cm.h + 2);
+    x.fillStyle = '#2a3a5c';
+    x.fillRect(cm.x - cm.w / 2, cm.y - cm.h, cm.w, cm.h);
+    x.fillStyle = 'rgba(196,214,236,.22)';
+    x.fillRect(cm.x - cm.w / 2, cm.y - cm.h, cm.w * 0.34, cm.h);
+  }
+  /* 屋间灌木：原画里村庄被一团团蓝绿灌木包住，这一步把房子"种进"地景 */
+  const bushes = Math.round(64 * clamp((W * H) / (1440 * 900), 0.4, 1.6));
+  for (let i = 0; i < bushes; i++) {
+    const u = 0.28 + R() * 0.66;
+    const depth = R();
+    const bx = u * W + (R() - 0.5) * W * 0.03;
+    const by = lerp(0.815, 0.995, depth) * H;
+    const br = (0.008 + R() * 0.018) * W * lerp(0.75, 1.3, depth);
+    const teal = R() < 0.26;                              // 以蓝黑为主，蓝绿只是少量偏色
+    x.fillStyle = teal ? `rgba(13,36,42,${0.24 + R() * 0.20})` : `rgba(11,25,52,${0.22 + R() * 0.20})`;
+    x.beginPath(); x.ellipse(bx, by - br * 0.30, br, br * 0.78, 0, 0, 6.2832); x.fill();
+    for (let k = 0; k < 16; k++) {                       // 团内的卷笔
+      const a = R() * 6.2832, rr = br * (0.2 + R() * 0.85);
+      daub(x, bx + Math.cos(a) * rr, by - br * 0.3 + Math.sin(a) * rr * 0.7,
+        a * 0.4 - 0.6, (5 + R() * 12) * S, (1.4 + R() * 2.6) * S, 0.9 + R() * 1.2,
+        teal ? (R() < 0.5 ? [18, 46, 50] : [32, 66, 66]) : (R() < 0.5 ? [20, 40, 78] : [52, 88, 132]),
+        0.13 + R() * 0.22);
+    }
+  }
+  /* 前景草垛 / 田埂笔触 */
+  for (let i = 0; i < 900; i++) {
+    const px = R() * W, py = H * (0.845 + Math.pow(R(), 1.4) * 0.17);
+    const warm = R() < 0.16;
+    x.strokeStyle = warm
+      ? `rgba(${150 + R() * 60 | 0},${120 + R() * 50 | 0},${54 + R() * 40 | 0},${0.08 + R() * 0.14})`
+      : `rgba(${26 + R() * 44 | 0},${50 + R() * 46 | 0},${84 + R() * 54 | 0},${0.10 + R() * 0.22})`;
+    x.lineWidth = 0.9 + R() * 2.4;
+    const ln = (8 + R() * 24) * S;
+    const up = 4 + R() * 9;
+    x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + ln * .5, py - up, px + ln, py - 1); x.stroke();
+  }
+  applyGrain(x, W, H, 0.11);
+  return c;
+}
+/* ── 画布颗粒 + 织纹（油画纹理）：512 无缝图块 + pattern ── */
+const TILE = 512;
+function bakeGrain() {
+  const c = document.createElement('canvas'); c.width = c.height = TILE;
+  const x = c.getContext('2d');
+  const R = rng(60606);
+  const img = x.createImageData(TILE, TILE);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = 128 + (R() * 30 - 15);
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  x.putImageData(img, 0, 0);
+  // 亚麻画布织纹（4px 周期，图块可无缝平铺）
+  x.globalAlpha = 0.14; x.strokeStyle = 'rgba(128,128,128,1)'; x.lineWidth = 1;
+  for (let gx = 0; gx < TILE; gx += 4) { x.beginPath(); x.moveTo(gx + 0.5, 0); x.lineTo(gx + 0.5, TILE); x.stroke(); }
+  for (let gy = 0; gy < TILE; gy += 4) { x.beginPath(); x.moveTo(0, gy + 0.5); x.lineTo(TILE, gy + 0.5); x.stroke(); }
+  x.globalAlpha = 1;
+  return c;
+}
+
+/* ══════════════════════════════════════════════════════════
+   5. 前景树（笔触一次性烘焙 + 每帧竖条错位）
+   ══════════════════════════════════════════════════════════ */
+/* 前景树：整棵树的笔触一次性烘到位图上，每帧只按竖条做几像素的错位。
+   逐笔重绘要四千次 fill，帧预算撑不住；竖条错位既省，又读得出"风穿过树冠"。 */
+function bakeTree() {
+  const c = document.createElement('canvas');
+  c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
+  const x = c.getContext('2d'); x.scale(DPR, DPR);
+  x.lineCap = 'round';
+  const K = W / 1440;
+  const hash = (a) => { const z = Math.sin(a * 127.1 + 311.7) * 43758.5453; return z - Math.floor(z); };
+  const taperAt = (h) => Math.pow(1 - h, 0.42) * (0.80 + 0.34 * Math.sin(h * 6.2))
+    * (1 + 0.30 * Math.exp(-Math.pow((h - 0.30) / 0.19, 2)));
+
+  for (let ti = 0; ti < geometry.trees.length; ti++) {
+    const tr = geometry.trees[ti];
+    x.beginPath();
+    const L = [], Rt = [];
+    for (let k = 0; k <= 22; k++) {
+      const h = k / 22;
+      const tp = taperAt(h);
+      const spine = tr.x + tr.lean * W * Math.pow(h, 1.7) + tr.curl * W * Math.sin(h * 3.4);
+      const y = lerp(tr.base, tr.top, h);
+      L.push({ x: spine - tr.half * tp, y });
+      Rt.push({ x: spine + tr.half * tp * 0.94, y });
+    }
+    x.moveTo(L[0].x, L[0].y);
+    for (const p of L) x.lineTo(p.x, p.y);
+    for (let i = Rt.length - 1; i >= 0; i--) x.lineTo(Rt[i].x, Rt[i].y);
+    x.closePath();
+    /* 剪影位置与形状沿用上一轮，只把"纯黑"换成压暗的深蓝：树是重音但不是洞 */
+    const g = x.createLinearGradient(tr.x - tr.half, tr.top, tr.x + tr.half * 0.6, tr.base);
+    g.addColorStop(0, 'rgba(21,48,76,.90)');
+    g.addColorStop(0.42, 'rgba(12,29,54,.93)');
+    g.addColorStop(1, 'rgba(7,16,32,.96)');
+    x.fillStyle = g; x.fill();
+    x.save(); polyPath(x, L.concat(Rt.slice().reverse())); x.clip();
+    const R2 = rng(313 + ti * 17);
+    for (let i = 0; i < 420; i++) {
+      const hh = R2(), rx = R2() - 0.5, ry = R2(), ag = R2(), ln = R2(), cc = R2(), aa = R2();
+      const spine = tr.x + tr.lean * W * Math.pow(hh, 1.7) + tr.curl * W * Math.sin(hh * 3.4);
+      const px = spine + rx * tr.half * 2.1 * taperAt(hh);
+      const py = lerp(tr.base, tr.top, hh) + (ry - 0.5) * (tr.base - tr.top) * 0.05;
+      const len = (12 + ln * 30) * K;
+      /* 受光侧（画面右）挑亮蓝，背光侧挑深蓝黑 → 用明暗差读出体积，而不是靠描边 */
+      const ci = rx > 0 ? 4 + Math.floor(cc * 4) : Math.floor(cc * 4);
+      daub(x, px, py, -Math.PI / 2 + (ag - 0.5) * 0.95, len, len * (0.26 + cc * 0.30),
+        (cc - 0.5) * 1.5, PAL.tree[Math.min(PAL.tree.length - 1, ci)], 0.20 + aa * 0.44);
+    }
+    /* 少量横斜的破笔：把纵向的节奏打断，树才不像一绺一绺的头发 */
+    for (let i = 0; i < 130; i++) {
+      const hh = R2(), rx = R2() - 0.5, ag = R2(), cc = R2(), aa = R2();
+      const spine = tr.x + tr.lean * W * Math.pow(hh, 1.7) + tr.curl * W * Math.sin(hh * 3.4);
+      const px = spine + rx * tr.half * 2.0 * taperAt(hh);
+      const py = lerp(tr.base, tr.top, hh);
+      const len = (10 + cc * 26) * K;
+      daub(x, px, py, (ag < 0.5 ? -1 : 1) * (0.85 + R2() * 0.7), len, len * (0.22 + aa * 0.22),
+        (aa - 0.5) * 1.3, PAL.tree[Math.min(PAL.tree.length - 1, Math.floor(cc * PAL.tree.length))],
+        0.14 + aa * 0.26);
+    }
+    x.restore();
+  }
+
+  /* 笔束：沿剪影的纵向短笔，与星云同一套笔形（逗号与短条），不再是通长的叶片 */
+  for (let si = 0; si < treeStrands.length; si++) {
+    const s = treeStrands[si];
+    const n = s.pts.length;
+    for (let k = 1; k < n - 1; k++) {
+      if (hash(si * 113 + k * 29) < 0.16) continue;              // 少量留白，笔不排满
+      const a2 = s.pts[k + 1].x - s.pts[k].x, b2 = s.pts[k + 1].y - s.pts[k].y;
+      const h0 = k / (n - 1);
+      const ang = Math.atan2(b2, a2) + (hash(si * 13 + k * 7) - 0.5) * 0.60;
+      const len = s.w * (1.4 + hash(si * 31 + k * 3) * 2.6);
+      const wid = s.w * (0.30 + hash(si * 57 + k * 11) * 0.40) * (0.55 + 0.45 * Math.sin(Math.PI * h0));
+      daub(x, s.pts[k].x, s.pts[k].y, ang, len, wid, (hash(si * 17 + k) - 0.5) * 1.8,
+        PAL.tree[s.ci], s.al * (0.40 + hash(si * 91 + k * 5) * 0.46));
+    }
+  }
+
+  /* 边缘的少量冷高光：把树从背景里"剥"出来，同时不产生描边发光感 */
+  for (const tr of geometry.trees) {
+    for (let k = 0; k < 20; k++) {
+      const h = 0.06 + (k / 20) * 0.92;
+      const spine = tr.x + tr.lean * W * Math.pow(h, 1.7) + tr.curl * W * Math.sin(h * 3.4 + 0.3);
+      const y = lerp(tr.base, tr.top, h);
+      const px = spine + tr.half * taperAt(h) * 0.96;
+      const len = (10 + 16 * (1 - h)) * K;
+      daub(x, px, y, -Math.PI / 2 + 0.18, len, len * 0.26, 0.7,
+        [52, 104, 124], 0.10 + 0.16 * (1 - h));
+    }
+  }
+  return c;
+}
+function drawTree(alpha) {
+  if (alpha <= 0.004) return;
+  if (!treeCv) treeCv = bakeTree();
+  const t = clock, K = W / 1440, SL = 26, sw = W / SL;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = alpha;
+  for (let i = 0; i < SL; i++) {
+    const f = i / (SL - 1);
+    const dx = (Math.sin(t * 0.46 + i * 0.62) * 0.62 + Math.sin(t * 0.27 + i * 1.31) * 0.38)
+      * 3.4 * K * (0.35 + 0.65 * Math.sin(Math.PI * f));
+    const sx = Math.round(i * sw * DPR);
+    ctx.drawImage(treeCv, sx, 0, Math.round(sw * DPR) + 2, treeCv.height,
+      i * sw - dx, 0, sw + 2 / DPR, H);
+  }
+  ctx.globalAlpha = 1;
+}
+/* ══════════════════════════════════════════════════════════
+   6. 光粒子 / 暖窗
+   ══════════════════════════════════════════════════════════ */
+/* ── 光点：少数几个"骑在星云上的光"，不是粒子雨 ───────────── */
+function buildMotes() {
+  const R = rng(1221);
+  motes = [];
+  for (let i = 0; i < 140; i++) {
+    let x = 0, y = 0, tries = 0;
+    do { x = R() * W; y = R() * H * 0.66; tries++; }
+    while (tries < 7 && densityAt(x, y) < 0.80);            // 只落在主带与涡环附近
+    motes.push({
+      x, y,
+      r: (0.8 + R() * 1.5) * (W / 1440),
+      a: 0.09 + R() * 0.20,
+      per: 5.5 + R() * 13.5, ph: R() * 6.28,
+      sp: 0.30 + R() * 0.85
+    });
+  }
+}
+function drawMotes(alpha) {
+  if (alpha <= 0.004) return;
+  const t = clock, n = Math.min(motes.length, CONFIG.particleCount);
+  const step = 0.016 * CONFIG.flowSpeed;
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < n; i++) {
+    const m = motes[i];
+    const f = fieldAt(m.x, m.y);
+    /* 只做流线推移：不整体上飘、不随机重生 ⇒ 光点是"沿星云缓慢移动"，
+       且轨迹与笔触同向，循环回原处 */
+    m.x += f[0] * m.sp * step * 0.55;
+    m.y += f[1] * m.sp * step * 0.55;
+    if (m.x > W + 14) m.x -= W + 28; else if (m.x < -14) m.x += W + 28;
+    if (m.y > H * 0.74 || m.y < -14) m.y = H * 0.30;
+    const puls = 0.55 + 0.45 * Math.sin(t / m.per * 6.2832 + m.ph);
+    const rr = m.r * (2.2 + puls * 1.1);
+    ctx.globalAlpha = alpha * m.a * puls;
+    ctx.drawImage(coreSpr, m.x - rr, m.y - rr, rr * 2, rr * 2);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ── 炊烟：几柱很慢的烟，只在较近人家的烟囱上 ─────────────── */
+function drawSmoke(alpha) {
+  if (alpha <= 0.004 || !chimneys.length) return;
+  const t = clock, K = W / 1440;
+  ctx.globalCompositeOperation = 'source-over';
+  for (const c of chimneys) {
+    const per = 13 + c.rate * 8;                            // 一柱烟的周期：很慢
+    for (let k = 0; k < 3; k++) {
+      const a = (t / per + k / 3 + c.ph) % 1;               // 0 出生 → 1 消散
+      const rise = a * H * (0.085 + 0.045 * c.z);
+      const sway = Math.sin(t * 0.17 + c.ph * 3 + k * 2.1) * (5 + a * 24) * K;
+      const rr = (4.5 + a * 26) * K * (0.7 + c.z * 0.55);
+      const al = Math.sin(Math.PI * a) * 0.20;
+      if (al <= 0.006) continue;
+      ctx.globalAlpha = alpha * al;
+      ctx.drawImage(puffSpr, c.x - rr + sway, c.y - rise - rr * 0.9, rr * 2, rr * 2);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ── 暖窗：先落"颜料"，再叠很薄的一层空气柔光 ─────────────── */
+function drawWindows(alpha) {
+  if (alpha <= 0.004) return;
+  const t = clock;
+  ctx.globalCompositeOperation = 'source-over';
+  for (const w of windows) {
+    let a = w.base * (0.76 + 0.14 * Math.sin(t / w.p1 * 6.2832 + w.ph)
+      + 0.10 * Math.sin(t / w.p2 * 6.2832 + w.ph * 2.3));
+    if (w.dip) {                                            // 偶尔暗一下：不规律呼吸
+      const k = (t / w.dip + w.ph) % 1;
+      a *= lerp(1, 0.45, Math.max(0, 1 - Math.abs(k - 0.5) * 6));
+    }
+    a = clamp(a, 0, 1) * alpha;
+    w._a = a;
+    if (a <= 0.004) continue;
+    /* 色温随 w.warm 变化：暖黄 ↔ 暖橙，一窗一色，不是一片同色贴片 */
+    const g2 = Math.round(lerp(178, 228, w.warm)), b2 = Math.round(lerp(92, 152, w.warm));
+    ctx.globalAlpha = a * 0.92;
+    ctx.fillStyle = `rgb(255,${g2},${b2})`;
+    if (w.round) { ctx.beginPath(); ctx.arc(w.x, w.y, w.w, 0, 6.2832); ctx.fill(); }
+    else ctx.fillRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h);
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  for (const w of windows) {
+    const a = w._a;
+    if (!a || a <= 0.004) continue;
+    const g = Math.max(5, w.w * 2.4);
+    ctx.globalAlpha = a * 0.26 * w.warm;
+    ctx.drawImage(glowSpr, w.x - g, w.y - g, g * 2, g * 2);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ══════════════════════════════════════════════════════════
+   7. 苏醒：笔触显影（不画线框，也不做图层交叉淡入）
+   —— 每帧只把「一套完整场景」画进离屏画布，再用不断累积的笔触
+      遮罩裁出已经画上画布的部分。遮罩只增不减 ⇒ 结构上不可能出现
+      重影；转场一结束遮罩通道整个弃用，稳态直接画同一套场景，
+      两边像素一致，所以交接处不会"跳"。
+   ══════════════════════════════════════════════════════════ */
+let groundCv = null;                       // 上了深蓝底料的画布
+let treeCv = null;                         // 前景树：笔触一次性烘焙
+const WHITE = [255, 255, 255];
+const M = { dabs: [], i: 0, t: -1 };       // 落笔计划 + 游标
+
+/** 底料画布：苏醒阶段 1 只有它——横刮开的深蓝底料 + 亚麻织纹 */
+function bakeGround() {
+  const c = document.createElement('canvas');
+  c.width = cv.width; c.height = cv.height;
+  const x = c.getContext('2d');
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const g = x.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#050f26'); g.addColorStop(0.48, '#0a1c3e'); g.addColorStop(1, '#0e2749');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  const R = rng(555);
+  for (let i = 0; i < 260; i++) {
+    daub(x, R() * W, R() * H, (R() - 0.5) * 0.07, W * (0.16 + R() * 0.46),
+      9 + R() * 24, (R() - 0.5) * 0.5, R() < 0.5 ? [5, 14, 34] : [17, 36, 70],
+      0.05 + R() * 0.10);
+  }
+  if (grainTile) {
+    x.globalCompositeOperation = 'soft-light';
+    x.globalAlpha = 0.9; x.fillStyle = x.createPattern(grainTile, 'repeat');
+    x.fillRect(0, 0, W, H);
+    x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
+  }
+  return c;
+}
+
+/** 落笔计划：每支笔一个绝对时刻并排序。
+ *  帧率只决定"每帧落几支"，不决定画面构成 ⇒ 快慢机看到的画是一样的。 */
+function buildMask() {
+  const R = rng(6161), K = W / 1440, dabs = [];
+  const add = (x, y, ang, len, wid, curve, at, a) =>
+    dabs.push({ x, y, ang, len, wid, curve, at: clamp(at, 0, P6), a: a === undefined ? 1 : a });
+  const vx = vortices[0].cx, vy = vortices[0].cy;
+  const out = (px, py) => clamp(Math.hypot(px - vx, (py - vy) / 0.8) / (W * 0.60), 0, 1);
+
+  /* ── 阶段 2（P2→P3）：山脉 → 村庄 → 前景树 ─────────────── */
+  const slopeAt = (u) => (ridgeA(clamp(u + 0.01, 0, 1)) - ridgeA(clamp(u - 0.01, 0, 1))) * H / (0.02 * W);
+
+  /* ── 铺底 block-in：先用成片半透的宽笔把"哪里有什么"占住 ──────
+     油画是先薄薄铺一大片暗色定形体，再往上摞笔。少了这一步，
+     苏醒期只剩散落的亮笔，读不出山势、云团和树的体块——就是"撒纸片"。
+     遮罩里这些大笔只给 0.55 的不透明度：叠几笔才够实，单笔边缘是虚的，
+     才不会在画面上留下硬边的"撕纸形"。 */
+  const SOFT = 0.55;
+  for (let i = 0; i < 340; i++) {                       // 天空：由大旋涡向外铺
+    const px = R() * W, py = R() * H * 0.74;
+    add(px, py, (R() - 0.5) * 0.7, W * (0.06 + R() * 0.11), H * (0.030 + R() * 0.045),
+      (R() - 0.5) * 0.5,
+      P2 + T.land * clamp(0.02 + 0.34 * Math.pow(out(px, py), 0.8) + 0.14 * R(), 0, 1), SOFT);
+  }
+  for (let i = 0; i < 300; i++) {                       // 山体与近地：顺山势的宽笔
+    const u = R(), top = ridgeA(u) * H;
+    const py = lerp(top - H * 0.03, H * 1.02, Math.pow(R(), 0.7));
+    add(u * W, py, Math.atan(slopeAt(u)) * 0.6 + (R() - 0.5) * 0.34,
+      W * (0.035 + R() * 0.075), H * (0.024 + R() * 0.050), (R() - 0.5) * 0.5,
+      P2 + T.land * clamp(0.02 + 0.40 * (0.55 * u + 0.45 * R()), 0, 1), SOFT);
+  }
+  for (let i = 0; i < 64; i++) {                        // 前景树：自下往上的体块
+    const s = treeStrands[Math.floor(R() * treeStrands.length)];
+    const f = Math.pow(R(), 0.65);
+    const p = s.pts[Math.min(s.pts.length - 1, Math.floor(f * (s.pts.length - 1)))];
+    add(p.x, p.y, (R() - 0.5) * 0.9, W * (0.018 + R() * 0.034), H * (0.020 + R() * 0.038),
+      (R() - 0.5) * 0.7, P2 + T.land * clamp(0.46 + 0.40 * (1 - f) + 0.08 * R(), 0, 1), SOFT);
+  }
+
+  for (let i = 0; i < 1040; i++) {                        // 山体：顺山势的长短笔
+    const u = R(), top = ridgeA(u) * H;
+    const py = lerp(top - 8, H * 1.03, Math.pow(R(), 0.72));
+    const k = clamp(0.03 + 0.34 * (0.45 * u + 0.55 * R())
+      + 0.20 * clamp((py - top) / Math.max(1, H - top), 0, 1) + 0.05 * R(), 0, 1);
+    const len = (15 + R() * 38) * K;
+    add(u * W, py, Math.atan(slopeAt(u)) + (R() - 0.5) * 0.36,
+      len, len * (0.26 + R() * 0.28), (R() - 0.5) * 1.0, P2 + T.land * k);
+  }
+  for (let i = 0; i < 520; i++) {                        // 村庄与近地：短横笔排屋舍
+    const u = 0.18 + R() * 0.82, py = lerp(0.775, 1.0, Math.pow(R(), 0.6)) * H;
+    const k = clamp(0.30 + 0.34 * (0.5 * u + 0.5 * R()) + 0.06 * R(), 0, 1);
+    const len = (8 + R() * 22) * K;
+    add(u * W, py, (R() - 0.5) * 0.24, len, len * (0.30 + R() * 0.34),
+      (R() - 0.5) * 0.6, P2 + T.land * k);
+  }
+  // 前景树：沿已有的剪影笔束自下往上铺，保证形状与位置与原画一致
+  for (let i = 0; i < 900; i++) {
+    const s = treeStrands[Math.floor(R() * treeStrands.length)];
+    const k = Math.floor(R() * (s.pts.length - 1)), f = R();
+    const p0 = s.pts[k], p1 = s.pts[k + 1];
+    const px = lerp(p0.x, p1.x, f), py = lerp(p0.y, p1.y, f);
+    const ang = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+    const nx = -Math.sin(ang), ny = Math.cos(ang), off = (R() - 0.5) * 26 * K;
+    const h = clamp((s.tree === 0 ? (1.06 * H - py) / (1.06 * H - 0.055 * H) : 1 - f), 0, 1);
+    const k2 = clamp(0.56 + 0.40 * h + 0.06 * R(), 0, 1);
+    const len = (12 + R() * 24) * K;
+    add(px + nx * off, py + ny * off, ang + (R() - 0.5) * 0.30,
+      len, len * (0.34 + R() * 0.34), (R() - 0.5) * 1.1, P2 + T.land * k2);
+  }
+
+  /* ── 阶段 3（P3→P4）：星云——顺旋涡方向，由大旋涡向外铺开 ── */
+  for (const s of strokes) {                              // 1) 沿流线的笔触
+    const r = s.p; if (!r) continue;
+    const m = r.m, step = Math.max(1, Math.round(m / 3));
+    for (let k = 0; k < m; k += step) {
+      const px = r.d[k * 4], py = r.d[k * 4 + 1];
+      const ang = Math.atan2(-r.d[k * 4 + 2], r.d[k * 4 + 3]);
+      const len = (24 + R() * 34) * K;
+      add(px, py, ang + (R() - 0.5) * 0.48, len, len * (0.30 + R() * 0.26),
+        (R() - 0.5) * 1.2, P3 + T.nebula * clamp(0.03 + 0.68 * Math.pow(out(px, py), 0.85) + 0.24 * R(), 0, 1));
+    }
+  }
+  for (let i = 0; i < 1700; i++) {                        // 2) 补笔：顺流与横切混合
+    const px = R() * W, py = R() * H * 0.70;
+    if (py > ridgeA(px / W) * H - 8) continue;             // 地平线以下交给阶段 2
+    if (densityAt(px, py) < 0.50 && R() < 0.55) continue;  // 稀疏区少补
+    const f = fieldAt(px, py);
+    const ang = Math.atan2(f[1], f[0]) + (R() < 0.22 ? Math.PI / 2 : 0) + (R() - 0.5) * 1.05;
+    const len = (20 + R() * 44) * K;
+    add(px, py, ang, len, len * (0.28 + R() * 0.28), (R() - 0.5) * 1.3,
+      P3 + T.nebula * clamp(0.08 + 0.72 * out(px, py) + 0.26 * R(), 0, 1));
+  }
+
+  /* ── 阶段 4（P4→P5）：灯光依次点亮，笔触继续收边 ────────── */
+  for (let i = 0; i < 760; i++) {
+    const px = R() * W, py = R() * H * 0.99;
+    if (densityAt(px, py) < 0.45 && R() < 0.5) continue;
+    const f = fieldAt(px, py);
+    const len = (16 + R() * 40) * K;
+    add(px, py, Math.atan2(f[1], f[0]) + (R() - 0.5) * 1.4,
+      len, len * (0.30 + R() * 0.34), (R() - 0.5) * 1.2,
+      P4 + T.light * clamp(0.02 + 0.92 * R(), 0, 1));
+  }
+
+  /* ── 阶段 5（P5→P6）：收拢——最后几支大笔把空隙铺满 ─────── */
+  for (let i = 0; i < 22; i++) {
+    const k = i / 22;
+    add(W * 0.5, lerp(-H * 0.04, H * 1.04, k), (R() - 0.5) * 0.04,
+      W * 1.5, H * 0.12, (R() - 0.5) * 0.4, P5 + T.fuse * clamp(0.06 + 0.72 * k, 0, 1));
+  }
+  for (let j = 0; j < 3; j++) {                            // 收尾：整幅扫三笔
+    add(W * 0.5, H * (0.18 + j * 0.32), 0, W * 2.7, H * 0.64, 0, P5 + T.fuse * (0.80 + 0.06 * j));
+  }
+
+  dabs.sort((a, b) => a.at - b.at);
+  M.dabs = dabs; M.i = 0; M.t = -1;
+  maskCtx.setTransform(1, 0, 0, 1, 0, 0);
+  maskCtx.clearRect(0, 0, maskCv.width, maskCv.height);
+  maskCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+
+/** 把时刻 t 之前该落的笔落到遮罩上（只增不减） */
+function paintMaskUpTo(t) {
+  let gap = M.t < 0 ? t : t - M.t;
+  if (gap < 0) {                                          // 重播 / 时间回退：遮罩归零
+    maskCtx.setTransform(1, 0, 0, 1, 0, 0);
+    maskCtx.clearRect(0, 0, maskCv.width, maskCv.height);
+    maskCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    M.i = 0; gap = t;
+  }
+  M.t = t;
+  maskCtx.globalCompositeOperation = 'source-over';
+  maskCtx.globalAlpha = 1;
+  const d = M.dabs;
+  /* 额度按"跳过的时间"给：正常每帧用不完，seek / 后台回前台能一次补满 ⇒ 画面与帧率无关 */
+  const lim = Math.min(d.length, M.i + Math.max(1400, Math.ceil(gap * 520)));
+  while (M.i < lim && d[M.i].at <= t) {
+    const b = d[M.i++];
+    daub(maskCtx, b.x, b.y, b.ang, b.len, b.wid, b.curve, WHITE, b.a);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   8. 苏醒时间轴 → 各层权重（全部单调，P6 处恰好等于稳态值）
+   ══════════════════════════════════════════════════════════ */
+function weights(t) {
+  const w = {
+    ground: 1, sky: 1, neb: 1, hill: 1, vill: 1, tree: 1,
+    star: 1, moon: 1, win: 1, smoke: 1, mote: 1,
+    flow: 1, breathe: 1, grain: 1, reveal: 1, transition: false
+  };
+  if (CONFIG.reducedMotion || t >= P6) return w;
+  w.transition = true;
+  const L1 = clamp(t / T.canvas, 0, 1);
+  const L2 = clamp((t - P2) / T.land, 0, 1);
+  const L3 = clamp((t - P3) / T.nebula, 0, 1);
+  const L4 = clamp((t - P4) / T.light, 0, 1);
+  const L5 = clamp((t - P5) / T.fuse, 0, 1);
+  /* 一 深蓝画布逐渐出现 */
+  w.ground = easeOut(L1);
+  /* 灯光：月 → 星 → 暖窗 → 炊烟 → 光点，依次点亮（不是一次亮起） */
+  w.moon = seg(L4, 0.00, 0.32);
+  w.star = seg(L4, 0.08, 0.52);
+  w.win = seg(L4, 0.38, 0.82);
+  w.smoke = seg(L4, 0.52, 1.00);
+  w.mote = seg(L4, 0.60, 1.00) * (0.55 + 0.45 * L5);
+  /* 运动强度逐级升起：刚落下的颜料还是湿的，最后才进入持续动态 */
+  w.flow = clamp(0.03 + 0.20 * L2 + 0.25 * L3 + 0.30 * L4 + 0.22 * easeInOut(L5), 0, 1);
+  w.breathe = clamp(0.10 * L3 + 0.40 * L4 + 0.50 * L5, 0, 1);
+  /* 织纹先明显后被颜料盖住 */
+  w.grain = lerp(0.62, 1, 0.5 * L2 + 0.5 * L3);
+  /* 湿颜料：刚铺上的笔只是透着一层底料薄色，随阶段逐级"干透"到最终明度。
+     没有这一层，稀疏期就是一把撒在深蓝纸上的亮色纸片，而不是一张正在画的画。
+     单调升到 P5 处恰好为 1，P6 交接不跳变。 */
+  w.reveal = clamp(0.40 + 0.26 * L2 + 0.20 * L3 + 0.14 * easeInOut(L4), 0, 1);
+  return w;
+}
+
+/* ══════════════════════════════════════════════════════════
+   9. 合成：一套场景，两种通道（显影期 / 稳态）
+   ══════════════════════════════════════════════════════════ */
+function drawScene(w) {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  // L1 夜空底色
+  ctx.fillStyle = PAL.nightTop; ctx.fillRect(0, 0, W, H);
+  if (w.sky > 0.004) { ctx.globalAlpha = w.sky; ctx.drawImage(sky, 0, 0, W, H); }
+  ctx.globalAlpha = 1;
+  // L2 动态星云笔触
+  drawNebula(w.neb, w.flow * CONFIG.flowSpeed);
+  // L3 星与月
+  drawStars(w.star, w.moon, w.breathe);
+  // L4 山脉
+  if (w.hill > 0.004) { ctx.globalAlpha = w.hill; ctx.drawImage(hill, 0, 0, W, H); ctx.globalAlpha = 1; }
+  // L5 村庄体块 + 炊烟 + 暖窗
+  if (w.vill > 0.004) { ctx.globalAlpha = w.vill; ctx.drawImage(village, 0, 0, W, H); ctx.globalAlpha = 1; }
+  drawSmoke(w.smoke);
+  drawWindows(w.win);
+  // L6 前景树（只负责构图与纵深）
+  drawTree(w.tree);
+  // L7 骑在星云上的少量光点
+  drawMotes(w.mote);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+}
+/** 两条通道共用的最后一道：布纹软光 + 暗角 */
+function drawFinish(w) {
+  if (CONFIG.grainAlpha > 0.005) {
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.globalAlpha = CONFIG.grainAlpha * w.grain;
+    ctx.fillStyle = grainPat;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.fillStyle = vign; ctx.fillRect(0, 0, W, H);
+}
+
+function render() {
+  const w = weights(clock);
+  if (!w.transition) { drawScene(w); drawFinish(w); return w; }
+
+  /* 显影期：完整场景 → tmp，再按遮罩裁出"已经画上的部分" */
+  paintMaskUpTo(clock);
+  const old = ctx;
+  ctx = tmpCtx; drawScene(w);
+  tmpCtx.globalCompositeOperation = 'destination-in';
+  tmpCtx.globalAlpha = 1;
+  /* 遮罩虚一笔：直接拿硬边笔形去裁画面，每一块都像撕下来的纸片。
+     裁之前把遮罩羽化几个像素，笔与笔之间才化得开——读作"刚撂上去的湿颜料"，
+     而不是贴在画上的剪贴块。只在显影期付这一次 blur 的代价。 */
+  tmpCtx.filter = `blur(${Math.max(2, Math.round(4 * DPR))}px)`;
+  tmpCtx.drawImage(maskCv, 0, 0, W, H);
+  tmpCtx.filter = 'none';
+  tmpCtx.globalCompositeOperation = 'source-over';
+  ctx = old;
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = PAL.veil; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = w.ground;                       // 阶段 1：底料画布浮现
+  ctx.drawImage(groundCv, 0, 0, W, H);
+  ctx.globalAlpha = w.reveal;                       // 阶段 2~5：颜料逐笔压上去（湿→干）
+  ctx.drawImage(tmpCv, 0, 0, W, H);
+  drawFinish(w);
+  return w;
+}
+
+/* ══════════════════════════════════════════════════════════
+   10. 生命周期
+   ══════════════════════════════════════════════════════════ */
+function rebuild(full) {
+  layout();
+  if (!grainTile) grainTile = bakeGrain();
+  buildStars();
+  buildVortices();
+  if (full) { buildStrokes(); buildMotes(); }
+  buildGeometry();
+  sky = bakeSky(); hill = bakeHills(); village = bakeVillage();
+  grainPat = ctx.createPattern(grainTile, 'repeat');
+  buildSprites();
+  treeCv = bakeTree();
+  groundCv = bakeGround();
+  buildMask();
+  vign = (() => {
+    const g = ctx.createRadialGradient(W * 0.5, H * 0.46, Math.min(W, H) * 0.30, W * 0.5, H * 0.5, Math.max(W, H) * 0.78);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.62, 'rgba(3,6,20,.16)'); g.addColorStop(1, 'rgba(2,4,14,.55)');
+    return g;
+  })();
+}
+
+function frame(now) {
+  if (!running) return;
+  raf = requestAnimationFrame(frame);
+  if (!last) last = now;
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.05) dt = 0.05;                       // 切后台回来不跳帧
+  clock += dt * CONFIG.awakeningSpeed;
+  render();
+  if (dt > 0) { fpsAcc += 1 / dt; fpsN++; }
+  if (fpsN >= 30) { fpsShown = Math.round(fpsAcc / fpsN); fpsAcc = 0; fpsN = 0; fpsEl.textContent = fpsShown + ' FPS'; }
+}
+function start() { if (running) return; running = true; last = 0; raf = requestAnimationFrame(frame); }
+function stop() { running = false; cancelAnimationFrame(raf); }
+
+const fpsEl = document.getElementById('fps');
+
+function boot() {
+  rebuild(true);
+  if (CONFIG.reducedMotion) { clock = P6 + 1; render(); return; }
+  clock = 0; start();
+}
+
+let rsTimer = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(rsTimer);
+  rsTimer = setTimeout(() => { const c = clock; rebuild(true); clock = c; if (CONFIG.reducedMotion) render(); }, 180);
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stop();
+  else if (!CONFIG.reducedMotion) start();
+});
+
+/* ── 交互 ───────────────────────────────────────────────── */
+const panel = document.getElementById('panel');
+const kFlow = document.getElementById('k-flow'), kDens = document.getElementById('k-dens');
+const kMote = document.getElementById('k-mote'), kTime = document.getElementById('k-time');
+const vFlow = document.getElementById('v-flow'), vDens = document.getElementById('v-dens');
+const vMote = document.getElementById('v-mote'), vTime = document.getElementById('v-time');
+
+function syncPanel() {
+  vFlow.textContent = CONFIG.flowSpeed.toFixed(2) + '×';
+  vDens.textContent = CONFIG.strokeDensity.toFixed(2) + '×';
+  vMote.textContent = String(CONFIG.particleCount);
+  vTime.textContent = CONFIG.awakeningSpeed.toFixed(2) + '×';
+}
+kFlow.addEventListener('input', () => { CONFIG.flowSpeed = +kFlow.value; syncPanel(); });
+kMote.addEventListener('input', () => { CONFIG.particleCount = +kMote.value; syncPanel(); });
+kTime.addEventListener('input', () => { CONFIG.awakeningSpeed = +kTime.value; syncPanel(); });
+kDens.addEventListener('input', () => {
+  CONFIG.strokeDensity = +kDens.value; syncPanel();
+  clearTimeout(rsTimer); rsTimer = setTimeout(() => { buildStrokes(); buildMask(); }, 220);
+});
+document.getElementById('btn-tune').addEventListener('click', () => panel.classList.toggle('on'));
+document.getElementById('btn-replay').addEventListener('click', () => { clock = 0; if (CONFIG.reducedMotion) { CONFIG.reducedMotion = false; start(); } });
+
+/* ── 开发层开关：正式展示只有画面，调试面板 / 帧率读数按需打开 ── */
+CONFIG.dev = /[?&]dev=1/.test(location.search);
+document.body.classList.toggle('dev', CONFIG.dev);
+
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'r') { clock = 0; if (CONFIG.reducedMotion) { CONFIG.reducedMotion = false; start(); } }
+  if (!CONFIG.dev) return;                    // 非开发模式下这些快捷键不接管界面
+  if (k === 'c') panel.classList.toggle('on');
+  if (k === 'f') fpsEl.classList.toggle('on');
+});
+
+/* prefers-reduced-motion：直接给完整静态成品画面 */
+const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+CONFIG.reducedMotion = mq.matches;
+if (mq.addEventListener) mq.addEventListener('change', (e) => { CONFIG.reducedMotion = e.matches; if (e.matches) { stop(); clock = P6 + 1; render(); } else { clock = 0; start(); } });
+
+/* 调试出口（供自动化截图 / 帧率检查使用） */
+window.__sn = {
+  CONFIG,
+  get stats() {
+    return {
+      fps: fpsShown, strokes: strokes.length, motes: Math.min(motes.length, CONFIG.particleCount),
+      dabs: M.dabs.length, laid: M.i, windows: windows.length, chimneys: chimneys.length,
+      dpr: +DPR.toFixed(2), t: +clock.toFixed(2), W: Math.round(W), H: Math.round(H)
+    };
+  },
+  seek(t) { clock = t; if (!running) render(); },
+  freeze(t) { stop(); clock = t; render(); return t; },
+  unfreeze() { if (!CONFIG.reducedMotion) start(); },
+  shotPhase(name) {
+    const map = {
+      canvas: P2 * 0.55, land: P2 + T.land * 0.55, sweep: P3 + T.nebula * 0.42,
+      nebula: P3 + T.nebula * 0.82, light: P4 + T.light * 0.62, fuse: P5 + T.fuse * 0.55,
+      live: P6 + 4, static: P6 + 4
+    };
+    const t = map[name]; this.seek(t); return t;
+  }
+};
+
+syncPanel();
+boot();
+</script>
+</body>
+</html>

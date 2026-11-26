@@ -51,6 +51,12 @@ export function createSceneRenderer(canvas) {
   const scoreSheet = new Image();
   let scoreReady = false;
   scoreSheet.onload = () => { scoreReady = true; propLayerKey = ''; };
+  // 《蝉鸣》里小悠真的旧照片：真实素材替代程序化绘制
+  const photoBoy = new Image();
+  let photoBoyReady = false;
+  photoBoy.onload = () => { photoBoyReady = true; propLayerKey = ''; };
+  // 只在真正描述这张照片的镜头里启用，避免《漩涡》的星图照片也换成小男孩
+  let detailPhotoBoy = false;
 
   // 场景大图按需加载：首屏不请求，进入舞台 / 打开剧本库时由 main.js 触发一次
   let sceneImagesRequested = false;
@@ -61,6 +67,7 @@ export function createSceneRenderer(canvas) {
     cityDay.src = './assets/images/lujiazui-day.png';
     cityNight.src = './assets/images/lujiazui-night.png';
     scoreSheet.src = './assets/images/pathetique-score.png';
+    photoBoy.src = './assets/images/cicada-photo.jpg';
   }
 
   function resize() {
@@ -16004,7 +16011,7 @@ export function createSceneRenderer(canvas) {
     if (cam === 'detail') {
       // 特写：只画物件，不画手与人物；同一镜头内保留最近出现的道具。
       // 物件是静止画面，离屏缓存一次后逐帧贴图，避免每帧重绘大量颗粒与阴影。
-      const propKey = `${detailProp}|${detailText}|${state.time}|${p.glow}|${W}x${H}@${DPR}|${starryReady ? 1 : 0}|${scoreReady ? 1 : 0}`;
+      const propKey = `${detailProp}|${detailText}|${detailPhotoBoy ? 1 : 0}|${state.time}|${p.glow}|${W}x${H}@${DPR}|${starryReady ? 1 : 0}|${scoreReady ? 1 : 0}|${photoBoyReady ? 1 : 0}`;
       if (!propLayer || propLayerKey !== propKey) {
         if (!propLayer) propLayer = document.createElement('canvas');
         propLayer.width = canvas.width;
@@ -16017,6 +16024,7 @@ export function createSceneRenderer(canvas) {
           time, kind: detailProp, palette: p, text: detailText,
           starry: starryReady ? starry : null,
           score: scoreReady ? scoreSheet : null,
+          photo: detailPhotoBoy && photoBoyReady ? photoBoy : null,
         });
         propLayerKey = propKey;
       }
@@ -16112,15 +16120,20 @@ export function createSceneRenderer(canvas) {
       layers = null;
       detailProp = 'none';
       detailText = '';
+      detailPhotoBoy = false;
     } else if (enteredDetail) {
       detailProp = 'none';
       detailText = '';
+      detailPhotoBoy = false;
     }
     if (state.cam === 'detail') {
       const k = pickProp(state.propText || '');
       if (k !== 'none') {
+        if (k !== detailProp) detailPhotoBoy = false;
         detailProp = k;
         detailText = state.propText || '';
+        // 同一段照片镜头里，只要提到过小男孩 / 旧照片就固定使用真实照片素材
+        if (k === 'photo' && /小男孩|小悠真|卷短发|做鬼脸|旧照片|黑白旧照/.test(detailText)) detailPhotoBoy = true;
       } else if (detailProp === 'scroll' && /血|红枫|红叶|卷尾|那抹红/.test(state.propText || '')) {
         detailText = state.propText || '';
       }

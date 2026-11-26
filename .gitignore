@@ -6,6 +6,10 @@ dist/
 .tmp*
 *.log
 
+# 截图回归与计划工作台产出（体积大、可重生）
+outputs/
+.superpowers/
+
 # 系统 / 编辑器
 .DS_Store
 Thumbs.db

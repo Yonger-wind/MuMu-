@@ -523,7 +523,7 @@ function drawEarphone(ctx, x, y, S, time, p) {
 }
 
 
-function drawPhoto(ctx, x, y, S, time, p) {
+function drawPhoto(ctx, x, y, S, time, p, text = '', photo = null) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-0.04);
@@ -1045,6 +1045,15 @@ function drawPhoto(ctx, x, y, S, time, p) {
   ctx.quadraticCurveTo(hr * 0.98, hr * 0.14, hr * 0.90, hr * 0.30);
   ctx.stroke();
   ctx.restore();
+
+  // 有真实照片素材时整幅覆盖画面区域（《蝉鸣》里的小悠真），
+  // 相纸、曝光、暗角与银盐颗粒仍叠在上面；程序化场景只作加载兜底。
+  // 顶部对齐：只裁掉画脚下方的石板，留下的正好是“半张旧照片”。
+  if (photo && photo.width) {
+    const scale = Math.max(iw / photo.width, ih / photo.height);
+    const dw = photo.width * scale, dh = photo.height * scale;
+    ctx.drawImage(photo, ix + (iw - dw) / 2, iy, dw, dh);
+  }
 
   // 曝光感：从左上打进来的旧日光
   const sun = ctx.createRadialGradient(ix + iw * 0.18, iy + ih * 0.18, 0, ix + iw * 0.18, iy + ih * 0.18, iw * 0.9);
@@ -5659,7 +5668,7 @@ export function drawPropDetail(ctx, o = {}) {
   else if (kind === 'earphone') drawEarphone(ctx, x, y, S, time, p);
   else if (kind === 'paper') drawPaper(ctx, x, y, S, time, p);
   else if (kind === 'letter') drawLetter(ctx, x, y, S, time, p);
-  else if (kind === 'photo') drawPhoto(ctx, x, y, S, time, p);
+  else if (kind === 'photo') drawPhoto(ctx, x, y, S, time, p, o.text || '', o.photo || null);
   else if (kind === 'token') drawToken(ctx, x, y, S, time, p);
   else if (kind === 'box') drawBox(ctx, x, y, S, time, p, /打开|矿石|盒中|匣中|盛放/.test(o.text || ''));
   else if (kind === 'paint') drawPaint(ctx, x, y, S, time, p, /朱砂|赤|血|红/.test(o.text || ''));

@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#070d18">
+<title>鎏金乐章 · 涡流笔触</title>
+<style>
+  :root{
+    color-scheme:dark;
+    --ink:#eef4fa; --dim:#93a8c0; --gold:#e8c877; --ice:#9fc4dc; --deep:#12233c;
+    --bg:#070d18; --panel:#0d1626; --line:#22344e;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"Noto Serif SC","Songti SC",SimSun,serif;}
+  body{display:flex;flex-direction:column;overflow:hidden}
+  .hall{display:flex;flex-direction:column;height:100%;padding:14px 20px 10px;gap:10px}
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  h1{margin:0;font-size:20px;font-weight:600;letter-spacing:.14em;color:var(--gold)}
+  .tagline{font-size:12px;letter-spacing:.22em;color:var(--dim)}
+  .sign{margin-left:auto;font-size:11px;letter-spacing:.12em;color:#5c718c}
+  main{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+  .frame{position:relative;width:min(100%,calc((100svh - 232px)*1.6));aspect-ratio:1.6;
+    background:#0a1220;border:1px solid var(--line);border-radius:6px;overflow:hidden;
+    box-shadow:0 18px 60px -22px rgba(232,200,119,.22), 0 6px 24px -12px rgba(0,0,0,.85);}
+  .frame canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .frame:fullscreen{width:100%;height:100%;aspect-ratio:auto;border:0;border-radius:0}
+  .frame:fullscreen canvas{left:50%;top:50%;transform:translate(-50%,-50%);
+    width:max(100vw,160vh);height:max(100vh,62.5vw)}
+  .hint{position:absolute;left:12px;bottom:10px;font-size:11px;letter-spacing:.14em;color:#dce8f4;
+    text-shadow:0 1px 6px rgba(4,10,20,.9);pointer-events:none;opacity:.85}
+  #skip{position:absolute;right:12px;top:10px;font:inherit;font-size:11px;letter-spacing:.16em;
+    color:#eef4fa;background:rgba(7,13,24,.55);border:1px solid rgba(232,200,119,.45);
+    border-radius:999px;padding:5px 12px;cursor:pointer;backdrop-filter:blur(3px)}
+  #skip:hover{background:rgba(232,200,119,.24)}
+  #skip[hidden]{display:none}
+  .deck{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+  button{font:inherit;font-size:12px;letter-spacing:.14em;color:var(--ink);cursor:pointer;
+    background:linear-gradient(180deg,#16283f,#0d1626);border:1px solid #2c405e;border-radius:6px;
+    padding:7px 14px;transition:border-color .15s, background .15s, transform .05s}
+  button:hover{border-color:var(--ice);background:linear-gradient(180deg,#1d3450,#0d1626)}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.45;cursor:default}
+  #pause{min-width:76px;border-color:#3a5070;color:var(--ice)}
+  .ctl{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.1em;color:var(--dim)}
+  .ctl output{min-width:44px;text-align:right;color:var(--gold);font-variant-numeric:tabular-nums}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:104px;height:4px;border-radius:2px;
+    background:linear-gradient(90deg,var(--deep),var(--ice),var(--gold));outline:none;cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:13px;height:13px;
+    border-radius:50%;background:var(--gold);border:2px solid #0d1626;box-shadow:0 0 8px rgba(232,200,119,.55)}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--gold);
+    border:2px solid #0d1626;box-shadow:0 0 8px rgba(232,200,119,.55)}
+  input[type=range]:focus-visible{box-shadow:0 0 0 2px rgba(159,196,220,.5)}
+  .acts{margin-left:auto;display:flex;gap:8px}
+  footer{display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:.14em;color:#5c718c}
+  #status{color:var(--dim)}
+  .deck::-webkit-scrollbar,.hall::-webkit-scrollbar{height:8px;width:8px}
+  .deck::-webkit-scrollbar-track,.hall::-webkit-scrollbar-track{background:#0a1220}
+  .deck::-webkit-scrollbar-thumb,.hall::-webkit-scrollbar-thumb{background:#2c405e;border-radius:4px}
+  .deck::-webkit-scrollbar-thumb:hover,.hall::-webkit-scrollbar-thumb:hover{background:var(--ice)}
+  @media(max-width:680px){
+    .hall{padding:10px 12px 8px}
+    h1{font-size:16px}
+    .sign{display:none}
+    .frame{width:100%;aspect-ratio:1.45}
+    .deck{gap:10px;padding:8px 10px;overflow-x:auto;flex-wrap:nowrap}
+    .ctl{flex:0 0 auto}
+    input[type=range]{width:84px}
+    .acts{margin-left:0}
+  }
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="hall">
+  <header>
+    <h1>鎏金乐章</h1>
+    <span class="tagline">涡流笔触 · 生长开场</span>
+    <span class="sign">零依赖 · Canvas2D + WebGL2</span>
+  </header>
+  <main>
+    <div class="frame" id="frame">
+      <canvas id="sky" role="img" aria-label="鎏金乐章：深蓝夜幕上，金色与冰蓝的五线谱带蜿蜒盘成漩涡，谱带间洒满金粉星屑，精致的高音谱号、低音谱号与音符漂浮其间。"></canvas>
+      <span class="hint">空格 暂停 · R 重绘 · F 全屏 · S 保存</span>
+      <button id="skip" hidden>跳过生长 ›</button>
+    </div>
+  </main>
+  <div class="deck">
+    <button id="pause">暂停</button>
+    <label class="ctl">流速<input id="speed" type="range" min="0.2" max="3" step="0.05" value="1"><output id="speedOut">1.00</output></label>
+    <label class="ctl">笔触<input id="density" type="range" min="2000" max="32000" step="500" value="20000"><output id="densityOut">20000</output></label>
+    <label class="ctl">金粉<input id="glitter" type="range" min="0" max="1" step="0.05" value="0.8"><output id="glitterOut">0.80</output></label>
+    <label class="ctl">音符<input id="notes" type="range" min="0" max="1" step="0.05" value="1"><output id="notesOut">1.00</output></label>
+    <label class="ctl">辉光<input id="bloom" type="range" min="0" max="2" step="0.05" value="0.55"><output id="bloomOut">0.55</output></label>
+    <label class="ctl">曝光<input id="exposure" type="range" min="0.4" max="2.5" step="0.05" value="1"><output id="exposureOut">1.00</output></label>
+    <div class="acts">
+      <button id="redraw">重新绘制</button>
+      <button id="save">保存画面</button>
+      <button id="full">全屏</button>
+    </div>
+  </div>
+  <footer><span id="status">正在起笔…</span></footer>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   鎏金乐章 · 涡流笔触（单文件 / 零依赖 / 无外部资源）
+   复刻目标：深蓝夜幕 + 金 / 冰蓝五线谱带蜿蜒成涡 + 金粉星屑 + 精致音符
+   管线：Canvas2D 粒子笔触 → WebGL2 浮点拖尾累积 → 辉光 → ACES
+   开场：数处光辉点燃后缓慢蔓延成画（生长效果），可跳过
+   音符：矢量路径手绘（谱号 / 符头 / 符干 / 符尾 / 符杠 / 升降号），
+         剪影内撒金粉颗粒 + 外晕，逐帧微浮微转
+   ============================================================ */
+
+const TAU = Math.PI * 2;
+const W = 1.6, H = 1;
+const $ = s => document.querySelector(s);
+
+const skyEl = $('#sky'), frameEl = $('#frame'), statusEl = $('#status');
+const pauseBtn = $('#pause'), skipBtn = $('#skip');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const PREF_KEY = 'melody.prefs.v1';
+const params = { speed: 1, density: 20000, glitter: 0.8, notes: 1, bloom: 0.55, exposure: 1.0 };
+try {
+  const saved = JSON.parse(localStorage.getItem(PREF_KEY) || 'null');
+  if (saved) for (const k of Object.keys(params)) if (typeof saved[k] === 'number') params[k] = saved[k];
+} catch {}
+params.speed = Math.min(3, Math.max(0.2, params.speed));
+params.density = Math.min(32000, Math.max(2000, Math.round(params.density)));
+params.glitter = Math.min(1, Math.max(0, params.glitter));
+params.notes = Math.min(1, Math.max(0, params.notes));
+params.bloom = Math.min(2, Math.max(0, params.bloom));
+params.exposure = Math.min(2.5, Math.max(0.4, params.exposure));
+function remember() { try { localStorage.setItem(PREF_KEY, JSON.stringify(params)); } catch {} }
+
+let seed = 20261126;
+function rnd() { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; }
+
+/* ---------- 谱带：六条蜿蜒中心线（金 / 冰蓝交替），平行五线 ---------- */
+const RIBBONS = [
+  { base: 0.10, A1: 0.070, k1: 3.8, p1: 0.4, A2: 0.020, k2: 8.2, p2: 1.7, fam: 1 },
+  { base: 0.26, A1: 0.095, k1: 4.2, p1: 2.2, A2: 0.026, k2: 7.4, p2: 0.6, fam: 0 },
+  { base: 0.42, A1: 0.105, k1: 3.5, p1: 4.0, A2: 0.030, k2: 8.8, p2: 2.9, fam: 1 },
+  { base: 0.58, A1: 0.090, k1: 4.5, p1: 1.1, A2: 0.024, k2: 7.9, p2: 4.2, fam: 0 },
+  { base: 0.74, A1: 0.078, k1: 3.9, p1: 3.3, A2: 0.022, k2: 8.5, p2: 1.2, fam: 1 },
+  { base: 0.90, A1: 0.065, k1: 4.3, p1: 5.1, A2: 0.018, k2: 7.6, p2: 3.6, fam: 0 },
+];
+const LINE_OFF = [-0.020, -0.010, 0, 0.010, 0.020];
+function ribOf(r, x) { return r.base + r.A1 * Math.sin(r.k1 * x + r.p1) + r.A2 * Math.sin(r.k2 * x + r.p2); }
+function ribDOf(r, x) { return r.A1 * r.k1 * Math.cos(r.k1 * x + r.p1) + r.A2 * r.k2 * Math.cos(r.k2 * x + r.p2); }
+/* 中心线查表：每帧数万次求值走线性插值 */
+const RN = 384;
+let ribTab = [], ribDTab = [];
+function buildRibTabs() {
+  ribTab = RIBBONS.map(r => { const a = new Float32Array(RN + 1); for (let i = 0; i <= RN; i++) a[i] = ribOf(r, i / RN * W); return a; });
+  ribDTab = RIBBONS.map(r => { const a = new Float32Array(RN + 1); for (let i = 0; i <= RN; i++) a[i] = ribDOf(r, i / RN * W); return a; });
+}
+function ribAt(oi, x) {
+  const t = Math.min(RN - 1e-6, Math.max(0, x / W * RN)); const i = t | 0, f = t - i;
+  const a = ribTab[oi]; return a[i] + (a[i + 1] - a[i]) * f;
+}
+function ribDAt(oi, x) {
+  const t = Math.min(RN - 1e-6, Math.max(0, x / W * RN)); const i = t | 0, f = t - i;
+  const a = ribDTab[oi]; return a[i] + (a[i + 1] - a[i]) * f;
+}
+function ownOf(x, y) {
+  let bi = 0, bd = 1e9;
+  for (let i = 0; i < RIBBONS.length; i++) {
+    const d = Math.abs(y - ribAt(i, x));
+    if (d < bd) { bd = d; bi = i; }
+  }
+  return bi;
+}
+/* ---------- 乐涡：谱带盘绕成的螺旋 ---------- */
+const SPIRALS = [
+  { x: 0.400, y: 0.350, r: 0.150, s: 0.34, fam: 0 },
+  { x: 0.845, y: 0.100, r: 0.105, s: -0.30, fam: 1 },
+  { x: 0.115, y: 0.100, r: 0.085, s: 0.28, fam: 0 },
+  { x: 0.100, y: 0.550, r: 0.060, s: -0.22, fam: 1 },
+];
+function spiralAt(x, y) {
+  for (const v of SPIRALS) {
+    if (Math.abs(x - v.x) > v.r * 2.2 || Math.abs(y - v.y) > v.r * 2.0) continue;
+    const rr = Math.hypot(x - v.x, (y - v.y) / 0.9) / v.r;
+    if (rr < 1.7) return { v, rr };
+  }
+  return null;
+}
+
+function fieldAt(x, y, own) {
+  let vx = 0.10 + 0.02 * Math.sin(y * 17 + own * 2.1);
+  // 相邻两谱带切线按距离加权，避免归属边界处流线对冲堆亮缝
+  const c1 = ribAt(own, x), d1 = Math.abs(y - c1);
+  let si = -1, sd = 1e9;
+  for (let i = 0; i < RIBBONS.length; i++) {
+    if (i === own) continue;
+    const d = Math.abs(y - ribAt(i, x));
+    if (d < sd) { sd = d; si = i; }
+  }
+  const w = d1 / (d1 + sd + 1e-6);
+  const tang = ribDAt(own, x) * (1 - w) + ribDAt(si, x) * w;
+  let vy = tang * vx * 0.95 + 0.006 * Math.sin(x * 24 + y * 8 + own);
+  // 乐涡旋卷 + 向心吸入
+  let gmax = 0, rx = 0, ry = 0;
+  for (const v of SPIRALS) {
+    const dx = x - v.x, dy = (y - v.y) / 0.9;
+    const r2 = dx * dx + dy * dy;
+    const cut = v.r * 2.0;
+    if (r2 > cut * cut) continue;
+    const g = Math.exp(-r2 / (2 * v.r * v.r));
+    if (g > gmax) gmax = g;
+    const a = v.s * g / Math.sqrt(r2 + 0.0008);
+    const sink = 0.008 * g;
+    rx += -dy * a - dx * sink;
+    ry += dx * a * 0.9 - dy * sink * 0.9;
+  }
+  vx = vx * (1 - 0.80 * gmax) + rx;
+  vy = vy * (1 - 0.80 * gmax) + ry;
+  return [vx, vy];
+}
+function field(x, y) { return fieldAt(x, y, ownOf(x, y)); }
+
+function emphasisAt(x, y, own, sp) {
+  if (sp) {                                       // 涡环带笔触（涡心留暗）
+    const ang = Math.atan2((y - sp.v.y) / 0.9, x - sp.v.x);
+    const brush = 0.78 + 0.22 * Math.sin(ang * 2 + Math.log(sp.rr + 0.15) * 2.4 + sp.v.x * 4);
+    return Math.min(1, Math.exp(-(((sp.rr - 0.95) / 0.30) ** 2)) * brush * 0.9 + (sp.rr < 0.4 ? 0.10 : 0.05));
+  }
+  const d = y - ribAt(own, x);
+  if (Math.abs(d) > 0.034) return 0.05;           // 谱带之外几乎留白
+  const stripe = Math.max(0, Math.cos(TAU * d / 0.010));
+  return Math.min(1, 0.10 + 0.90 * stripe * stripe * stripe);
+}
+function emphasis(x, y) {
+  const sp = spiralAt(x, y);
+  return emphasisAt(x, y, ownOf(x, y), sp);
+}
+
+/* ---------- 配色：金线 / 冰线 / 金粉 / 冰粉 ---------- */
+const PALS = [
+  ['#8a6a2a', '#b98f3e', '#d9b45b', '#e8c877', '#f2d896', '#f8e8b8', '#fdf6dc'], // 0 金谱线
+  ['#5d87a6', '#7fa8c4', '#9fc4dc', '#bcd8e8', '#d4e8f2', '#e8f4fa', '#ffffff'], // 1 冰谱线
+  ['#c9a24a', '#d9b45b', '#e8c877', '#f2d896', '#f8e8b8', '#fdf2cc', '#fffdf2'], // 2 金粉
+  ['#9fc4dc', '#bcd8e8', '#d4e8f2', '#e8f4fa', '#f4fafd', '#ffffff', '#fff8e0'], // 3 冰粉
+];
+const FEATHER = 0.10;
+let growth = null;
+const cellCache = new Map();
+function cellInfo(x, y) {
+  const key = ((x * 80) | 0) * 128 + ((y * 80) | 0);
+  let c = cellCache.get(key);
+  if (c) return c;
+  const sp = spiralAt(x, y);
+  const own = ownOf(x, y);
+  let kind, shift = 0;
+  if (sp) {
+    kind = sp.v.fam === 0 ? 2 : 3;
+    shift = (sp.rr > 0.5 && sp.rr < 1.2) ? 1 : -1;
+  } else {
+    const d = y - ribAt(own, x);
+    const stripe = Math.max(0, Math.cos(TAU * d / 0.010));
+    const fam = RIBBONS[own].fam;
+    if (stripe > 0.35) { kind = fam; shift = Math.round(stripe * 2) - (Math.abs(d) > 0.026 ? 1 : 0); }
+    else { kind = fam === 0 ? 2 : 3; shift = -1; }
+  }
+  const em = emphasisAt(x, y, own, sp);
+  const f = fieldAt(x, y, own);
+  let g = 1;
+  if (growth) {
+    g = 0;
+    for (const s of growth) {
+      if (s.rOut2 <= 0) continue;
+      const dx = x - s.x, dy = y - s.y, d2 = dx * dx + dy * dy;
+      if (d2 >= s.rOut2) continue;
+      const d = Math.sqrt(d2);
+      const v = d <= s.r ? 1 : (s.rOut - d) / FEATHER;
+      if (v > g) g = v;
+      if (g >= 1) break;
+    }
+  }
+  c = { em, kind, shift, g, fx: f[0], fy: f[1] };
+  cellCache.set(key, c);
+  return c;
+}
+const toneAt = (info, tone) => Math.min(6, Math.max(0, tone + info.shift));
+function colorOf(info, tone) { return PALS[info.kind][toneAt(info, tone)]; }
+function colorAt(x, y, tone) { return colorOf(cellInfo(x, y), tone); }
+
+/* ---------- WebGL2 合成器 ---------- */
+class Film {
+  constructor(canvas) {
+    const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+    if (!gl) throw new Error('no webgl2');
+    this.gl = gl;
+    this.hdr = !!gl.getExtension('EXT_color_buffer_float');
+    const VS = `#version 300 es
+      layout(location=0) in vec2 aPos; out vec2 vUv;
+      void main(){ vUv = aPos * .5 + .5; gl_Position = vec4(aPos, 0., 1.); }`;
+    const HEAD = `#version 300 es
+      precision highp float; in vec2 vUv; out vec4 o;`;
+    const FS_ACC = HEAD + `
+      uniform sampler2D uInk, uBase, uDust, uPrev; uniform float uDecay, uGlitter;
+      uniform float uGrow; uniform vec4 uSeeds[6];
+      vec3 lin(vec3 c){ return pow(c, vec3(2.2)); }
+      void main(){
+        vec2 uv = vec2(vUv.x, 1. - vUv.y);
+        vec4 ink = texture(uInk, uv);
+        vec4 du = texture(uDust, uv);
+        vec3 base = lin(texture(uBase, uv).rgb) + lin(du.rgb) * du.a * uGlitter;
+        if (uGrow > .5) {
+          vec2 p = vec2(uv.x * 1.6, uv.y);
+          float g = 0.;
+          for (int i = 0; i < 6; i++) {
+            vec4 s = uSeeds[i];
+            if (s.w <= 0.) continue;
+            g = max(g, clamp((s.w - length(p - s.xy)) / 0.10, 0., 1.));
+          }
+          base *= g;
+        }
+        vec3 prev = texture(uPrev, vUv).rgb;
+        o = vec4(prev * (1. - uDecay) + base * uDecay + lin(ink.rgb) * ink.a * .5, 1.);
+      }`;
+    const FS_EXT = HEAD + `
+      uniform sampler2D uSrc;
+      void main(){
+        vec3 c = texture(uSrc, vUv).rgb * 1.25;
+        float l = max(c.r, max(c.g, c.b));
+        o = vec4(c * smoothstep(.55, .95, l), 1.);
+      }`;
+    const FS_BLUR = HEAD + `
+      uniform sampler2D uSrc; uniform vec2 uTexel, uDir;
+      void main(){
+        vec2 d = uTexel * uDir;
+        vec3 c = texture(uSrc, vUv).rgb * .227027;
+        c += (texture(uSrc, vUv + d * 1.384615).rgb + texture(uSrc, vUv - d * 1.384615).rgb) * .316216;
+        c += (texture(uSrc, vUv + d * 3.230769).rgb + texture(uSrc, vUv - d * 3.230769).rgb) * .070270;
+        o = vec4(c, 1.);
+      }`;
+    const FS_COMP = HEAD + `
+      uniform sampler2D uScene, uGlow; uniform float uBloom, uExposure;
+      vec3 aces(vec3 x){ return clamp((x * (2.51 * x + .03)) / (x * (2.43 * x + .59) + .14), 0., 1.); }
+      void main(){
+        vec3 base = texture(uScene, vUv).rgb * 1.2;
+        vec3 c = aces((base + texture(uGlow, vUv).rgb * uBloom * .7) * uExposure);
+        float vig = 1. - .16 * pow(length((vUv - .5) * vec2(1.1, 1.)), 1.5);
+        c = pow(c * vig, vec3(1. / 2.2));
+        float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - .5;
+        o = vec4(clamp(c + grain * .0035, 0., 1.), 1.);
+      }`;
+    this.pAcc = this.prog(VS, FS_ACC);
+    this.pExt = this.prog(VS, FS_EXT);
+    this.pBlur = this.prog(VS, FS_BLUR);
+    this.pComp = this.prog(VS, FS_COMP);
+    this.buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    this.ink = this.tex(); this.base = this.tex(); this.dust = this.tex();
+    this.hist = []; this.bloomT = []; this.idx = 0;
+  }
+  prog(vs, fs) {
+    const gl = this.gl, p = gl.createProgram();
+    for (const [t, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+      const s = gl.createShader(t);
+      gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      gl.attachShader(p, s); gl.deleteShader(s);
+    }
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {};
+    const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); u[info.name] = gl.getUniformLocation(p, info.name); u[info.name.replace('[0]', '')] = u[info.name]; }
+    return { p, u };
+  }
+  tex() {
+    const gl = this.gl, t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  target(w, h) {
+    const gl = this.gl, t = this.tex();
+    gl.texImage2D(gl.TEXTURE_2D, 0, this.hdr ? gl.RGBA16F : gl.RGBA, w, h, 0, gl.RGBA, this.hdr ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE, null);
+    const f = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('bad fbo');
+    gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    return { t, f };
+  }
+  resize(w, h) {
+    const gl = this.gl;
+    for (const x of [...this.hist, ...this.bloomT]) { gl.deleteTexture(x.t); gl.deleteFramebuffer(x.f); }
+    this.w = w; this.h = h;
+    this.bw = Math.max(1, w >> 2); this.bh = Math.max(1, h >> 2);
+    this.hist = [this.target(w, h), this.target(w, h)];
+    this.bloomT = [this.target(this.bw, this.bh), this.target(this.bw, this.bh)];
+    this.idx = 0;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+  bind(t, unit) { const gl = this.gl; gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); }
+  draw(prog, fbo, w, h) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(prog.p);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  }
+  setBase(src, dustSrc) {
+    this.bind(this.base, 0); this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, src);
+    this.bind(this.dust, 0); this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, dustSrc);
+  }
+  advance(inkCanvas, dt, seeds) {
+    const gl = this.gl, next = 1 - this.idx;
+    this.bind(this.ink, 0);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, inkCanvas);
+    this.draw(this.pAcc, this.hist[next].f, this.w, this.h);
+    this.bind(this.ink, 0); this.bind(this.base, 1); this.bind(this.hist[this.idx].t, 2); this.bind(this.dust, 3);
+    gl.uniform1i(this.pAcc.u.uInk, 0); gl.uniform1i(this.pAcc.u.uBase, 1); gl.uniform1i(this.pAcc.u.uPrev, 2); gl.uniform1i(this.pAcc.u.uDust, 3);
+    gl.uniform1f(this.pAcc.u.uGlitter, params.glitter);
+    gl.uniform1f(this.pAcc.u.uDecay, Math.min(0.3, 0.03 * dt));
+    gl.uniform1f(this.pAcc.u.uGrow, seeds ? 1 : 0);
+    if (seeds) {
+      const arr = new Float32Array(24);
+      for (let i = 0; i < 6; i++) { const s = seeds[i]; arr[i * 4] = s.x; arr[i * 4 + 1] = s.y; arr[i * 4 + 2] = s.r; arr[i * 4 + 3] = s.rOut; }
+      gl.uniform4fv(this.pAcc.u.uSeeds, arr);
+    }
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    this.idx = next;
+    gl.activeTexture(gl.TEXTURE0);
+  }
+  render() {
+    const gl = this.gl;
+    this.draw(this.pExt, this.bloomT[0].f, this.bw, this.bh);
+    this.bind(this.hist[this.idx].t, 0); gl.uniform1i(this.pExt.u.uSrc, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    for (let i = 0; i < 4; i++) {
+      const dst = (i + 1) % 2;
+      this.draw(this.pBlur, this.bloomT[dst].f, this.bw, this.bh);
+      this.bind(this.bloomT[i % 2].t, 0);
+      gl.uniform1i(this.pBlur.u.uSrc, 0);
+      gl.uniform2f(this.pBlur.u.uTexel, 1 / this.bw, 1 / this.bh);
+      gl.uniform2f(this.pBlur.u.uDir, i % 2 === 0 ? 1.2 : 0, i % 2 === 1 ? 1.2 : 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+    this.draw(this.pComp, null, this.w, this.h);
+    this.bind(this.hist[this.idx].t, 0); this.bind(this.bloomT[0].t, 1);
+    gl.uniform1i(this.pComp.u.uScene, 0); gl.uniform1i(this.pComp.u.uGlow, 1);
+    gl.uniform1f(this.pComp.u.uBloom, params.bloom);
+    gl.uniform1f(this.pComp.u.uExposure, params.exposure);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+}
+
+/* ---------- 画布 ---------- */
+let sky = skyEl, gpu = null, ctx2d = null;
+try { gpu = new Film(sky); }
+catch (err) {
+  console.warn('WebGL2 不可用，回退 Canvas：', err.message);
+  const clone = sky.cloneNode(); sky.replaceWith(clone); sky = clone;
+  ctx2d = sky.getContext('2d', { alpha: false });
+}
+const under = document.createElement('canvas'), baseCtx = under.getContext('2d', { alpha: false });
+const dustC = document.createElement('canvas'), dustCtx = dustC.getContext('2d');
+const ink = document.createElement('canvas'), inkCtx = ink.getContext('2d', { alpha: !!gpu });
+const maskC = document.createElement('canvas'), maskCtx = maskC.getContext('2d');
+const baseIntro = document.createElement('canvas'), bIntroCtx = baseIntro.getContext('2d', { alpha: false });
+let scale = 800;
+
+/* ---------- 精致音符：矢量路径 + 剪影内金粉 + 外晕 ---------- */
+const GLYPH_BOX = {
+  treble: { w: 0.80, h: 2.10 }, bass: { w: 1.00, h: 1.25 },
+  eighth: { w: 0.80, h: 1.65 }, quarter: { w: 0.60, h: 1.65 },
+  beam: { w: 1.10, h: 1.65 }, sixteenth: { w: 1.10, h: 1.85 },
+  sharp: { w: 0.70, h: 1.35 }, flat: { w: 0.55, h: 1.50 },
+};
+const GLYPH_COL = {
+  0: { base: '#e8c877', light: '#f8e8b8', deep: '#b98f3e', white: '#fffdf2', halo: 'rgba(232,200,119,0.35)' },
+  1: { base: '#cfe4f0', light: '#ffffff', deep: '#7fa8c4', white: '#f4fafd', halo: 'rgba(159,196,220,0.32)' },
+};
+function glyphPath(ctx, type) {
+  ctx.beginPath();
+  if (type === 'treble') {
+    ctx.moveTo(0.03, 0.62);
+    ctx.bezierCurveTo(0.03, 0.10, 0.03, -0.35, 0.03, -0.66);
+    ctx.bezierCurveTo(0.03, -0.92, 0.22, -1.00, 0.28, -0.82);
+    ctx.bezierCurveTo(0.34, -0.62, 0.10, -0.36, -0.10, -0.16);
+    ctx.bezierCurveTo(-0.32, 0.06, -0.34, 0.36, -0.10, 0.48);
+    ctx.bezierCurveTo(0.10, 0.58, 0.26, 0.46, 0.24, 0.28);
+    ctx.bezierCurveTo(0.22, 0.12, 0.04, 0.06, -0.06, 0.16);
+    ctx.moveTo(0.03, 0.62);
+    ctx.bezierCurveTo(0.03, 0.80, -0.02, 0.92, -0.14, 0.94);
+    ctx.bezierCurveTo(-0.26, 0.96, -0.30, 0.84, -0.22, 0.78);
+  } else if (type === 'bass') {
+    ctx.moveTo(-0.30, -0.40);
+    ctx.bezierCurveTo(0.05, -0.52, 0.36, -0.30, 0.36, 0.02);
+    ctx.bezierCurveTo(0.36, 0.34, 0.08, 0.54, -0.24, 0.62);
+    ctx.bezierCurveTo(0.02, 0.44, 0.14, 0.26, 0.14, 0.04);
+    ctx.bezierCurveTo(0.14, -0.16, 0.00, -0.30, -0.30, -0.40);
+    ctx.closePath();
+  } else if (type === 'eighth' || type === 'quarter') {
+    ctx.moveTo(0.13, 0.55); ctx.lineTo(0.13, -0.75);
+  } else if (type === 'beam' || type === 'sixteenth') {
+    ctx.moveTo(-0.15, 0.55); ctx.lineTo(-0.15, -0.62);
+    ctx.moveTo(0.55, 0.43); ctx.lineTo(0.55, -0.74);
+  } else if (type === 'sharp') {
+    ctx.moveTo(-0.12, -0.62); ctx.lineTo(-0.12, 0.62);
+    ctx.moveTo(0.14, -0.68); ctx.lineTo(0.14, 0.56);
+  } else if (type === 'flat') {
+    ctx.moveTo(-0.10, -0.72); ctx.lineTo(-0.10, 0.52);
+  }
+}
+function glyphFill(ctx, type) {
+  ctx.beginPath();
+  if (type === 'treble') { ctx.arc(-0.17, 0.86, 0.075, 0, TAU); }
+  else if (type === 'bass') { ctx.arc(-0.18, -0.28, 0.17, 0, TAU); ctx.moveTo(0.59, -0.18); ctx.arc(0.52, -0.18, 0.07, 0, TAU); ctx.moveTo(0.59, 0.10); ctx.arc(0.52, 0.10, 0.07, 0, TAU); }
+  else if (type === 'eighth' || type === 'quarter') { ctx.ellipse(-0.12, 0.62, 0.26, 0.19, -0.35, 0, TAU); }
+  else if (type === 'beam' || type === 'sixteenth') {
+    ctx.ellipse(-0.35, 0.62, 0.24, 0.18, -0.35, 0, TAU);
+    ctx.moveTo(0.59, 0.50); ctx.ellipse(0.35, 0.50, 0.24, 0.18, -0.35, 0, TAU);
+  }
+  else if (type === 'flat') {
+    ctx.moveTo(-0.10, 0.10);
+    ctx.bezierCurveTo(0.16, -0.02, 0.30, 0.14, 0.18, 0.32);
+    ctx.bezierCurveTo(0.08, 0.46, -0.02, 0.50, -0.10, 0.52);
+    ctx.closePath();
+  }
+  ctx.fill();
+  // 符尾 / 符杠 / 升号斜杠：实心多边形
+  ctx.beginPath();
+  if (type === 'eighth') {
+    ctx.moveTo(0.13, -0.75);
+    ctx.bezierCurveTo(0.42, -0.52, 0.46, -0.24, 0.30, 0.02);
+    ctx.bezierCurveTo(0.36, -0.26, 0.30, -0.44, 0.13, -0.56);
+    ctx.closePath();
+  } else if (type === 'beam' || type === 'sixteenth') {
+    ctx.moveTo(-0.19, -0.62); ctx.lineTo(0.59, -0.74); ctx.lineTo(0.59, -0.56); ctx.lineTo(-0.19, -0.44); ctx.closePath();
+    if (type === 'sixteenth') { ctx.moveTo(-0.19, -0.34); ctx.lineTo(0.59, -0.46); ctx.lineTo(0.59, -0.28); ctx.lineTo(-0.19, -0.16); ctx.closePath(); }
+  } else if (type === 'sharp') {
+    ctx.moveTo(-0.30, -0.10); ctx.lineTo(0.32, -0.26); ctx.lineTo(0.32, -0.10); ctx.lineTo(-0.30, 0.06); ctx.closePath();
+    ctx.moveTo(-0.30, 0.24); ctx.lineTo(0.32, 0.08); ctx.lineTo(0.32, 0.24); ctx.lineTo(-0.30, 0.40); ctx.closePath();
+  }
+  ctx.fill();
+}
+function makeGlyph(type, u, fam) {
+  const box = GLYPH_BOX[type], col = GLYPH_COL[fam];
+  const pad = 0.45;
+  const cw = Math.ceil((box.w + pad) * u), ch = Math.ceil((box.h + pad) * u);
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  const g = c.getContext('2d');
+  g.translate(cw / 2, ch / 2); g.scale(u, u);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  g.shadowColor = col.halo; g.shadowBlur = u * 0.10;
+  g.strokeStyle = col.base; g.fillStyle = col.base;
+  g.lineWidth = type === 'treble' ? 0.085 : (type === 'sharp' || type === 'flat' ? 0.06 : 0.07);
+  if (type === 'bass') { glyphFill(g, type); }
+  else { glyphPath(g, type); g.stroke(); glyphFill(g, type); }
+  g.shadowBlur = 0;
+  // 剪影内撒粉：亮 / 深 / 白颗粒叠出金粉质感
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'source-atop';
+  const n = Math.floor(box.w * box.h * 520);
+  for (let i = 0; i < n; i++) {
+    const x = rnd() * cw, y = rnd() * ch;
+    const t = rnd();
+    g.fillStyle = t < 0.42 ? col.light : (t < 0.72 ? col.deep : (t < 0.9 ? col.white : col.base));
+    g.globalAlpha = 0.25 + rnd() * 0.65;
+    const s = (0.012 + rnd() * 0.026) * u;
+    g.fillRect(x, y, s, s);
+  }
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  return { c, w: cw, h: ch };
+}
+const GLYPH_DEF = [
+  ['treble', 0.405, 0.345, 0.300, -0.06, 0], ['treble', 0.065, 0.400, 0.160, 0.10, 1],
+  ['treble', 0.935, 0.160, 0.220, 0.05, 0], ['bass', 0.655, 0.475, 0.160, -0.08, 0],
+  ['bass', 0.805, 0.115, 0.100, 0.12, 0], ['eighth', 0.265, 0.075, 0.100, 0.15, 0],
+  ['eighth', 0.545, 0.100, 0.090, -0.12, 1], ['eighth', 0.745, 0.130, 0.090, 0.10, 0],
+  ['eighth', 0.475, 0.200, 0.080, -0.18, 0], ['eighth', 0.585, 0.235, 0.085, 0.14, 1],
+  ['eighth', 0.155, 0.600, 0.110, -0.10, 0], ['eighth', 0.225, 0.585, 0.090, 0.16, 0],
+  ['eighth', 0.875, 0.375, 0.090, -0.14, 1], ['eighth', 0.965, 0.700, 0.110, 0.08, 0],
+  ['eighth', 0.505, 0.795, 0.090, -0.12, 0], ['eighth', 0.355, 0.925, 0.100, 0.10, 1],
+  ['eighth', 0.775, 0.915, 0.100, -0.08, 0], ['beam', 0.135, 0.360, 0.130, -0.10, 0],
+  ['beam', 0.475, 0.085, 0.120, 0.06, 1], ['beam', 0.665, 0.185, 0.130, -0.05, 0],
+  ['beam', 0.525, 0.665, 0.140, 0.04, 0], ['beam', 0.315, 0.700, 0.110, -0.06, 1],
+  ['sixteenth', 0.600, 0.350, 0.100, 0.12, 0], ['sixteenth', 0.075, 0.860, 0.100, -0.10, 1],
+  ['quarter', 0.145, 0.845, 0.090, 0.06, 0], ['quarter', 0.695, 0.350, 0.080, -0.10, 1],
+  ['sharp', 0.105, 0.060, 0.100, 0.05, 0], ['flat', 0.178, 0.175, 0.100, -0.06, 0],
+];
+let GLYPHS = [];
+function buildGlyphs() {
+  GLYPHS = GLYPH_DEF.map(([type, x, y, size, rot, fam]) => {
+    const u = size * scale / GLYPH_BOX[type].h;
+    const spr = makeGlyph(type, u, fam);
+    return { type, x, y, rot, fam, ph: rnd() * TAU, sw: spr.w, sh: spr.h, c: spr.c };
+  });
+}
+
+/* ---------- 底涂：深蓝夜幕 + 谱带五线 + 乐涡螺旋 + 金粉星屑 ---------- */
+function paintUnder() {
+  const w = under.width, h = under.height;
+  dustCtx.clearRect(0, 0, w, h);
+  const gBg = baseCtx.createLinearGradient(0, 0, 0, h);
+  gBg.addColorStop(0, '#0b1526'); gBg.addColorStop(0.5, '#0a1020'); gBg.addColorStop(1, '#0d1a2e');
+  baseCtx.fillStyle = gBg; baseCtx.fillRect(0, 0, w, h);
+  const gC = baseCtx.createRadialGradient(0.45 * w, 0.42 * h, 0, 0.45 * w, 0.42 * h, 0.75 * w);
+  gC.addColorStop(0, 'rgba(38,58,92,0.35)'); gC.addColorStop(1, 'rgba(38,58,92,0)');
+  baseCtx.fillStyle = gC; baseCtx.fillRect(0, 0, w, h);
+  baseCtx.lineCap = 'round';
+  // 谱带：宽柔光体 + 五条平行谱线 + 沿线金粉
+  for (let oi = 0; oi < RIBBONS.length; oi++) {
+    const r = RIBBONS[oi];
+    const pal = PALS[r.fam];
+    baseCtx.strokeStyle = pal[2];
+    baseCtx.globalAlpha = 0.06;
+    baseCtx.lineWidth = 0.030 * scale;
+    baseCtx.beginPath();
+    for (let x = 0; x <= W + 0.001; x += 0.01) { const y = ribOf(r, x); x === 0 ? baseCtx.moveTo(x * scale, y * scale) : baseCtx.lineTo(x * scale, y * scale); }
+    baseCtx.stroke();
+    for (let li = 0; li < LINE_OFF.length; li++) {
+      const off = LINE_OFF[li];
+      baseCtx.strokeStyle = pal[li === 2 ? 5 : (li % 2 === 0 ? 3 : 4)];
+      baseCtx.globalAlpha = 0.34 + rnd() * 0.26;
+      baseCtx.lineWidth = (0.5 + rnd() * 0.5) * scale / 800;
+      baseCtx.beginPath();
+      for (let x = 0; x <= W + 0.001; x += 0.008) {
+        const y = ribOf(r, x) + off + 0.0016 * Math.sin(x * 34 + li * 1.7 + oi);
+        x === 0 ? baseCtx.moveTo(x * scale, y * scale) : baseCtx.lineTo(x * scale, y * scale);
+      }
+      baseCtx.stroke();
+      // 沿线洒粉（独立金粉层，随「金粉」滑杆增减）
+      const dust = PALS[r.fam === 0 ? 2 : 3];
+      for (let x = 0; x <= W; x += 0.0035) {
+        if (rnd() < 0.30) continue;
+        const y = ribOf(r, x) + off + (rnd() - 0.5) * 0.004;
+        dustCtx.fillStyle = dust[3 + Math.floor(rnd() * 4)];
+        dustCtx.globalAlpha = Math.min(1, (0.20 + rnd() * 0.55) * 1.25);
+        const s = (0.3 + rnd() * 1.0) * scale / 800;
+        dustCtx.fillRect(x * scale - s / 2, y * scale - s / 2, s, s);
+      }
+    }
+  }
+  baseCtx.globalAlpha = 1;
+  // 乐涡：三圈平行螺旋臂 + 涡心密粉
+  for (const v of SPIRALS) {
+    const pal = PALS[v.fam];
+    const turns = 2.3, thMax = turns * TAU;
+    for (let arm = 0; arm < 3; arm++) {
+      const aoff = (arm - 1) * 0.010;
+      baseCtx.strokeStyle = pal[arm === 1 ? 5 : 3];
+      baseCtx.globalAlpha = 0.34 + rnd() * 0.24;
+      baseCtx.lineWidth = (0.5 + rnd() * 0.5) * scale / 800;
+      baseCtx.beginPath();
+      let pen = false;
+      for (let th = 0.5; th <= thMax; th += 0.05) {
+        const rr = v.r * Math.pow(1 - th / thMax, 1.2) + 0.004 + aoff;
+        const x = v.x + Math.cos(th + v.x * 5) * rr;
+        const y = v.y + Math.sin(th + v.x * 5) * rr * 0.9;
+        if (x < -0.05 || x > W + 0.05 || y < -0.05 || y > 1.05) { pen = false; continue; }
+        if (!pen) { baseCtx.moveTo(x * scale, y * scale); pen = true; } else baseCtx.lineTo(x * scale, y * scale);
+      }
+      baseCtx.stroke();
+    }
+    const dust = PALS[v.fam === 0 ? 2 : 3];
+    for (let i = 0; i < 700; i++) {
+      const th = rnd() * thMax;
+      const rr = v.r * Math.pow(1 - th / thMax, 1.2) + 0.004 + (rnd() - 0.5) * 0.014;
+      const x = v.x + Math.cos(th + v.x * 5) * rr, y = v.y + Math.sin(th + v.x * 5) * rr * 0.9;
+      dustCtx.fillStyle = dust[2 + Math.floor(rnd() * 5)];
+      dustCtx.globalAlpha = Math.min(1, (0.12 + rnd() * 0.35) * 1.25);
+      const s = (0.3 + rnd() * 1.0) * scale / 800;
+      dustCtx.fillRect(x * scale - s / 2, y * scale - s / 2, s, s);
+    }
+  }
+  baseCtx.globalAlpha = 1;
+  // 夜幕星点
+  for (let i = 0; i < 150; i++) {
+    const x = rnd() * W, y = rnd();
+    baseCtx.fillStyle = rnd() < 0.5 ? '#fff6d8' : '#dfe9f2';
+    baseCtx.globalAlpha = 0.12 + rnd() * 0.4;
+    const s = (0.3 + rnd() * 0.9) * scale / 800;
+    baseCtx.fillRect(x * scale - s / 2, y * scale - s / 2, s, s);
+  }
+  baseCtx.globalAlpha = 1;
+  // 满幅细碎金粉 / 冰屑（独立金粉层）
+  for (let i = 0; i < 2600; i++) {
+    const x = rnd() * W, y = rnd();
+    dustCtx.fillStyle = rnd() < 0.55 ? PALS[2][3 + Math.floor(rnd() * 4)] : PALS[3][2 + Math.floor(rnd() * 4)];
+    dustCtx.globalAlpha = Math.min(1, (0.08 + rnd() * 0.26) * 1.25);
+    const s = (0.25 + rnd() * 0.8) * scale / 800;
+    dustCtx.fillRect(x * scale - s / 2, y * scale - s / 2, s, s);
+  }
+  dustCtx.globalAlpha = 1;
+  // 静态流线笔触
+  for (let i = 0; i < 24000; i++) {
+    let x, y;
+    const m = rnd();
+    if (m < 0.70) {
+      x = rnd() * W;
+      const oi = Math.floor(rnd() * RIBBONS.length);
+      y = ribOf(RIBBONS[oi], x) + LINE_OFF[Math.floor(rnd() * 5)] + (rnd() - 0.5) * 0.004;
+    } else if (m < 0.88) {
+      const v = SPIRALS[Math.floor(rnd() * SPIRALS.length)], a = rnd() * TAU, rr = v.r * (0.55 + rnd() * 0.85);
+      x = v.x + Math.cos(a) * rr; y = v.y + Math.sin(a) * rr * 0.9;
+    } else { x = rnd() * W; y = rnd(); }
+    const tone = Math.min(6, Math.floor(rnd() * 7));
+    baseCtx.strokeStyle = colorAt(x, y, tone);
+    baseCtx.globalAlpha = (0.08 + rnd() * 0.34) * emphasis(x, y);
+    baseCtx.lineWidth = (0.4 + rnd() ** 2 * 1.9) * scale / 800;
+    baseCtx.beginPath(); baseCtx.moveTo(x * scale, y * scale);
+    const steps = 5 + Math.floor(rnd() * 30);
+    for (let j = 0; j < steps; j++) { const d = field(x, y); x += d[0] * 0.012; y += d[1] * 0.012; baseCtx.lineTo(x * scale, y * scale); }
+    baseCtx.stroke();
+  }
+  baseCtx.globalAlpha = 1;
+  inkCtx.drawImage(under, 0, 0);
+  inkCtx.globalAlpha = params.glitter;
+  inkCtx.drawImage(dustC, 0, 0);
+  inkCtx.globalAlpha = 1;
+}
+
+/* ---------- 粒子笔触 ---------- */
+let particles = [];
+function spawn(initial) {
+  let x = rnd() * 1.7 - 0.05, y = rnd() * 1.08 - 0.04;
+  const m = rnd();
+  if (m < 0.70) {
+    x = rnd() * W;
+    const oi = Math.floor(rnd() * RIBBONS.length);
+    y = ribOf(RIBBONS[oi], x) + LINE_OFF[Math.floor(rnd() * 5)] + (rnd() - 0.5) * 0.005;
+  } else if (m < 0.88) {
+    const v = SPIRALS[Math.floor(rnd() * SPIRALS.length)], a = rnd() * TAU, rr = v.r * (0.55 + rnd() * 0.85);
+    x = v.x + Math.cos(a) * rr; y = v.y + Math.sin(a) * rr * 0.9;
+  }
+  return { x, y, age: initial ? Math.floor(rnd() * 180) : 0, life: 120 + Math.floor(rnd() * 220), tone: Math.min(6, Math.floor(rnd() ** 1.35 * 7)), width: 0.3 + rnd() ** 2 * 1.0, phase: rnd() * TAU };
+}
+/* 闪点：谱线洒金 + 涡心碎光 + 夜幕星点 */
+let sparkles = [];
+function buildSparkles() {
+  sparkles = [];
+  for (let i = 0; i < 90; i++) {
+    sparkles.push({ x: rnd() * W, y: rnd(), s: 0.4 + rnd() * 0.9, ph: rnd() * TAU, c: rnd() < 0.5 ? '#fff6d8' : '#ffffff', gold: rnd() < 0.5 });
+  }
+  for (let oi = 0; oi < RIBBONS.length; oi++) {
+    const r = RIBBONS[oi];
+    for (let i = 0; i < 44; i++) {
+      const x = rnd() * W;
+      const y = ribOf(r, x) + LINE_OFF[Math.floor(rnd() * 5)] + (rnd() - 0.5) * 0.004;
+      sparkles.push({ x, y, s: 0.5 + rnd() * 1.2, ph: rnd() * TAU, c: r.fam === 0 ? '#f8e8b8' : '#eaf4fa', gold: r.fam === 0 });
+    }
+  }
+  for (const v of SPIRALS) {
+    for (let i = 0; i < 40; i++) {
+      const a = rnd() * TAU, rr = v.r * (0.35 + Math.pow(rnd(), 0.8) * 0.9);
+      sparkles.push({ x: v.x + Math.cos(a) * rr, y: v.y + Math.sin(a) * rr * 0.9, s: 0.5 + rnd() * 1.2, ph: rnd() * TAU, c: v.fam === 0 ? '#f8e8b8' : '#eaf4fa', gold: v.fam === 0 });
+    }
+  }
+}
+const buckets = new Map();
+let simT = 0;
+function step(dt, show) {
+  simT += dt / 30;
+  if (growth && !gpu) refreshGrowth();
+  if (gpu) {
+    inkCtx.clearRect(0, 0, ink.width, ink.height);
+  } else {
+    inkCtx.globalAlpha = Math.min(0.9, 0.028 * dt);
+    inkCtx.drawImage(growth ? baseIntro : under, 0, 0);
+    if (!growth) { inkCtx.globalAlpha = Math.min(0.9, 0.028 * dt) * params.glitter; inkCtx.drawImage(dustC, 0, 0); }
+    inkCtx.globalAlpha = 1;
+  }
+  cellCache.clear();
+  buckets.clear();
+  for (let i = 0; i < particles.length; i++) {
+    let p = particles[i];
+    p.age += dt;
+    if (p.age > p.life || p.x < -0.12 || p.x > 1.72 || p.y < -0.12 || p.y > 1.12) p = particles[i] = spawn(false);
+    const info = cellInfo(p.x, p.y);
+    const nx = p.x + info.fx * 0.018 * dt, ny = p.y + info.fy * 0.018 * dt;
+    const alpha = (0.28 + 0.4 * Math.sin(p.phase + p.age * 0.025) ** 2) * info.em * info.g;
+    if (alpha > 0.02) {
+      const ti = toneAt(info, p.tone);
+      const ci = info.kind * 7 + ti;
+      const aq = Math.min(7, Math.round(alpha * 7));
+      const wq = Math.min(3, Math.round(p.width * 2.5));
+      const key = ci * 32 + aq * 4 + wq;
+      let b = buckets.get(key);
+      if (!b) {
+        b = { style: PALS[info.kind][ti], alpha: aq / 7, width: (wq / 2.5) * scale / 800, pts: [] };
+        buckets.set(key, b);
+      }
+      b.pts.push(p.x * scale, p.y * scale, nx * scale, ny * scale);
+    }
+    p.x = nx; p.y = ny;
+  }
+  inkCtx.lineCap = 'round';
+  for (const b of buckets.values()) {
+    inkCtx.strokeStyle = b.style;
+    inkCtx.globalAlpha = b.alpha;
+    inkCtx.lineWidth = Math.max(0.3, b.width);
+    inkCtx.beginPath();
+    const pts = b.pts;
+    for (let j = 0; j < pts.length; j += 4) {
+      inkCtx.moveTo(pts[j], pts[j + 1]);
+      inkCtx.lineTo(pts[j + 2], pts[j + 3]);
+    }
+    inkCtx.stroke();
+  }
+  inkCtx.globalAlpha = 1;
+  // 音符：低alpha逐帧累积（拖尾平衡亮度），微浮微转微闪
+  const N = GLYPHS.length;
+  for (let i = 0; i < N; i++) {
+    const gl = GLYPHS[i];
+    const fade = Math.min(1, Math.max(0, params.notes * N - i));
+    if (fade <= 0.02) continue;
+    const gate = growth ? cellInfo(gl.x, gl.y).g : 1;
+    if (gate <= 0.02) continue;
+    const shim = 0.8 + 0.2 * Math.sin(simT * 1.3 + gl.ph);
+    inkCtx.globalAlpha = 0.045 * fade * shim * gate;
+    inkCtx.save();
+    inkCtx.translate(gl.x * scale, (gl.y + 0.004 * Math.sin(simT * 0.6 + gl.ph)) * scale);
+    inkCtx.rotate(gl.rot + 0.03 * Math.sin(simT * 0.4 + gl.ph));
+    inkCtx.drawImage(gl.c, -gl.sw / 2, -gl.sh / 2, gl.sw, gl.sh);
+    inkCtx.restore();
+  }
+  inkCtx.globalAlpha = 1;
+  // 闪点（随生长门控显现，微微闪烁）
+  for (const sp of sparkles) {
+    const g = growth ? cellInfo(sp.x, sp.y).g : 1;
+    if (g <= 0.02) continue;
+    const gm = sp.gold ? params.glitter : 1;
+    if (gm <= 0.02) continue;
+    const tw = (0.25 + 0.55 * Math.sin(simT * 2 + sp.ph) ** 2) * gm;
+    inkCtx.globalAlpha = tw * g;
+    inkCtx.fillStyle = sp.c;
+    const s = sp.s * scale / 800;
+    inkCtx.fillRect(sp.x * scale - s / 2, sp.y * scale - s / 2, s, s);
+  }
+  inkCtx.globalAlpha = 1;
+  if (growth) {
+    for (const s of growth) {
+      if (s.rOut2 <= 0) continue;
+      const u = Math.min(1, Math.max(0, (introT - s.t0) / s.dur));
+      const fade = Math.min(1, Math.max(0, (introT - s.t0) / 0.5)) * Math.pow(1 - u, 1.6);
+      if (fade <= 0.01) continue;
+      const r = (s.warm ? 0.09 : 0.085) * scale;
+      const col = s.warm ? '248,232,184' : '214,236,248';
+      const a0 = s.warm ? 0.035 : 0.025;
+      const g = inkCtx.createRadialGradient(s.x * scale, s.y * scale, 0, s.x * scale, s.y * scale, r);
+      g.addColorStop(0, `rgba(${col},${a0 * fade})`);
+      g.addColorStop(0.4, `rgba(${col},${a0 * 0.45 * fade})`);
+      g.addColorStop(1, `rgba(${col},0)`);
+      inkCtx.fillStyle = g;
+      inkCtx.fillRect(s.x * scale - r, s.y * scale - r, r * 2, r * 2);
+    }
+  }
+  if (gpu) gpu.advance(ink, dt, growth);
+  if (show) present();
+}
+function present() { if (gpu) gpu.render(); else ctx2d.drawImage(ink, 0, 0); }
+
+/* ---------- 生长开场 ---------- */
+const SEEDS = [
+  { x: 0.400, y: 0.350, t0: 0.15, dur: 6.4, maxR: 1.05, warm: true },
+  { x: 0.845, y: 0.100, t0: 0.90, dur: 5.9, maxR: 0.95, warm: true },
+  { x: 0.115, y: 0.100, t0: 1.60, dur: 5.5, maxR: 0.90, warm: false },
+  { x: 0.550, y: 0.800, t0: 2.20, dur: 5.6, maxR: 0.95, warm: true },
+  { x: 0.100, y: 0.550, t0: 2.80, dur: 5.2, maxR: 0.90, warm: false },
+  { x: 0.750, y: 0.550, t0: 3.30, dur: 5.2, maxR: 0.90, warm: false },
+];
+const INTRO_END = 8.6;
+let introT = 0;
+const easeGrow = u => u;
+function updateGrowth(t) {
+  introT = t;
+  for (const s of SEEDS) {
+    const u = Math.min(1, Math.max(0, (t - s.t0) / s.dur));
+    s.r = u <= 0 ? 0 : s.maxR * easeGrow(u);
+    s.rOut = s.r + FEATHER;
+    s.rOut2 = s.rOut * s.rOut;
+  }
+}
+function refreshGrowth() {
+  const w = under.width, h = under.height;
+  maskCtx.clearRect(0, 0, w, h);
+  maskCtx.globalCompositeOperation = 'lighter';
+  for (const s of growth) {
+    if (s.rOut2 <= 0) continue;
+    const R = s.rOut * scale;
+    const g = maskCtx.createRadialGradient(s.x * scale, s.y * scale, 0, s.x * scale, s.y * scale, R);
+    const inner = Math.max(0, Math.min(1, s.r / s.rOut));
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(inner, 'rgba(255,255,255,1)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    maskCtx.fillStyle = g;
+    maskCtx.fillRect(s.x * scale - R, s.y * scale - R, R * 2, R * 2);
+  }
+  maskCtx.globalCompositeOperation = 'source-over';
+  bIntroCtx.clearRect(0, 0, w, h);
+  bIntroCtx.drawImage(under, 0, 0);
+  bIntroCtx.globalAlpha = params.glitter;
+  bIntroCtx.drawImage(dustC, 0, 0);
+  bIntroCtx.globalAlpha = 1;
+  bIntroCtx.globalCompositeOperation = 'destination-in';
+  bIntroCtx.drawImage(maskC, 0, 0);
+  bIntroCtx.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- 状态机 ---------- */
+let phase = 'boot';
+let introStart = 0;
+let running = true;
+let warmLeft = 0, last = 0, acc = 0;
+let fps = 0, fpsCount = 0, fpsAt = 0;
+function setStatus(t) { statusEl.textContent = t; }
+function beginIntro(now) {
+  phase = 'intro'; introStart = now; introT = 0;
+  growth = SEEDS; updateGrowth(0);
+  skipBtn.hidden = false; pauseBtn.disabled = true;
+  setStatus('乐章正在生长…');
+}
+function endIntro() {
+  growth = null;
+  if (gpu) gpu.setBase(under, dustC);
+  phase = 'live'; last = 0;
+  skipBtn.hidden = true; pauseBtn.disabled = false;
+  setStatus(running ? '流动中 · 空格暂停' : '已暂停');
+}
+function skipIntro() {
+  if (phase !== 'intro') return;
+  growth = null;
+  if (gpu) gpu.setBase(under, dustC);
+  for (let i = 0; i < 12; i++) step(1, false);
+  present();
+  endIntro();
+}
+let setupEpoch = 0;
+function setup(replayIntro) {
+  const rect = frameEl.getBoundingClientRect();
+  scale = Math.min(800, Math.max(600, rect.width * Math.min(devicePixelRatio || 1, 2) / W));
+  const pw = Math.round(scale * W), ph = Math.round(scale);
+  for (const c of [sky, under, dustC, ink, maskC, baseIntro]) { c.width = pw; c.height = ph; }
+  if (gpu) gpu.resize(pw, ph);
+  seed = 20261126;
+  buildRibTabs();
+  paintUnder();
+  buildGlyphs();
+  buildSparkles();
+  if (gpu) gpu.setBase(under, dustC);
+  particles = Array.from({ length: Math.round(params.density * Q_FACTOR[quality]) }, () => spawn(true));
+  warmLeft = 48;
+  const epoch = ++setupEpoch;
+  if (replayIntro && !reducedMotion) { beginIntro(performance.now()); return; }
+  growth = null;
+  phase = 'warm';
+  (function warm() {
+    if (epoch !== setupEpoch) return;
+    for (let i = 0; i < 4 && warmLeft > 0; i++, warmLeft--) step(1, false);
+    present();
+    if (warmLeft > 0) requestAnimationFrame(warm);
+    else { phase = 'live'; last = 0; setStatus(running ? '流动中 · 空格暂停' : '已暂停'); }
+  })();
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  fpsCount++;
+  if (now - fpsAt >= 1000) { fps = fpsCount * 1000 / (now - fpsAt); fpsCount = 0; fpsAt = now; }
+  if (phase === 'intro') {
+    const t = (now - introStart) / 1000;
+    updateGrowth(t);
+    if (!last) last = now;
+    acc += Math.min(80, now - last); last = now;
+    if (acc >= 1000 / 30) { const dt = Math.min(2, acc / (1000 / 30)); acc = 0; step(dt, true); }
+    if (t >= INTRO_END) endIntro();
+    return;
+  }
+  if (document.hidden || !running || phase === 'warm' || phase === 'boot') { last = now; return; }
+  if (!last) last = now;
+  acc += Math.min(80, now - last); last = now;
+  if (acc >= 1000 / 30) { const dt = Math.min(2, acc / (1000 / 30)) * params.speed; acc = 0; step(dt, true); }
+  if (phase === 'live' && now - govAt > 2500) {
+    govAt = now;
+    if (fps > 0 && fps < 48 && quality < 2) { quality++; applyDensity(); }
+  }
+}
+let quality = 0, govAt = 0;
+const Q_FACTOR = [1, 0.65, 0.45];
+function applyDensity() {
+  const target = Math.round(params.density * Q_FACTOR[quality]);
+  while (particles.length < target) particles.push(spawn(true));
+  particles.length = target;
+}
+
+/* ---------- UI ---------- */
+const sliders = { speed: $('#speed'), density: $('#density'), glitter: $('#glitter'), notes: $('#notes'), bloom: $('#bloom'), exposure: $('#exposure') };
+const outs = { speed: $('#speedOut'), density: $('#densityOut'), glitter: $('#glitterOut'), notes: $('#notesOut'), bloom: $('#bloomOut'), exposure: $('#exposureOut') };
+function syncOutputs() {
+  sliders.speed.value = params.speed; outs.speed.textContent = params.speed.toFixed(2);
+  sliders.density.value = params.density; outs.density.textContent = params.density;
+  sliders.glitter.value = params.glitter; outs.glitter.textContent = params.glitter.toFixed(2);
+  sliders.notes.value = params.notes; outs.notes.textContent = params.notes.toFixed(2);
+  sliders.bloom.value = params.bloom; outs.bloom.textContent = params.bloom.toFixed(2);
+  sliders.exposure.value = params.exposure; outs.exposure.textContent = params.exposure.toFixed(2);
+}
+sliders.speed.oninput = e => { params.speed = +e.target.value; outs.speed.textContent = params.speed.toFixed(2); remember(); };
+sliders.density.oninput = e => { params.density = +e.target.value; outs.density.textContent = params.density; applyDensity(); remember(); };
+sliders.glitter.oninput = e => { params.glitter = +e.target.value; outs.glitter.textContent = params.glitter.toFixed(2); remember(); };
+sliders.notes.oninput = e => { params.notes = +e.target.value; outs.notes.textContent = params.notes.toFixed(2); remember(); };
+sliders.bloom.oninput = e => { params.bloom = +e.target.value; outs.bloom.textContent = params.bloom.toFixed(2); remember(); };
+sliders.exposure.oninput = e => { params.exposure = +e.target.value; outs.exposure.textContent = params.exposure.toFixed(2); remember(); };
+function toggle() {
+  running = !running;
+  pauseBtn.textContent = running ? '暂停' : '继续';
+  if (phase === 'live') setStatus(running ? '流动中 · 空格暂停' : '已暂停');
+}
+pauseBtn.onclick = toggle;
+skipBtn.onclick = skipIntro;
+$('#redraw').onclick = () => setup(true);
+$('#save').onclick = () => {
+  const a = document.createElement('a');
+  a.download = 'melody-flow.png';
+  a.href = sky.toDataURL('image/png');
+  a.click();
+};
+$('#full').onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else frameEl.requestFullscreen?.().catch(() => {});
+};
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); if (phase === 'live') toggle(); }
+  else if (e.key === 'r' || e.key === 'R') setup(true);
+  else if (e.key === 'f' || e.key === 'F') $('#full').click();
+  else if (e.key === 's' || e.key === 'S') $('#save').click();
+});
+let resizeTimer;
+new ResizeObserver(() => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => setup(phase === 'intro'), 200);
+}).observe(frameEl);
+
+window.__flow = {
+  get t() { return phase === 'intro' ? (performance.now() - introStart) / 1000 : 99; },
+  get phase() { return phase; },
+  get fps() { return fps; },
+  get quality() { return quality; },
+  get pw() { return sky.width; },
+  get ph() { return sky.height; },
+  get renderer() { return gpu ? 'webgl2' : 'canvas2d'; },
+  get setups() { return setupEpoch; },
+  get warmLeft() { return warmLeft; },
+  params,
+  skip: () => skipIntro(),
+};
+
+syncOutputs();
+setup(!reducedMotion);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#071124" />
+<meta name="description" content="《漩涡与深蓝：星月夜的回响》作品集开场动画 · 从线稿显影到流动油画的星夜演出" />
+<link rel="icon" href="data:," />
+<title>漩涡与深蓝 · 星月夜的回响 — 开场演出</title>
+<style>
+  :root{
+    --night-950:#071124; --night-900:#0d1f3c; --night-800:#132c52;
+    --ultramarine:#2a4d8f; --cobalt:#3f6db4; --teal:#4d8ba6;
+    --gold:#f2c14e; --gold-soft:#f6d98a; --amber:#d98b2e;
+    --ivory:#f4efdd; --cypress:#0c2418; --cyan:#7fd4e8;
+    --ok:#7fd8a4; --warn:#f2c14e; --danger:#e86a5e; --info:#7fb8e8;
+    --text:rgba(244,239,221,.94); --text-soft:rgba(244,239,221,.72); --text-mute:rgba(244,239,221,.48);
+    --line:rgba(244,239,221,.16);
+    --glass:rgba(10,22,44,.55); --glass-2:rgba(13,31,60,.62);
+    --serif:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","SimSun",serif;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    --ease:cubic-bezier(.22,1,.36,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%}
+  body{
+    overflow:hidden;background:var(--night-950);color:var(--text);
+    font-family:var(--sans);-webkit-font-smoothing:antialiased;
+  }
+  button{color:inherit;font:inherit;background:none;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  a{color:inherit;text-decoration:none}
+  button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+  ::selection{background:rgba(242,193,78,.28)}
+
+  /* ---- 画布与兜底 ---- */
+  #stage{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0}
+  .fallback{position:fixed;inset:0;z-index:0;display:none;
+    background:
+      radial-gradient(ellipse 60% 45% at 62% 30%, rgba(63,109,180,.55), transparent 70%),
+      radial-gradient(ellipse 30% 26% at 86% 18%, rgba(242,193,78,.35), transparent 70%),
+      radial-gradient(ellipse 24% 60% at 14% 60%, rgba(12,36,24,.9), transparent 75%),
+      linear-gradient(180deg,#0a1a38 0%,#132c52 55%,#0c2036 78%,#071124 100%);
+  }
+  body.no-gl .fallback{display:block}
+  body.no-gl #stage{display:none}
+
+  /* ---- 开场标题 ---- */
+  .intro-title{
+    position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;pointer-events:none;padding:0 6vw;
+    opacity:1;transition:opacity .9s var(--ease),transform .9s var(--ease),filter .9s var(--ease);
+  }
+  .intro-title.out{opacity:0;transform:scale(1.06);filter:blur(6px)}
+  .intro-eyebrow{font-size:.62rem;letter-spacing:.5em;color:var(--gold-soft);text-transform:uppercase;
+    display:flex;align-items:center;gap:1rem}
+  .intro-eyebrow::before,.intro-eyebrow::after{content:"";width:2.6rem;height:1px;background:linear-gradient(90deg,transparent,rgba(246,217,138,.7))}
+  .intro-eyebrow::after{background:linear-gradient(90deg,rgba(246,217,138,.7),transparent)}
+  .intro-main{margin-top:1.4rem;font-family:var(--serif);font-weight:400;font-size:clamp(2.6rem,7.2vw,5.4rem);
+    letter-spacing:.14em;line-height:1.15;text-shadow:0 2px 30px rgba(7,17,36,.85),0 0 60px rgba(7,17,36,.6)}
+  .intro-sub{margin-top:1.1rem;font-family:var(--serif);font-size:clamp(.85rem,1.6vw,1.05rem);letter-spacing:.34em;color:var(--text-soft)}
+  .intro-en{margin-top:.7rem;font:italic .78rem Georgia,serif;letter-spacing:.18em;color:var(--text-mute)}
+  .intro-rule{margin-top:1.5rem;width:5.5rem;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+
+  /* ---- 常驻顶栏 ---- */
+  .topbar{position:fixed;z-index:40;top:0;left:0;right:0;display:flex;align-items:flex-start;justify-content:space-between;
+    padding:1.4rem clamp(1.2rem,3.4vw,3.4rem);pointer-events:none}
+  .topbar>*{pointer-events:auto}
+  .brand{display:flex;align-items:center;gap:.8rem;opacity:0;transform:translateY(-10px);
+    transition:opacity 1s var(--ease) .15s,transform 1s var(--ease) .15s}
+  body.is-ready .brand{opacity:1;transform:none}
+  .brand-mark{width:2.5rem;height:2.5rem;color:var(--gold);filter:drop-shadow(0 0 10px rgba(242,193,78,.35))}
+  .brand-name{font-family:var(--serif);font-size:1.02rem;letter-spacing:.3em}
+  .brand-sub{display:block;margin-top:.22rem;font-size:.5rem;letter-spacing:.3em;color:var(--text-mute)}
+  .top-right{display:flex;align-items:center;gap:.5rem}
+  .nav{display:flex;gap:.2rem;opacity:0;transform:translateY(-10px);transition:opacity 1s var(--ease) .3s,transform 1s var(--ease) .3s}
+  body.is-ready .nav{opacity:1;transform:none}
+  .nav-btn{padding:.6rem .95rem;border-radius:999px;font-size:.72rem;letter-spacing:.14em;color:var(--text-soft);
+    transition:color .2s,background .2s}
+  .nav-btn:hover{color:var(--text);background:rgba(244,239,221,.08)}
+  .nav-btn.active{color:var(--gold-soft);background:rgba(242,193,78,.1)}
+  .chip{display:inline-flex;align-items:center;gap:.5rem;padding:.55rem .9rem;border-radius:999px;
+    border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    font-size:.68rem;letter-spacing:.1em;color:var(--text-soft);transition:border-color .2s,color .2s,background .2s}
+  .chip:hover{border-color:rgba(242,193,78,.5);color:var(--text)}
+  .chip svg{width:.95rem;height:.95rem}
+  #sound-btn .wave{transition:opacity .2s}
+  #sound-btn.muted .wave{opacity:.15}
+  #sound-btn.muted .slash{opacity:1}
+  #sound-btn .slash{opacity:0;transition:opacity .2s}
+  #skip-btn{opacity:.75}
+  body.is-ready #skip-btn{display:none}
+
+  /* ---- 底部信息 ---- */
+  .scene-tag{position:fixed;z-index:20;left:clamp(1.2rem,3.4vw,3.4rem);bottom:1.6rem;max-width:24rem;
+    opacity:0;transform:translateY(12px);transition:opacity 1.1s var(--ease) .5s,transform 1.1s var(--ease) .5s;pointer-events:none}
+  body.is-ready .scene-tag{opacity:1;transform:none}
+  .scene-tag .over{font-size:.52rem;letter-spacing:.4em;color:var(--gold-soft)}
+  .scene-tag h2{margin-top:.5rem;font-family:var(--serif);font-weight:400;font-size:1.35rem;letter-spacing:.2em}
+  .scene-tag p{margin-top:.5rem;font-family:var(--serif);font-size:.74rem;letter-spacing:.12em;line-height:1.9;color:var(--text-soft)}
+  .explore-hint{position:fixed;z-index:20;right:clamp(1.2rem,3.4vw,3.4rem);bottom:1.6rem;
+    display:flex;flex-direction:column;align-items:center;gap:.55rem;color:var(--text-mute);
+    opacity:0;transition:opacity 1.1s var(--ease) .7s,color .2s}
+  body.is-ready .explore-hint{opacity:1}
+  body.is-tour .explore-hint{opacity:0;pointer-events:none}
+  .explore-hint:hover{color:var(--gold-soft)}
+  .explore-hint span{font-size:.58rem;letter-spacing:.32em;writing-mode:vertical-rl}
+  .explore-hint svg{width:1rem;height:1rem;animation:dip 2.2s var(--ease) infinite}
+  @keyframes dip{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(6px);opacity:1}}
+
+  /* ---- 导演台（调参面板） ---- */
+  .director{position:fixed;z-index:25;right:clamp(1.2rem,3.4vw,3.4rem);top:50%;transform:translateY(-50%) translateX(16px);
+    width:236px;max-height:min(72vh,560px);display:flex;flex-direction:column;
+    border:1px solid var(--line);border-radius:14px;background:var(--glass);
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    box-shadow:0 18px 50px rgba(4,10,24,.5);opacity:0;pointer-events:none;
+    transition:opacity 1.1s var(--ease) .65s,transform 1.1s var(--ease) .65s}
+  body.is-ready .director{opacity:1;pointer-events:auto;transform:translateY(-50%)}
+  /* 导览态：导演台 dock 为底部横条，避免遮挡章节卡片 */
+  body.is-tour .director{top:auto;bottom:0;left:0;right:0;width:100%;max-height:44vh;transform:none;
+    border-radius:16px 16px 0 0;transition:opacity .6s var(--ease)}
+  body.is-tour .director-body{display:flex;flex-wrap:wrap;gap:0 1.1rem;overflow-y:auto;max-height:24vh;padding:.6rem 1.2rem .4rem}
+  body.is-tour .director-body .ctl{flex:1 1 130px;min-width:118px;margin-bottom:.45rem}
+  body.is-tour .director-actions{padding:.45rem 1.2rem .8rem}
+  body.is-tour .tc-3,body.is-tour .tc-4{bottom:176px}
+  body.is-tour .scene-tag{opacity:0;transition:opacity .5s var(--ease)}
+  .director-head{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1rem .6rem;
+    border-bottom:1px solid rgba(244,239,221,.08)}
+  .director-head b{font-size:.62rem;letter-spacing:.3em;color:var(--gold-soft);font-weight:400}
+  #fps{font-size:.58rem;letter-spacing:.08em;color:var(--ok);font-variant-numeric:tabular-nums}
+  .director-body{padding:.7rem 1rem .9rem;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(242,193,78,.45) rgba(13,31,60,.4)}
+  .director-body::-webkit-scrollbar{width:6px}
+  .director-body::-webkit-scrollbar-track{background:rgba(13,31,60,.4);border-radius:3px}
+  .director-body::-webkit-scrollbar-thumb{background:rgba(242,193,78,.45);border-radius:3px}
+  .director-body::-webkit-scrollbar-thumb:hover{background:rgba(242,193,78,.75)}
+  .ctl{margin-bottom:.62rem}
+  .ctl label{display:flex;justify-content:space-between;font-size:.6rem;letter-spacing:.14em;color:var(--text-soft);margin-bottom:.28rem}
+  .ctl output{color:var(--gold-soft);font-variant-numeric:tabular-nums}
+  .ctl input[type=range]{width:100%;height:16px;appearance:none;-webkit-appearance:none;background:transparent;cursor:pointer}
+  .ctl input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;
+    background:linear-gradient(90deg,var(--ultramarine),var(--cobalt) 60%,var(--gold))}
+  .ctl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;margin-top:-4.5px;border-radius:50%;
+    background:var(--gold-soft);border:1px solid rgba(7,17,36,.6);box-shadow:0 0 8px rgba(242,193,78,.55)}
+  .ctl input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:linear-gradient(90deg,var(--ultramarine),var(--cobalt) 60%,var(--gold))}
+  .ctl input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--gold-soft);border:1px solid rgba(7,17,36,.6)}
+  .ctl select{width:100%;padding:.4rem .5rem;border-radius:8px;border:1px solid var(--line);background:var(--night-900);
+    color:var(--text-soft);font-size:.66rem;letter-spacing:.1em}
+  .director-actions{display:flex;gap:.4rem;padding:.7rem 1rem .9rem;border-top:1px solid rgba(244,239,221,.08)}
+  .d-btn{flex:1;padding:.5rem .2rem;border-radius:8px;border:1px solid var(--line);font-size:.6rem;letter-spacing:.08em;
+    color:var(--text-soft);transition:all .2s;text-align:center}
+  .d-btn:hover{border-color:rgba(242,193,78,.55);color:var(--gold-soft);background:rgba(242,193,78,.07)}
+  .d-btn.primary{border-color:rgba(242,193,78,.5);color:var(--gold-soft)}
+  #director-tab{display:none}
+
+  /* ---- 导览态 ---- */
+  .tour{position:fixed;inset:0;z-index:18;display:flex;align-items:center;justify-content:center;
+    opacity:0;visibility:hidden;transition:opacity .8s var(--ease),visibility .8s;pointer-events:none}
+  body.is-tour .tour{opacity:1;visibility:visible;pointer-events:auto}
+  .tour-center{text-align:center;max-width:34rem;padding:0 1rem;transform:translateY(14px);transition:transform .9s var(--ease)}
+  body.is-tour .tour-center{transform:none}
+  .tour-center .over{font-size:.56rem;letter-spacing:.5em;color:var(--gold-soft)}
+  .tour-center h1{margin-top:1rem;font-family:var(--serif);font-weight:400;font-size:clamp(2.2rem,5.4vw,3.8rem);letter-spacing:.16em;
+    text-shadow:0 2px 26px rgba(7,17,36,.9)}
+  .tour-center .sub{margin-top:.8rem;font-family:var(--serif);font-size:.85rem;letter-spacing:.3em;color:var(--text-soft)}
+  .tour-center .meta{margin-top:1.2rem;font-size:.6rem;letter-spacing:.24em;color:var(--text-mute)}
+  .tour-back{margin-top:1.8rem;display:inline-flex;align-items:center;gap:.6rem;padding:.6rem 1.3rem;border-radius:999px;
+    border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(12px);font-size:.68rem;letter-spacing:.16em;color:var(--text-soft);transition:all .2s}
+  .tour-back:hover{border-color:rgba(242,193,78,.55);color:var(--gold-soft)}
+  .tour-card{position:absolute;width:min(240px,26vw);padding:1rem 1.1rem;border-radius:14px;text-align:left;
+    border:1px solid var(--line);background:var(--glass-2);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    box-shadow:0 14px 40px rgba(4,10,24,.45);transition:border-color .25s,box-shadow .25s;cursor:pointer;
+    opacity:0;transform:translateY(18px)}
+  body.is-tour .tour-card{opacity:1;transform:none;transition:opacity .8s var(--ease),transform .8s var(--ease),border-color .25s,box-shadow .25s}
+  body.is-tour .tour-card:nth-child(2){transition-delay:.1s}
+  body.is-tour .tour-card:nth-child(3){transition-delay:.2s}
+  body.is-tour .tour-card:nth-child(4){transition-delay:.3s}
+  body.is-tour .tour-card:nth-child(5){transition-delay:.4s}
+  .tour-card:hover,.tour-card.open{border-color:rgba(242,193,78,.5);box-shadow:0 18px 50px rgba(4,10,24,.6),0 0 24px rgba(242,193,78,.08)}
+  .tour-card .no{font-size:.52rem;letter-spacing:.34em;color:var(--gold-soft)}
+  .tour-card h3{margin-top:.45rem;font-family:var(--serif);font-weight:400;font-size:1.02rem;letter-spacing:.12em}
+  .tour-card .hook{margin-top:.5rem;font-size:.68rem;line-height:1.85;color:var(--text-soft);letter-spacing:.04em}
+  .tour-card .detail{max-height:0;overflow:hidden;transition:max-height .5s var(--ease),margin .5s var(--ease);
+    font-size:.64rem;line-height:1.9;color:var(--text-mute);letter-spacing:.04em}
+  .tour-card.open .detail{max-height:11rem;margin-top:.6rem;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(242,193,78,.4) transparent}
+  .tour-card .detail::-webkit-scrollbar{width:5px}
+  .tour-card .detail::-webkit-scrollbar-thumb{background:rgba(242,193,78,.4);border-radius:3px}
+  .tour-card .more{margin-top:.6rem;font-size:.54rem;letter-spacing:.2em;color:var(--text-mute)}
+  .tour-card.open .more{color:var(--gold-soft)}
+  .tc-1{left:6%;top:20%}.tc-2{right:6%;top:16%}.tc-3{right:8%;bottom:18%}.tc-4{left:8%;bottom:16%}
+  .tour-card a{color:var(--info);border-bottom:1px solid rgba(127,184,232,.4)}
+
+  /* ---- 联系弹层 ---- */
+  .contact{position:fixed;z-index:50;top:4.6rem;right:clamp(1.2rem,3.4vw,3.4rem);width:min(280px,86vw);
+    padding:1.2rem 1.3rem;border-radius:14px;border:1px solid var(--line);background:var(--glass-2);
+    backdrop-filter:blur(18px);box-shadow:0 18px 50px rgba(4,10,24,.55);
+    opacity:0;visibility:hidden;transform:translateY(-8px);transition:all .35s var(--ease)}
+  .contact.open{opacity:1;visibility:visible;transform:none}
+  .contact h3{font-family:var(--serif);font-weight:400;font-size:.95rem;letter-spacing:.2em;color:var(--gold-soft)}
+  .contact p{margin-top:.6rem;font-size:.68rem;line-height:1.9;color:var(--text-soft)}
+  .contact a{display:inline-flex;align-items:center;gap:.45rem;margin-top:.8rem;font-size:.68rem;color:var(--info);
+    border-bottom:1px solid rgba(127,184,232,.4);padding-bottom:.15rem}
+  .contact a:hover{color:var(--cyan)}
+
+  .toast{position:fixed;z-index:60;left:50%;bottom:5.4rem;transform:translateX(-50%) translateY(8px);
+    padding:.6rem 1.2rem;border-radius:999px;border:1px solid rgba(242,193,78,.4);background:var(--glass-2);
+    backdrop-filter:blur(12px);font-size:.66rem;letter-spacing:.14em;color:var(--gold-soft);
+    opacity:0;visibility:hidden;transition:all .4s var(--ease);pointer-events:none}
+  .toast.show{opacity:1;visibility:visible;transform:translateX(-50%)}
+
+  /* ---- 响应式 ---- */
+  @media (max-width:1200px){
+    body.is-tour .tc-3,body.is-tour .tc-4{bottom:250px}
+    body.is-tour .tc-1,body.is-tour .tc-2{top:12%}
+  }
+  @media (max-width:900px){
+    .director{width:212px}
+    .tour-card{width:min(210px,30vw)}
+  }
+  @media (max-width:700px){
+    .topbar{padding:1rem 1.1rem;align-items:center}
+    .brand-sub{display:none}
+    .brand{gap:.5rem}
+    .brand-mark{width:1.6rem;height:1.6rem}
+    .brand-name{font-size:.72rem;letter-spacing:.08em;white-space:nowrap}
+    .nav{gap:.1rem}
+    .nav-btn{padding:.4rem .45rem;font-size:.6rem;letter-spacing:.05em;white-space:nowrap}
+    .chip{padding:.45rem .6rem;gap:.35rem;font-size:.62rem;white-space:nowrap}
+    body:not(.is-ready) .brand,body:not(.is-ready) .nav{display:none}
+    body:not(.is-ready) .topbar{justify-content:flex-end;gap:.5rem}
+    .scene-tag{bottom:1.1rem;max-width:60vw}
+    .scene-tag h2{font-size:1.05rem}
+    .scene-tag p{display:none}
+    .explore-hint{right:1.1rem;bottom:1.1rem;flex-direction:row;gap:.4rem}
+    .explore-hint span{writing-mode:horizontal-tb;letter-spacing:.18em}
+    .director{top:auto;bottom:0;right:0;left:0;width:100%;max-height:46vh;transform:translateY(105%);
+      border-radius:16px 16px 0 0;transition:transform .5s var(--ease),opacity .5s}
+    body.is-ready .director{transform:translateY(105%);opacity:1}
+    body.is-ready.panel-open .director{transform:translateY(0)}
+    #director-tab{display:inline-flex;position:fixed;z-index:26;right:1.1rem;bottom:4.2rem;
+      opacity:0;transition:opacity 1s var(--ease) .7s}
+    body.is-ready #director-tab{opacity:1}
+    body.panel-open #director-tab{opacity:0;pointer-events:none}
+    .tour{flex-direction:column;justify-content:flex-start;overflow-y:auto;padding:5.4rem 1.1rem 2rem;
+      scrollbar-width:thin;scrollbar-color:rgba(242,193,78,.4) rgba(13,31,60,.4)}
+    .tour::-webkit-scrollbar{width:6px}
+    .tour::-webkit-scrollbar-thumb{background:rgba(242,193,78,.4);border-radius:3px}
+    .tour-center{order:-1;margin-bottom:1.4rem}
+    .tour-card{position:static;width:100%;margin-bottom:.8rem}
+    .tc-1,.tc-2,.tc-3,.tc-4{left:auto;right:auto;top:auto;bottom:auto}
+    .intro-main{letter-spacing:.08em}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.15s!important}
+  }
+</style>
+</head>
+<body>
+<canvas id="stage" aria-label="星月夜流动油画场景"></canvas>
+<div class="fallback" aria-hidden="true"></div>
+
+<!-- 开场标题 -->
+<div class="intro-title" id="intro-title" aria-hidden="true">
+  <div class="intro-eyebrow">MuMu Portfolio · 互动剧情</div>
+  <h1 class="intro-main">漩涡与深蓝</h1>
+  <div class="intro-sub">星月夜的回响</div>
+  <div class="intro-en">In the swirl of starlight.</div>
+  <div class="intro-rule"></div>
+</div>
+
+<!-- 顶栏 -->
+<header class="topbar">
+  <a class="brand" href="#" id="brand" aria-label="回到主视觉">
+    <svg class="brand-mark" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+      <path d="M22 6c9 0 16 6.5 16 15 0 7-5.5 12-12 12-5.4 0-9.5-3.8-9.5-8.6 0-4 3-7 6.8-7 3 0 5.2 2.1 5.2 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="28.5" cy="22.2" r="1.7" fill="currentColor"/>
+      <circle cx="9" cy="12" r="1.2" fill="currentColor" opacity=".8"/>
+      <circle cx="36" cy="9" r="1" fill="currentColor" opacity=".6"/>
+    </svg>
+    <span><span class="brand-name">暮幕 · 漩涡与深蓝</span><span class="brand-sub">VORTEX &amp; DEEP BLUE · STARRY NIGHT</span></span>
+  </a>
+  <div class="top-right">
+    <nav class="nav" aria-label="作品集导航">
+      <button class="nav-btn" id="nav-works" type="button">作品</button>
+      <button class="nav-btn" id="nav-about" type="button">关于</button>
+      <button class="nav-btn" id="nav-contact" type="button">联系</button>
+    </nav>
+    <button class="chip" id="sound-btn" type="button" aria-pressed="true" title="环境音效开关 (M)">
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path d="M3 8v4h3l4 3.5v-11L6 8H3Z" fill="currentColor"/>
+        <path class="wave" d="M13 7.5a3.5 3.5 0 0 1 0 5M15.2 5.5a6.5 6.5 0 0 1 0 9" stroke="currentColor" stroke-linecap="round"/>
+        <path class="slash" d="M3.5 3.5l13 13" stroke="currentColor" stroke-linecap="round"/>
+      </svg>
+      <span id="sound-label">音效 开</span>
+    </button>
+    <button class="chip" id="skip-btn" type="button">跳过开场
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 3l5 5-5 5M9 3l5 5-5 5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- 左下场景名 -->
+<div class="scene-tag">
+  <div class="over">SAINT-RÉMY · 1889</div>
+  <h2>圣雷米 · 星月夜</h2>
+  <p>让思绪随星光，坠入一场蓝色的梦。<br/>笔触在流动，夜在呼吸。</p>
+</div>
+
+<!-- 右下滚动提示 -->
+<button class="explore-hint" id="explore-hint" type="button" aria-label="进入章节导览">
+  <span>滚动进入导览</span>
+  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 6l5 5 5-5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
+
+<!-- 导演台 -->
+<button class="chip" id="director-tab" type="button">
+  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5h12M2 11h12" stroke="currentColor" stroke-linecap="round"/><circle cx="6" cy="5" r="1.8" fill="currentColor"/><circle cx="10" cy="11" r="1.8" fill="currentColor"/></svg>
+  调参
+</button>
+<aside class="director" id="director" aria-label="导演台 · 实时调参">
+  <div class="director-head"><b>导演台 · LIVE</b><span id="fps">-- fps</span></div>
+  <div class="director-body">
+    <div class="ctl"><label>笔触流速 <output id="o-flow">1.0</output></label><input type="range" id="c-flow" min="0" max="2.5" step="0.05" value="1"></div>
+    <div class="ctl"><label>涡旋强度 <output id="o-swirl">1.0</output></label><input type="range" id="c-swirl" min="0" max="2" step="0.05" value="1"></div>
+    <div class="ctl"><label>笔触密度 <output id="o-dens">1.0</output></label><input type="range" id="c-dens" min="0.6" max="1.8" step="0.05" value="1"></div>
+    <div class="ctl"><label>星月辉光 <output id="o-bloom">1.0</output></label><input type="range" id="c-bloom" min="0" max="2" step="0.05" value="1"></div>
+    <div class="ctl"><label>星月旋转 <output id="o-spin">0.8</output></label><input type="range" id="c-spin" min="0" max="2" step="0.05" value="0.8"></div>
+    <div class="ctl"><label>画布颗粒 <output id="o-grain">0.5</output></label><input type="range" id="c-grain" min="0" max="1" step="0.05" value="0.5"></div>
+    <div class="ctl"><label>视差幅度 <output id="o-par">1.0</output></label><input type="range" id="c-par" min="0" max="2" step="0.05" value="1"></div>
+    <div class="ctl"><label>色调冷暖 <output id="o-warm">0.5</output></label><input type="range" id="c-warm" min="0" max="1" step="0.05" value="0.5"></div>
+    <div class="ctl"><label>开场节奏 <output id="o-tempo">1.0×</output></label><input type="range" id="c-tempo" min="0.5" max="2" step="0.1" value="1"></div>
+    <div class="ctl"><label>渲染画质</label>
+      <select id="c-quality"><option value="auto" selected>自动（按帧率调节）</option><option value="1">高 · 全分辨率</option><option value="0.8">中 · 0.8×</option><option value="0.62">低 · 0.62×</option></select>
+    </div>
+  </div>
+  <div class="director-actions">
+    <button class="d-btn primary" id="btn-replay" type="button">重播开场</button>
+    <button class="d-btn" id="btn-random" type="button">随机笔触</button>
+    <button class="d-btn" id="btn-export" type="button">导出静帧</button>
+  </div>
+</aside>
+
+<!-- 导览态 -->
+<section class="tour" id="tour" aria-label="章节导览">
+  <div class="tour-center">
+    <div class="over">AN INTERACTIVE FICTION</div>
+    <h1>漩涡与深蓝</h1>
+    <div class="sub">星月夜的回响</div>
+    <div class="meta">三章 · 双结局 · 互动剧情</div>
+    <button class="tour-back" id="tour-back" type="button">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      返回主视觉
+    </button>
+  </div>
+  <article class="tour-card tc-1" data-card tabindex="0" role="button" aria-expanded="false">
+    <div class="no">CHAPTER 01</div><h3>雨夜沙龙</h3>
+    <p class="hook">圣雷米的雨夜，沙龙墙上的《星月夜》前，一桩命案悄然发生。</p>
+    <div class="detail">书房里的血泊、倒下的青铜雕塑、被撕下的画布碎片与一张旧纸片——所有线索都藏在颜料之下。放大镜扫过之处，星光的漩涡开始倒转。</div>
+    <div class="more">点击展开 · 章节手记</div>
+  </article>
+  <article class="tour-card tc-2" data-card tabindex="0" role="button" aria-expanded="false">
+    <div class="no">CHAPTER 02</div><h3>庄园往事</h3>
+    <p class="hook">石砌外墙、瓦垄与柏树夹道，壁炉边的往事缓缓展开。</p>
+    <div class="detail">两条路线在此分岔：夜访父亲的公司，或直上后山神社的石阶。而画库深处，静静挂着一幅逆向的《星月夜》——漩涡的方向，恰好相反。</div>
+    <div class="more">点击展开 · 章节手记</div>
+  </article>
+  <article class="tour-card tc-3" data-card tabindex="0" role="button" aria-expanded="false">
+    <div class="no">CHAPTER 03 · FINALE</div><h3>双结局</h3>
+    <p class="hook">临时借用的档案室里，真相只差最后一笔。</p>
+    <div class="detail">公开真相，或篡改报告。黄昏露台的一杯咖啡，与夜晚修复室里逆向的星空，各自通向一种结局。终章之后，没有「继续下一章」——只有回响。</div>
+    <div class="more">点击展开 · 章节手记</div>
+  </article>
+  <article class="tour-card tc-4" data-card tabindex="0" role="button" aria-expanded="false">
+    <div class="no">ABOUT</div><h3>关于本作</h3>
+    <p class="hook">暮幕 MuMu · 零依赖互动剧情引擎上的一部蓝色悬疑。</p>
+    <div class="detail">原生 HTML / Canvas / Web Audio 构建，无第三方依赖。本页开场演出由自定义 GLSL 流场笔触着色器实时绘制，向 1889 年的那夜星空致意。<br/><a href="https://github.com/Yonger-wind/MuMu-" target="_blank" rel="noopener noreferrer">GitHub · Yonger-wind/MuMu-</a></div>
+    <div class="more">点击展开 · 制作手记</div>
+  </article>
+</section>
+
+<!-- 联系弹层 -->
+<div class="contact" id="contact" role="dialog" aria-label="联系方式">
+  <h3>联系 · Contact</h3>
+  <p>作品与引擎源码托管于 GitHub，欢迎 Issue 交流剧情分支、着色器与演出时序。</p>
+  <a href="https://github.com/Yonger-wind/MuMu-" target="_blank" rel="noopener noreferrer">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 .5a7.5 7.5 0 0 0-2.37 14.62c.37.07.51-.16.51-.36v-1.27c-2.09.45-2.53-1-2.53-1-.34-.87-.83-1.1-.83-1.1-.68-.47.05-.46.05-.46.75.05 1.15.77 1.15.77.67 1.15 1.76.82 2.19.63.07-.49.26-.82.48-1.01-1.67-.19-3.42-.83-3.42-3.7 0-.82.29-1.49.77-2.01-.08-.19-.33-.95.07-1.98 0 0 .63-.2 2.06.77a7.16 7.16 0 0 1 3.75 0c1.43-.97 2.06-.77 2.06-.77.4 1.03.15 1.79.07 1.98.48.52.77 1.19.77 2.01 0 2.88-1.76 3.51-3.43 3.69.27.23.51.69.51 1.39v2.07c0 .2.14.43.52.36A7.5 7.5 0 0 0 8 .5Z"/></svg>
+    Yonger-wind / MuMu-
+  </a>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ============================================================
+   配置层：时间轴 / 相机 / 视差 / 笔触 —— 与渲染和 UI 解耦
+   ============================================================ */
+const CONFIG = {
+  timeline: {            // 单位：秒（受「开场节奏」倍率缩放）
+    titleOut: 1.10,      // 标题开始退场
+    irisStart: 1.25, irisEnd: 2.10,  // 圆形扩散转场
+    lineStart: 1.80, lineEnd: 5.40,  // 双 tracer 勾勒：左上入笔下旋 / 右下入笔上旋，汇于涡心
+    paintStart: 4.60, paintEnd: 8.60,// 油画自 tracer 轨迹向外逐块晕染（放慢，看清填色）
+    readyAt: 8.90        // UI 浮现
+  },
+  camera: { pushFrom: 1.10, pushTo: 1.0, pushDur: 7.0, breathAmp: 0.0055, breathHz: 0.085 },
+  parallax: { sky: 0.5, land: 1.0, cypress: 1.8, base: 0.012 },
+  tempo: 1.0,
+  seed: 1889.0
+};
+
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const smooth = (a, b, t) => { const x = clamp((t - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
+const easeOutCubic = t => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ============================================================
+   着色器：流场驱动的厚涂笔触 + 线稿显影 + 光学后处理
+   ============================================================ */
+const VERT = `attribute vec2 aPos;void main(){gl_Position=vec4(aPos,0.,1.);}`;
+const FRAG = `
+precision highp float;
+uniform vec2 uRes;uniform float uTime;
+uniform float uTitle,uIris,uLine,uPaint,uZoom,uFade;
+uniform vec2 uMouse;uniform float uPar;
+uniform vec3 uPtr;uniform vec3 uClick;uniform vec2 uTwinkle;
+uniform float uFlow,uSwirl,uDens,uBloom,uGrain,uWarm,uSeed,uSpin;
+uniform vec2 uStars[10];
+float A;float M;
+const vec2 C1=vec2(0.46,0.60);
+const vec2 C2=vec2(0.665,0.52);
+const vec2 MOON=vec2(0.865,0.80);
+const float CHX=0.565;
+const float TAU=6.2831853;
+/* 双 tracer 螺旋参数：轨迹即最终主涡旋亮臂 */
+const float TR_R0=0.34;
+const float TR_K=0.22;
+const float TR_PHI=12.9;
+const float TR_A0=1.5707963;
+
+float h21(vec2 p){p=fract(p*vec2(234.34,435.345));p+=dot(p,p+34.23);return fract(p.x*p.y);}
+float h11(float n){return fract(sin(n)*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  float a=h21(i),b=h21(i+vec2(1.,0.)),c=h21(i+vec2(0.,1.)),d=h21(i+vec2(1.,1.));
+  return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}
+float fbm(vec2 p){float v=0.,w=.5;for(int i=0;i<3;i++){v+=w*noise(p);p=p*2.03+vec2(17.3,9.1);w*=.5;}return v;}
+vec2 D(vec2 p,vec2 c){return (p-c)*vec2(M,1.);}
+
+float ridge(float x){return 0.315+0.05*sin(x*4.6+1.4)+0.024*sin(x*10.7+0.6);}
+float cypW(float y){
+  float t=clamp(y/0.94,0.,1.);
+  float w=0.052*pow(1.-t,0.75);
+  w*=0.62+0.75*noise(vec2(y*7.,uTime*0.06+uSeed));
+  w+=0.020*pow(1.-t,1.5)*noise(vec2(y*17.,3.1));
+  w+=0.010*pow(1.-t,2.)*noise(vec2(y*23.,4.7));
+  return max(w,0.0015);
+}
+float cypX(float y){return 0.155+(0.012*sin(y*6.+1.)+(noise(vec2(y*5.,8.2))-0.5)*0.02)/M;}
+
+vec2 vort(vec2 p,vec2 c,float rad,float s){
+  vec2 r=D(p,c)+1e-4;float d2=dot(r,r);
+  return vec2(-r.y,r.x)/max(sqrt(d2),0.02)*exp(-d2/(rad*rad))*s;
+}
+vec2 skyFlow(vec2 p){
+  vec2 f=vec2(0.85,0.10*sin(p.x*6.+uTime*0.08));
+  f+=vort(p,C1,0.30,1.05*uSwirl);
+  f+=vort(p,C2,0.17,-0.75*uSwirl);
+  for(int i=0;i<10;i++)f+=vort(p,uStars[i],0.06,0.07);
+  f+=vort(p,MOON,0.10,0.22);
+  f+=(vec2(fbm(p*2.5+uTime*0.02),fbm(p*2.5+31.7))-0.5)*0.25;
+  /* 涡心与星月附近改为横向翻卷，避免针状螺纹与同心"指纹眼" */
+  vec2 r1=D(p,C1);vec2 r2=D(p,C2);
+  float core=exp(-dot(r1,r1)/0.026)+exp(-dot(r2,r2)/0.014);
+  for(int i=0;i<10;i++){vec2 rs=D(p,uStars[i]);core+=exp(-dot(rs,rs)/0.0045)*0.9;}
+  vec2 rmo=D(p,MOON);core+=exp(-dot(rmo,rmo)/0.012)*0.9;
+  f=mix(f,vec2(0.9,0.15),clamp(core,0.,1.)*0.8);
+  vec2 pr=D(p,uPtr.xy)+1e-4;float pd=dot(pr,pr);
+  f+=vec2(-pr.y,pr.x)/max(sqrt(pd),0.02)*exp(-pd/0.006)*uPtr.z*1.6;
+  return f;
+}
+
+vec3 skyCol(vec2 p){
+  vec3 col=mix(vec3(0.035,0.082,0.168),vec3(0.065,0.150,0.280),smoothstep(0.15,0.8,p.y));
+  float n=fbm(p*vec2(M,1.)*3.+uTime*0.015);
+  col=mix(col,vec3(0.16,0.33,0.58),0.42*n);
+  float warp=fbm(p*5.)*1.1;
+  vec2 r1=D(p,C1);float d1=length(r1);
+  /* 亮臂与勾勒 tracer 同旋向同涡心；半径项设下限，避免涡心出现针状密环 */
+  float ph1=atan(r1.y,r1.x)-TR_A0-log(TR_R0/max(d1,0.18))/0.55;
+  float arm1=0.5+0.5*cos(ph1+warp-uTime*0.10*uSwirl);
+  float m1=exp(-d1*d1/0.09);
+  col=mix(col,vec3(0.62,0.74,0.82),arm1*m1*0.40);
+  col=mix(col,vec3(0.78,0.80,0.62),pow(arm1,3.)*m1*0.20);
+  col+=vec3(0.55,0.66,0.76)*exp(-d1*d1/0.010)*0.16;
+  vec2 r2=D(p,C2);float d2=length(r2);
+  float arm2=0.5+0.5*sin(atan(r2.y,r2.x)*2.-d2*7.+uTime*0.08*uSwirl+warp*1.2);
+  float m2=exp(-d2*d2/0.030);
+  col=mix(col,vec3(0.56,0.68,0.78),arm2*m2*0.34);
+  col=mix(col,vec3(0.75,0.77,0.60),pow(arm2,3.)*m2*0.16);
+  col+=vec3(0.50,0.62,0.72)*exp(-d2*d2/0.004)*0.13;
+  float band=exp(-pow((p.y-0.42)*6.,2.));
+  col=mix(col,vec3(0.40,0.55,0.66),band*0.32*(0.5+0.5*sin(p.x*14.+fbm(p*4.)*4.)));
+  return col;
+}
+
+/* 厚涂笔触：沿流场方向的连续短弧刷痕 + 刷毛纹理 + 堆积高光（第一版观感） */
+vec3 strokes(vec2 p,vec3 base,vec2 dir,float spd){
+  dir=normalize(dir+vec2(1e-4,0.));
+  vec2 pp=vec2(-dir.y,dir.x);
+  vec2 pm=p*vec2(M,1.);
+  vec2 q=pm+(vec2(fbm(pm*4.+uTime*0.03),fbm(pm*4.+47.2-uTime*0.025))-0.5)*0.006;
+  float s=dot(q,dir)-uTime*spd;
+  float t=dot(q,pp);
+  float L=0.10/uDens,W=0.024/uDens;
+  float row=floor(t/W);
+  s+=h11(row*3.7+uSeed)*L;
+  vec2 cell=vec2(floor(s/L),row);
+  float tj=t+(h21(cell+3.3)-0.5)*W*0.7;
+  vec2 f=vec2(fract(s/L),fract(tj/W));
+  float r1=h21(cell+uSeed),r2=h21(cell+uSeed+19.7),r3=h21(cell+uSeed+71.3);
+  float body=smoothstep(0.0,0.25,f.x)*smoothstep(1.0,0.75,f.x);
+  float edge=smoothstep(0.0,0.22,f.y)*smoothstep(1.0,0.78,f.y);
+  float bristle=0.95+0.05*sin(f.y*5.+r1*20.);
+  float hgt=body*edge*bristle;
+  vec3 sc=base*(0.70+0.55*r2);
+  sc+=(r3-0.5)*vec3(-0.08,0.06,0.14);
+  if(r1>0.90)sc+=vec3(0.18,0.16,0.10);
+  else if(r1<0.06)sc+=vec3(-0.02,0.04,0.06);
+  float patch=0.4+0.6*noise(vec2(f.x*3.+r1*9.,row*0.7));
+  sc*=0.92+0.30*hgt+0.14*smoothstep(0.45,0.9,f.y)*body*patch;
+  sc*=0.86+0.26*sin(f.x*3.14159);
+  sc*=1.0-0.10*smoothstep(0.5,0.0,f.y)*body;
+  sc*=0.86+0.14*edge;
+  return sc;
+}
+
+/* 村落 / 教堂 / 小桥：流体版剪影建筑融入油画夜（暗色体块 + 月光描边 + 方形金窗） */
+vec4 village(vec2 p){
+  float hw=0.052;
+  float id=floor(p.x/hw);
+  float fx=fract(p.x/hw);
+  float r1=h11(id*7.13+uSeed),r2=h11(id*3.7+1.3),r3=h11(id*9.1+5.),r4=h11(id*5.3+9.1);
+  float base=0.070+r1*0.035;
+  float hh=0.040+r2*0.045;
+  float top=base+hh;
+  float x0=0.12,x1=0.88;
+  float body=step(x0,fx)*step(fx,x1)*step(base,p.y)*step(p.y,top);
+  float roofH=0.026+r3*0.016;
+  float ry=(p.y-top)/roofH;
+  float roof=step(top,p.y)*step(p.y,top+roofH)*step(abs(fx-0.5),0.42*(1.-ry));
+  float chx=0.68+r4*0.12;
+  float chim=step(abs(fx-chx),0.035)*step(top+roofH*0.35,p.y)*step(p.y,top+roofH*0.95)*step(0.5,r3);
+  float cov=max(body,max(roof,chim));
+  /* 教堂：塔身 / 尖顶 / 玫瑰窗 / 十字 finial */
+  float dx=abs(p.x-CHX)*M;
+  float spire=step(dx,0.009*(1.-clamp((p.y-0.19)/0.21,0.,1.)))*step(0.19,p.y)*step(p.y,0.40);
+  float cbody=step(dx,0.018)*step(0.10,p.y)*step(p.y,0.19);
+  float croof=step(0.19,p.y)*step(p.y,0.225)*step(dx,0.022*(1.-(p.y-0.19)/0.035));
+  float cross=clamp(step(dx,0.0015)*step(0.40,p.y)*step(p.y,0.425)
+              +step(abs(p.y-0.415),0.0015)*step(dx,0.006),0.,1.);
+  cov=max(cov,max(cbody,max(spire,max(croof,cross))));
+  /* 石桥：桥面 / 拱洞 / 桥墩 / 栏杆 */
+  vec2 bp=D(p,vec2(0.80,0.075));
+  float deck=step(abs(bp.y-0.030),0.005)*step(abs(bp.x),0.070);
+  float stone=step(abs(bp.x),0.070)*step(-0.040,bp.y)*step(bp.y,0.030);
+  float opening=step(length(vec2(bp.x,(bp.y-0.028)*1.9)),0.042)*step(bp.y,0.028);
+  stone*=1.-opening;
+  float pier=step(abs(abs(bp.x)-0.064),0.006)*step(-0.045,bp.y)*step(bp.y,0.030);
+  float rail=step(abs(bp.y-0.040),0.002)*step(abs(bp.x),0.070)
+            +step(0.90,fract((bp.x+0.07)*60.))*step(0.030,bp.y)*step(bp.y,0.040)*step(abs(bp.x),0.070);
+  float br=max(deck,max(stone,max(pier,rail)));
+  cov=max(cov,br);
+  /* 暗色剪影体块 + 极弱侧光 */
+  vec3 col=vec3(0.012,0.024,0.052)*cov;
+  col+=vec3(0.020,0.036,0.062)*body*smoothstep(x0,x1,fx)*0.6;
+  /* 月光描边：体块外缘一线冷光（流体版轮廓光） */
+  float eBody=body*(step(fx,x0+0.016)+step(x1-0.016,fx)+step(p.y,base+0.0035)+step(top-0.0035,p.y));
+  float eRoof=roof*step(0.42*(1.-ry)-0.018,abs(fx-0.5));
+  float eChim=chim*step(0.027,abs(fx-chx));
+  float eCh=clamp(cbody*step(0.014,dx)
+             +spire*step(0.006*(1.-clamp((p.y-0.19)/0.21,0.,1.)),dx)
+             +croof*step(0.018*(1.-(p.y-0.19)/0.035),dx),0.,1.);
+  float eBr=clamp(deck+rail,0.,1.);
+  float rim=clamp(eBody+eRoof+eChim+eCh+eBr,0.,1.);
+  col+=vec3(0.38,0.66,0.82)*rim*0.42;
+  col+=vec3(0.30,0.40,0.48)*cbody*smoothstep(0.010,0.018,dx)*0.25;
+  /* 方形金窗（烛火微颤）+ 教堂玫瑰窗 */
+  float wy=base+hh*0.62;
+  float flick=0.80+0.20*sin(uTime*(1.3+r2*1.7)+r1*40.);
+  vec3 warm=vec3(0.98,0.78,0.36);
+  for(int k=0;k<2;k++){
+    float cx=(k==0)?0.32:0.68;
+    float lit=(k==0)?step(0.30,r2):step(0.45,r3);
+    vec2 w=vec2((p.x-(id+cx)*hw)*M,p.y-wy);
+    float win=step(abs(w.x),0.006)*step(abs(w.y),0.008)*lit;
+    col=mix(col,warm*(0.75+0.25*flick),win);
+  }
+  vec2 rw=vec2((p.x-CHX)*M,p.y-0.155);
+  col=mix(col,vec3(0.95,0.80,0.45),step(length(rw),0.007)*0.9);
+  col=mix(col,vec3(0.85,0.80,0.60),cross);
+  return vec4(col,cov);
+}
+float windowGlow(vec2 p){
+  float hw=0.052;
+  float id=floor(p.x/hw);
+  float r1=h11(id*7.13+uSeed),r2=h11(id*3.7+1.3),r3=h11(id*9.1+5.);
+  float base=0.070+r1*0.035,hh=0.040+r2*0.045;
+  float wy=base+hh*0.62;
+  float flick=0.80+0.20*sin(uTime*(1.3+r2*1.7)+r1*40.);
+  float g=0.;
+  for(int k=0;k<2;k++){
+    float cx=(k==0)?0.32:0.68;
+    float lit=(k==0)?step(0.30,r2):step(0.45,r3);
+    vec2 w=vec2((p.x-(id+cx)*hw)*M,p.y-wy);
+    g+=exp(-dot(w,w)/0.00035)*lit;
+  }
+  vec2 rw=vec2((p.x-CHX)*M,p.y-0.155);
+  g+=exp(-dot(rw,rw)/0.0004)*0.8;
+  return g*flick;
+}
+
+/* 勾勒显影：左上一笔横扫至中部后向下旋入 / 右下一笔横扫至中部后向上旋入，
+   两条 tracer 汇于涡心；其对数螺旋轨迹即最终主涡旋亮臂，油画自 tracer 向外晕染 */
+float trSpiral(vec2 p,float th0,out float s){
+  vec2 r=D(p,C1)+1e-4;float d=length(r);
+  float phiRaw=log(TR_R0/max(d,1e-4))/TR_K;
+  float phi=clamp(phiRaw,0.,TR_PHI);
+  float phase=(atan(r.y,r.x)-th0-phiRaw)/TAU;
+  float fa=abs(fract(phase+0.5)-0.5);
+  s=0.34+0.66*(phi/TR_PHI);
+  /* 只取螺旋半径带内，外缘稍向外延续以便与入笔平滑相接 */
+  float gate=(1.-smoothstep(TR_R0*1.02,TR_R0*1.10,d))*smoothstep(0.006,0.012,d);
+  return mix(1e3,fa*d*TAU*TR_K/1.024,gate);
+}
+float trLead(vec2 p,vec2 S,vec2 E,float bow,out float s){
+  float t=clamp((S.x-p.x)/(S.x-E.x),0.,1.);
+  float sm=t*t*(3.-2.*t);
+  float y=mix(S.y,E.y,sm)+bow*sin(t*3.14159);
+  s=t*0.34;
+  float inX=step(min(S.x,E.x),p.x)*step(p.x,max(S.x,E.x));
+  return mix(1e3,abs(p.y-y)*0.92,inX);
+}
+float lineLayer(vec2 p,out float dGuide){
+  float sSa,sLa,sSb,sLb;
+  float dSa=trSpiral(p,TR_A0,sSa);
+  float dLa=trLead(p,vec2(-0.06,0.86),vec2(C1.x,C1.y+TR_R0),0.05,sLa);
+  float dA=min(dSa,dLa);float sA=(dSa<dLa)?sSa:sLa;
+  float dSb=trSpiral(p,TR_A0-3.14159265,sSb);
+  float dLb=trLead(p,vec2(1.06,0.16),vec2(C1.x,C1.y-TR_R0),-0.05,sLb);
+  float dB=min(dSb,dLb);float sB=(dSb<dLb)?sSb:sLb;
+  float limA=1.-smoothstep(uLine-0.02,uLine+0.01,sA);
+  float limB=1.-smoothstep(uLine-0.02,uLine+0.01,sB);
+  float core=smoothstep(0.0030,0.0010,dA)*limA+smoothstep(0.0030,0.0010,dB)*limB;
+  float silk=exp(-dA*dA/0.00010)*0.28*limA+exp(-dB*dB/0.00010)*0.28*limB;
+  float head=(exp(-pow((sA-uLine)*46.,2.))*smoothstep(0.012,0.002,dA)
+             +exp(-pow((sB-uLine)*46.,2.))*smoothstep(0.012,0.002,dB))
+             *step(0.002,uLine)*(1.-smoothstep(0.98,1.0,uLine));
+  dGuide=min(dA+(1.-limA)*0.5,dB+(1.-limB)*0.5);
+  return core+silk+head*0.9;
+}
+
+void main(){
+  vec2 uv=gl_FragCoord.xy/uRes;A=uRes.x/uRes.y;
+  /* 竖屏裁切：截取长卷构图的横向切片，保持笔触/星晕在屏幕上为正圆且不拥挤 */
+  float crop=min(A,1.6)/1.6;
+  M=A/crop;
+  float cx=0.5-0.17*(1.-crop);
+  vec2 suv=vec2(cx+(uv.x-0.5)*crop,uv.y);
+  vec2 cuv=(suv-0.5)/uZoom+0.5;
+  vec2 par=uMouse*uPar*0.012;
+  vec2 pSky=cuv+par*0.5;
+  vec2 pLand=cuv+par*1.0;
+  vec2 pCyp=cuv+par*1.8;
+
+  /* ---- 油画层 ---- */
+  vec3 sky=skyCol(pSky);
+  vec3 glow=vec3(0.);
+  /* 场景显影后，星月黄色光斑开始偏圆旋转 */
+  float spinG=smoothstep(0.55,0.95,uPaint)*uSpin;
+  for(int i=0;i<10;i++){
+    vec2 r=D(pSky,uStars[i]);float d=length(r);
+    float tw=(float(i)==uTwinkle.x)?uTwinkle.y:0.;
+    float ang=atan(r.y,r.x)+uTime*0.30*spinG;
+    float halo=exp(-d*d/0.0030)*(0.78+0.22*noise(vec2(ang*2.,d*8.)))
+              *(0.88+0.12*sin(ang*3.-d*16.)*smoothstep(0.034,0.012,d));
+    sky=mix(sky,vec3(0.98,0.90,0.62),clamp(halo*(0.85+tw*0.6),0.,1.));
+    sky=mix(sky,vec3(1.,0.98,0.85),smoothstep(0.014,0.005,d));
+    glow+=vec3(0.95,0.80,0.45)*exp(-d*d/0.012)*(0.30+tw*0.55);
+  }
+  vec2 rm=D(pSky,MOON);float dm=length(rm);
+  vec2 rm2=D(pSky,MOON+vec2(-0.030,0.012)/vec2(M,1.));
+  float crescent=smoothstep(0.046,0.040,dm)*smoothstep(0.034,0.040,length(rm2));
+  float angM=atan(rm.y,rm.x)+uTime*0.22*spinG;
+  float mhalo=exp(-dm*dm/0.010)*(0.90+0.10*sin(angM*2.-dm*10.));
+  sky=mix(sky,vec3(0.98,0.85,0.50),mhalo*0.55);
+  sky=mix(sky,vec3(1.,0.95,0.70),crescent);
+  glow+=vec3(0.98,0.82,0.42)*exp(-dm*dm/0.030)*0.42;
+
+  float rg=ridge(pLand.x);
+  float landM=smoothstep(rg+0.003,rg-0.003,pLand.y);
+  float slope=(ridge(pLand.x+0.01)-ridge(pLand.x-0.01))*50.;
+  vec3 landCol=mix(vec3(0.05,0.13,0.22),vec3(0.09,0.20,0.27),smoothstep(0.0,0.32,pLand.y));
+  landCol=mix(landCol,vec3(0.10,0.22,0.24),exp(-abs(pLand.y-rg)*22.)*0.5);
+  vec4 v=village(pLand);
+  landCol=mix(landCol,v.rgb,v.a);
+  vec3 col=mix(sky,landCol,landM);
+  col+=vec3(0.35,0.50,0.60)*exp(-abs(pLand.y-rg)*70.)*0.10;
+
+  float cypM=smoothstep(cypW(pCyp.y),cypW(pCyp.y)-0.008,abs((pCyp.x-cypX(pCyp.y))*M))*step(pCyp.y,0.95);
+  vec3 cypCol=mix(vec3(0.008,0.028,0.020),vec3(0.030,0.070,0.045),noise(pCyp*vec2(M,1.)*vec2(6.,14.)));
+  cypCol+=vec3(0.08,0.055,0.025)*noise(pCyp*vec2(M,1.)*vec2(4.,30.)+7.)*0.25;
+  float cypEdge=(pCyp.x-cypX(pCyp.y))*M;
+  cypCol+=vec3(0.16,0.26,0.36)*smoothstep(cypW(pCyp.y)*0.55,cypW(pCyp.y)*0.95,cypEdge)*0.12;
+  col=mix(col,cypCol,cypM);
+
+  /* 笔触方向按区域混合 */
+  vec2 dir=skyFlow(pSky);
+  dir=mix(dir,vec2(1.,slope*0.6),landM);
+  dir=mix(dir,vec2(0.25*sin(pCyp.y*8.+uTime*0.1),1.),cypM);
+  vec3 painted=strokes(cuv,col,dir,mix(0.022,0.006,max(landM,cypM))*uFlow);
+  /* 建筑剪影保持体块干净：笔触只轻扫其表，轮廓与金窗不被刷痕切碎 */
+  painted=mix(painted,col,clamp(v.a,0.,1.)*0.5);
+  painted+=glow*uBloom*0.55*(1.-cypM*0.6);
+  painted+=vec3(0.95,0.68,0.28)*windowGlow(pLand)*uBloom*0.6;
+  /* 鼠标扰动微光 */
+  vec2 pr=D(cuv,uPtr.xy);
+  painted+=vec3(0.55,0.65,0.75)*exp(-dot(pr,pr)/0.004)*uPtr.z*0.10;
+
+  /* ---- 线稿 / 蓝图层 ---- */
+  float dG;float lines=lineLayer(cuv,dG);
+  float paintMask=smoothstep(0.,0.16,uPaint*1.05-dG*0.9+((fbm(cuv*7.)-0.5)*0.30+(noise(cuv*22.)-0.5)*0.08)*uPaint);
+  paintMask=max(paintMask,smoothstep(0.88,1.0,uPaint));
+  vec3 blueprint=vec3(0.020,0.045,0.095);
+  blueprint+=vec3(0.05,0.10,0.18)*exp(-pow(length(D(uv,vec2(0.5,0.55)))*1.4,2.));
+  float grid=(step(0.965,fract(cuv.x*14.))+step(0.965,fract(cuv.y*14.)))*0.018;
+  blueprint+=vec3(0.3,0.5,0.7)*grid;
+  vec3 lineCol=mix(vec3(0.98,0.82,0.45),vec3(0.45,0.85,0.95),0.5+0.5*sin(cuv.x*7.+cuv.y*5.));
+  vec3 scene=mix(blueprint,painted,paintMask);
+  scene+=lineCol*lines*(1.-paintMask)*1.25;
+
+  /* ---- 开场：油画标题 → 圆形扩散 → 蓝图显影 ---- */
+  float iris=smoothstep(0.,0.15,uIris*1.8-length(D(uv,vec2(0.5,0.5)))*1.2);
+  vec3 titleScene=painted*1.12;
+  vec2 tc=D(uv,vec2(0.5,0.52));
+  titleScene*=1.-uTitle*0.28*exp(-dot(tc,tc)*3.5);
+  vec3 final=mix(titleScene,scene,iris);
+
+  /* 点击涟漪 */
+  if(uClick.z>=0.){
+    vec2 cr=D(cuv,uClick.xy);float cd=length(cr);
+    float ring=exp(-abs(cd-uClick.z*0.22)*34.)*exp(-uClick.z*1.6);
+    final+=vec3(0.95,0.82,0.45)*ring*0.35;
+  }
+
+  /* ---- 后处理：亚麻画布 / 颗粒 / 暗角 / 冷暖 ---- */
+  float weave=sin(gl_FragCoord.x*1.7)*sin(gl_FragCoord.y*1.7);
+  final*=1.+weave*0.022;
+  float g=h21(gl_FragCoord.xy+fract(uTime)*vec2(113.,57.));
+  final+=(g-0.5)*uGrain*0.07;
+  float vig=smoothstep(1.35,0.35,length((uv-0.5)*vec2(A*0.8,1.)));
+  final*=mix(0.62,1.0,vig);
+  final=mix(final*vec3(0.92,0.98,1.10),final*vec3(1.08,1.02,0.92),uWarm);
+  final*=uFade;
+  gl_FragColor=vec4(final,1.);
+}`;
+
+/* ============================================================
+   渲染器
+   ============================================================ */
+function createRenderer(canvas) {
+  const gl = canvas.getContext('webgl', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+  if (!gl) return null;
+  function compile(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'aPos');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const U = {};
+  ['uRes','uTime','uTitle','uIris','uLine','uPaint','uZoom','uFade','uMouse','uPar','uPtr','uClick','uTwinkle','uFlow','uSwirl','uDens','uBloom','uGrain','uWarm','uSeed','uSpin','uStars']
+    .forEach(n => U[n] = gl.getUniformLocation(prog, n));
+  const STARS = [
+    [0.075, 0.87], [0.205, 0.935], [0.335, 0.905], [0.425, 0.85], [0.575, 0.885],
+    [0.15, 0.70], [0.665, 0.73], [0.30, 0.585], [0.05, 0.50], [0.12, 0.435]
+  ];
+  gl.uniform2fv(U.uStars, new Float32Array(STARS.flat()));
+
+  const state = { scale: 1, qualityMode: 'auto', w: 0, h: 0 };
+  function resize() {
+    const dprCap = innerWidth < 700 ? 1.3 : 1.75;
+    const dpr = Math.min(devicePixelRatio || 1, dprCap) * state.scale;
+    state.w = Math.max(1, Math.round(canvas.clientWidth * dpr));
+    state.h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    if (canvas.width !== state.w || canvas.height !== state.h) {
+      canvas.width = state.w; canvas.height = state.h;
+      gl.viewport(0, 0, state.w, state.h);
+    }
+  }
+  function setQuality(mode) {
+    state.qualityMode = mode;
+    if (mode !== 'auto') { state.scale = parseFloat(mode); resize(); }
+  }
+  function adapt(avgMs) {
+    if (state.qualityMode !== 'auto') return;
+    if (avgMs > 22 && state.scale > 0.62) { state.scale = Math.max(0.62, state.scale - 0.18); resize(); }
+    else if (avgMs < 13.5 && state.scale < 1) { state.scale = Math.min(1, state.scale + 0.1); resize(); }
+  }
+  function draw(p) {
+    resize();
+    gl.uniform2f(U.uRes, state.w, state.h);
+    gl.uniform1f(U.uTime, p.time);
+    gl.uniform1f(U.uTitle, p.title);
+    gl.uniform1f(U.uIris, p.iris);
+    gl.uniform1f(U.uLine, p.line);
+    gl.uniform1f(U.uPaint, p.paint);
+    gl.uniform1f(U.uZoom, p.zoom);
+    gl.uniform1f(U.uFade, p.fade);
+    gl.uniform2f(U.uMouse, p.mx, p.my);
+    gl.uniform1f(U.uPar, p.par);
+    gl.uniform3f(U.uPtr, p.ptrX, p.ptrY, p.ptrE);
+    gl.uniform3f(U.uClick, p.clickX, p.clickY, p.clickAge);
+    gl.uniform2f(U.uTwinkle, p.twIndex, p.twEnv);
+    gl.uniform1f(U.uFlow, p.flow);
+    gl.uniform1f(U.uSwirl, p.swirl);
+    gl.uniform1f(U.uDens, p.dens);
+    gl.uniform1f(U.uBloom, p.bloom);
+    gl.uniform1f(U.uGrain, p.grain);
+    gl.uniform1f(U.uWarm, p.warm);
+    gl.uniform1f(U.uSeed, p.seed);
+    gl.uniform1f(U.uSpin, p.spin);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  return { draw, resize, setQuality, adapt, get scale() { return state.scale; }, gl };
+}
+
+/* ============================================================
+   音频：夜色氛围垫 + 风 + 星光风铃（与可见事件绑定）
+   ============================================================ */
+function createAudio() {
+  let ctx = null, master = null, enabled = true, started = false;
+  function init() {
+    if (started) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    started = true;
+    ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = enabled ? 0.5 : 0;
+    master.connect(ctx.destination);
+    /* 氛围垫 */
+    const padFilter = ctx.createBiquadFilter();
+    padFilter.type = 'lowpass'; padFilter.frequency.value = 520; padFilter.Q.value = 0.6;
+    padFilter.connect(master);
+    [[110, .045], [164.81, .035], [220, .028], [329.63, .012]].forEach(([f, g], i) => {
+      const o = ctx.createOscillator(); o.type = i < 2 ? 'sine' : 'triangle';
+      o.frequency.value = f; o.detune.value = (i - 1.5) * 4;
+      const og = ctx.createGain(); og.gain.value = 0;
+      og.gain.linearRampToValueAtTime(g, ctx.currentTime + 4);
+      o.connect(og); og.connect(padFilter); o.start();
+    });
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05;
+    const lfoG = ctx.createGain(); lfoG.gain.value = 160;
+    lfo.connect(lfoG); lfoG.connect(padFilter.frequency); lfo.start();
+    /* 夜风 */
+    const len = ctx.sampleRate * 2;
+    const nb = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = nb.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) { last = (last + (Math.random() * 2 - 1) * 0.02) * 0.985; data[i] = last * 3.2; }
+    const wind = ctx.createBufferSource(); wind.buffer = nb; wind.loop = true;
+    const wf = ctx.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 380; wf.Q.value = 0.4;
+    const wg = ctx.createGain(); wg.gain.value = 0;
+    wg.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 5);
+    wind.connect(wf); wf.connect(wg); wg.connect(master); wind.start();
+    const wlfo = ctx.createOscillator(); wlfo.frequency.value = 0.07;
+    const wlfoG = ctx.createGain(); wlfoG.gain.value = 0.025;
+    wlfo.connect(wlfoG); wlfoG.connect(wg.gain); wlfo.start();
+  }
+  function resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
+  function chime(freq, vol = 0.1) {
+    if (!ctx || !enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
+    const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = freq * 2.01;
+    const g = ctx.createGain(), g2 = ctx.createGain();
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
+    g2.gain.setValueAtTime(vol * 0.25, t); g2.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+    o.connect(g); o2.connect(g2); g.connect(master); g2.connect(master);
+    o.start(t); o2.start(t); o.stop(t + 3.4); o2.stop(t + 1.8);
+  }
+  function swell() {
+    if (!ctx || !enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(360, t + 2.2);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + 1.1);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + 2.8);
+  }
+  function tick() {
+    if (!ctx || !enabled) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = 880;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.035, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.1);
+  }
+  function setEnabled(on) {
+    enabled = on;
+    if (master && ctx) master.gain.linearRampToValueAtTime(on ? 0.5 : 0, ctx.currentTime + 0.4);
+  }
+  return { init, resume, chime, swell, tick, setEnabled, get enabled() { return enabled; } };
+}
+
+/* ============================================================
+   主循环：导演（时间轴）+ 输入 + UI 状态
+   ============================================================ */
+(function boot() {
+  const canvas = $('stage');
+  let renderer = null;
+  try { renderer = createRenderer(canvas); } catch (e) { console.warn('WebGL 初始化失败，使用静态兜底', e); }
+  if (!renderer) document.body.classList.add('no-gl');
+  const audio = createAudio();
+
+  const params = { flow: 1, swirl: 1, dens: 1, bloom: 1, grain: 0.5, par: 1, warm: 0.5, spin: 0.8, seed: CONFIG.seed };
+  const input = {
+    mx: 0, my: 0, tmx: 0, tmy: 0,
+    ptrX: 0.5, ptrY: 0.5, ptrE: 0,
+    clickX: 0, clickY: 0, clickT: -10,
+    twIndex: -1, twStart: -10, nextTw: 6
+  };
+  let introT = reducedMotion ? 99 : 0;
+  let loopTime = 0, lastTs = 0, ready = false, tour = false;
+  let frameAcc = 0, frameN = 0, fpsShown = 0, adaptTimer = 0;
+  let swellFired = reducedMotion;
+  const TL = CONFIG.timeline;
+
+  /* ---- UI 工具 ---- */
+  const toastEl = $('toast');
+  let toastTimer = 0;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+  }
+  function setReady(on) {
+    ready = on;
+    document.body.classList.toggle('is-ready', on);
+    if (on) $('intro-title').classList.add('out');
+  }
+  function setTour(on) {
+    if (on && !ready) return;
+    tour = on;
+    document.body.classList.toggle('is-tour', on);
+    $('nav-works').classList.toggle('active', on);
+    if (!on) document.querySelectorAll('.tour-card.open').forEach(c => { c.classList.remove('open'); c.setAttribute('aria-expanded', 'false'); });
+    audio.tick();
+  }
+  function replay() {
+    introT = 0; swellFired = false;
+    setTour(false); setReady(false);
+    $('intro-title').classList.remove('out');
+    $('contact').classList.remove('open');
+    audio.tick();
+    toast('开场演出 · 重播');
+  }
+  function skip() { introT = 99; audio.tick(); }
+
+  /* ---- 事件绑定 ---- */
+  $('skip-btn').addEventListener('click', skip);
+  $('btn-replay').addEventListener('click', replay);
+  $('btn-random').addEventListener('click', () => {
+    params.seed = Math.round(Math.random() * 9000 + 100);
+    audio.chime(659.25, 0.07);
+    toast('笔触种子 · ' + params.seed);
+  });
+  $('btn-export').addEventListener('click', () => {
+    if (!renderer) { toast('当前为静态兜底模式'); return; }
+    renderFrame(0);
+    canvas.toBlob(blob => {
+      if (!blob) { toast('导出失败'); return; }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'vortex-starry-frame.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast('静帧已导出 · PNG');
+    });
+    audio.tick();
+  });
+  $('explore-hint').addEventListener('click', () => setTour(true));
+  $('tour-back').addEventListener('click', () => setTour(false));
+  $('brand').addEventListener('click', e => { e.preventDefault(); setTour(false); });
+  $('nav-works').addEventListener('click', () => setTour(!tour));
+  $('nav-about').addEventListener('click', () => {
+    setTour(true);
+    const card = document.querySelector('.tc-4');
+    card.classList.add('open'); card.setAttribute('aria-expanded', 'true');
+  });
+  $('nav-contact').addEventListener('click', () => { $('contact').classList.toggle('open'); audio.tick(); });
+  document.addEventListener('click', e => {
+    if (!$('contact').contains(e.target) && e.target !== $('nav-contact') && !$('nav-contact').contains(e.target))
+      $('contact').classList.remove('open');
+  });
+  document.querySelectorAll('[data-card]').forEach(card => {
+    const toggle = () => {
+      const open = card.classList.toggle('open');
+      card.setAttribute('aria-expanded', String(open));
+      audio.chime(open ? 783.99 : 523.25, 0.06);
+    };
+    card.addEventListener('click', e => { if (e.target.tagName !== 'A') toggle(); });
+    card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  });
+  $('director-tab').addEventListener('click', () => { document.body.classList.toggle('panel-open'); audio.tick(); });
+
+  /* 声音开关 */
+  const soundBtn = $('sound-btn');
+  function refreshSound() {
+    soundBtn.classList.toggle('muted', !audio.enabled);
+    soundBtn.setAttribute('aria-pressed', String(audio.enabled));
+    $('sound-label').textContent = audio.enabled ? '音效 开' : '音效 关';
+  }
+  soundBtn.addEventListener('click', () => {
+    audio.init(); audio.resume();
+    audio.setEnabled(!audio.enabled);
+    refreshSound();
+    if (audio.enabled) audio.chime(523.25, 0.08);
+  });
+  const unlock = () => { audio.init(); audio.resume(); };
+  addEventListener('pointerdown', unlock, { once: false, passive: true });
+  addEventListener('keydown', unlock, { once: false });
+
+  /* 调参滑杆 */
+  const bind = (id, out, key, fmt) => {
+    const el = $(id), o = $(out);
+    el.addEventListener('input', () => {
+      const v = parseFloat(el.value);
+      if (key === 'tempo') CONFIG.tempo = v; else params[key] = v;
+      o.textContent = fmt ? fmt(v) : v.toFixed(2).replace(/0$/, '');
+    });
+  };
+  bind('c-flow', 'o-flow', 'flow'); bind('c-swirl', 'o-swirl', 'swirl');
+  bind('c-dens', 'o-dens', 'dens'); bind('c-bloom', 'o-bloom', 'bloom');
+  bind('c-grain', 'o-grain', 'grain'); bind('c-par', 'o-par', 'par');
+  bind('c-spin', 'o-spin', 'spin');
+  bind('c-warm', 'o-warm', 'warm'); bind('c-tempo', 'o-tempo', 'tempo', v => v.toFixed(1) + '×');
+  $('c-quality').addEventListener('change', e => { if (renderer) renderer.setQuality(e.target.value); });
+
+  /* 指针：视差 + 天空扰动 + 点击涟漪 */
+  addEventListener('pointermove', e => {
+    input.tmx = (e.clientX / innerWidth - 0.5) * 2;
+    input.tmy = -(e.clientY / innerHeight - 0.5) * 2;
+    const nx = e.clientX / innerWidth, ny = 1 - e.clientY / innerHeight;
+    const d = Math.hypot(nx - input.ptrX, ny - input.ptrY);
+    input.ptrE = Math.min(1, input.ptrE + d * 6);
+    input.ptrX = nx; input.ptrY = ny;
+  }, { passive: true });
+  addEventListener('pointerdown', e => {
+    if (e.target.closest('button,a,input,select,.director,.tour-card,.contact')) return;
+    input.clickX = e.clientX / innerWidth;
+    input.clickY = 1 - e.clientY / innerHeight;
+    input.clickT = loopTime;
+    audio.chime([523.25, 587.33, 659.25, 783.99, 880][Math.floor(Math.random() * 5)], 0.05);
+  }, { passive: true });
+  document.documentElement.addEventListener('pointerleave', () => { input.tmx = 0; input.tmy = 0; });
+
+  /* 滚轮 / 触摸切换导览 */
+  let wheelLock = 0;
+  addEventListener('wheel', e => {
+    if (!ready || performance.now() < wheelLock) return;
+    if (e.target.closest('.director,.tour,.contact')) return;
+    if (e.deltaY > 30 && !tour) { setTour(true); wheelLock = performance.now() + 900; }
+    else if (e.deltaY < -30 && tour) { setTour(false); wheelLock = performance.now() + 900; }
+  }, { passive: true });
+  let touchY = null;
+  addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
+  addEventListener('touchend', e => {
+    if (touchY === null || !ready) return;
+    const dy = touchY - e.changedTouches[0].clientY;
+    if (e.target.closest('.director,.tour,.contact')) { touchY = null; return; }
+    if (dy > 60 && !tour) setTour(true);
+    else if (dy < -60 && tour) setTour(false);
+    touchY = null;
+  }, { passive: true });
+
+  /* 键盘 */
+  addEventListener('keydown', e => {
+    if (e.key === 'Escape') { if (tour) setTour(false); $('contact').classList.remove('open'); }
+    else if (e.key === 'm' || e.key === 'M') soundBtn.click();
+    else if (e.key === 'r' || e.key === 'R') { if (ready) replay(); }
+  });
+
+  /* ---- 帧渲染 ---- */
+  const P = {};
+  function renderFrame(dt) {
+    loopTime += dt;
+    introT += dt * CONFIG.tempo;
+    const t = introT;
+    /* 导演时间轴 */
+    P.title = 1 - smooth(TL.titleOut, TL.titleOut + 0.4, t);
+    P.iris = smooth(TL.irisStart, TL.irisEnd, t);
+    P.line = smooth(TL.lineStart, TL.lineEnd, t);
+    P.paint = smooth(TL.paintStart, TL.paintEnd, t);
+    P.fade = smooth(0, 0.5, t);
+    const cam = CONFIG.camera;
+    P.zoom = cam.pushFrom + (cam.pushTo - cam.pushFrom) * easeOutCubic(t / cam.pushDur)
+      + (reducedMotion ? 0 : cam.breathAmp * Math.sin(loopTime * cam.breathHz * Math.PI * 2));
+    if (t > TL.titleOut && ! $('intro-title').classList.contains('out')) $('intro-title').classList.add('out');
+    if (t >= TL.readyAt && !ready) setReady(true);
+    if (!swellFired && t >= TL.paintStart) { swellFired = true; audio.swell(); }
+
+    /* 输入平滑 */
+    const k = reducedMotion ? 1 : 0.045;
+    input.mx += (input.tmx - input.mx) * k;
+    input.my += (input.tmy - input.my) * k;
+    input.ptrE *= 0.94;
+    /* 星光风铃：随机挑一颗星闪烁并发声 */
+    if (loopTime > input.nextTw && ready) {
+      input.twIndex = Math.floor(Math.random() * 10);
+      input.twStart = loopTime;
+      input.nextTw = loopTime + 6 + Math.random() * 7;
+      audio.chime([523.25, 587.33, 659.25, 783.99, 880][input.twIndex % 5] * 0.5, 0.07);
+    }
+    const twAge = loopTime - input.twStart;
+    P.twIndex = input.twIndex; P.twEnv = twAge < 2.5 ? Math.sin(Math.PI * twAge / 2.5) : 0;
+    const clickAge = loopTime - input.clickT;
+    /* 屏幕坐标 → 场景坐标（与着色器竖屏裁切/推拉保持一致） */
+    const asp = innerWidth / Math.max(1, innerHeight);
+    const crop = Math.min(asp, 1.6) / 1.6;
+    const ccx = 0.5 - 0.17 * (1 - crop);
+    const sx = x => (ccx + (x - 0.5) * crop - 0.5) / P.zoom + 0.5;
+    const sy = y => (y - 0.5) / P.zoom + 0.5;
+    P.clickX = sx(input.clickX); P.clickY = sy(input.clickY); P.clickAge = clickAge < 2.2 ? clickAge : -1;
+
+    P.time = loopTime; P.mx = input.mx; P.my = input.my;
+    P.ptrX = sx(input.ptrX); P.ptrY = sy(input.ptrY); P.ptrE = input.ptrE;
+    P.par = params.par; P.flow = reducedMotion ? params.flow * 0.3 : params.flow;
+    P.swirl = params.swirl; P.dens = params.dens; P.bloom = params.bloom;
+    P.grain = params.grain; P.warm = params.warm; P.seed = params.seed;
+    P.spin = reducedMotion ? 0 : params.spin;
+    if (renderer) renderer.draw(P);
+  }
+
+  function loop(ts) {
+    const raw = lastTs ? ts - lastTs : 16.7;
+    lastTs = ts;
+    const dt = Math.min(0.05, Math.max(0.001, raw / 1000));
+    renderFrame(dt);
+    /* FPS 统计与自动画质 */
+    frameAcc += raw; frameN++;
+    if (frameN >= 30) {
+      const avg = frameAcc / frameN;
+      fpsShown = Math.round(1000 / avg);
+      const fpsEl = $('fps');
+      fpsEl.textContent = fpsShown + ' fps';
+      fpsEl.style.color = fpsShown >= 50 ? 'var(--ok)' : fpsShown >= 30 ? 'var(--warn)' : 'var(--danger)';
+      adaptTimer += frameAcc;
+      if (adaptTimer > 2000 && renderer) { renderer.adapt(avg); adaptTimer = 0; }
+      frameAcc = 0; frameN = 0;
+    }
+    requestAnimationFrame(loop);
+  }
+  addEventListener('resize', () => { if (renderer) renderer.resize(); });
+  document.addEventListener('visibilitychange', () => { lastTs = 0; });
+  if (reducedMotion) { setReady(true); $('intro-title').classList.add('out'); }
+  requestAnimationFrame(loop);
+  window.__vortex = { params, CONFIG, get fps() { return fpsShown; }, get introT() { return introT; }, replay, skip, setTour };
+})();
+</script>
+</body>
+</html>

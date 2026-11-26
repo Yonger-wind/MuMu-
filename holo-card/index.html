@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>全息检视卡 · Holo Profile Card</title>
+<style>
+/* ==========================================================================
+   0. 页面外壳（只是展示台，卡片本体样式在第 1 节）
+   ========================================================================== */
+:root {
+  color-scheme: dark;
+  --bg: #121017;
+  --ink: #f4f4f5;
+  --muted: rgba(244, 244, 245, .58);
+  --line: rgba(255, 255, 255, .09);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background:
+    radial-gradient(1200px 700px at 70% -10%, rgba(88, 74, 120, .22), transparent 60%),
+    radial-gradient(900px 600px at 10% 110%, rgba(50, 70, 110, .18), transparent 60%),
+    var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.topbar { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding: 26px 30px 6px;
+}
+body.light {
+  --bg: #eceaf0;
+  --ink: #1f1f23;
+  --muted: rgba(31, 31, 35, .62);
+  --line: rgba(24, 24, 27, .12);
+  background:
+    radial-gradient(1200px 700px at 70% -10%, rgba(150, 130, 200, .25), transparent 60%),
+    radial-gradient(900px 600px at 10% 110%, rgba(120, 160, 200, .22), transparent 60%),
+    var(--bg);
+}
+.topbar h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -.01em; }
+.topbar p { margin: 0; font-size: 13px; color: var(--muted); }
+.layout { display: flex; gap: 26px; align-items: flex-start; padding: 16px 30px 60px; }
+.stage {
+  flex: 1; min-width: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 34px; align-items: start;
+}
+/* 控制面板 */
+.panel {
+  flex: none; width: 250px; position: sticky; top: 18px;
+  padding: 14px 16px 16px; border-radius: 16px;
+  background: rgba(255, 255, 255, .04); border: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+  font-size: 12.5px;
+}
+.panel h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 7px 0; }
+.row label { flex: 1; color: var(--muted); }
+.row output { flex: none; width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+input[type=range] { flex: none; width: 92px; accent-color: #8b7fd6; }
+select, .btn {
+  font: inherit; font-size: 12px; color: var(--ink);
+  background: rgba(255, 255, 255, .07); border: 1px solid var(--line);
+  border-radius: 8px; padding: 4px 8px; cursor: pointer;
+}
+select { width: 118px; }
+.btn:hover, select:hover { background: rgba(255, 255, 255, .12); }
+.btns { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 12px; }
+.btns .btn { flex: 1; text-align: center; }
+.panel .hint { margin: 12px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.6; }
+@media (max-width: 860px) { .layout { flex-direction: column; } .panel { position: static; width: 100%; } }
+
+/* 卡片工具条（悬停出现在顶部，避开底部的星级） */
+.card-tools {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%) translateY(-6px);
+  display: flex; gap: 6px; z-index: 6;
+  opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease;
+}
+.profile-card:hover .card-tools, .profile-card.is-focus .card-tools { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+.card-tools button {
+  font: inherit; font-size: 11.5px; color: #fff; padding: 5px 11px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, .22); border-radius: 999px;
+  background: rgba(18, 16, 23, .62); backdrop-filter: blur(10px);
+}
+.card-tools button:hover { background: rgba(18, 16, 23, .85); }
+.profile-card.is-drop::after {
+  content: '松手换图'; position: absolute; inset: 0; z-index: 8; border-radius: inherit;
+  display: grid; place-items: center; font-size: 14px; font-weight: 600; color: #fff;
+  background: rgba(20, 16, 30, .55); border: 2px dashed rgba(255, 255, 255, .5);
+}
+.empty-tip { grid-column: 1 / -1; color: var(--muted); font-size: 13px; padding: 40px 0; }
+.crash {
+  margin: 10px 30px 0; padding: 10px 14px; border-radius: 10px;
+  background: rgba(190, 60, 60, .18); border: 1px solid rgba(230, 110, 110, .45);
+  color: #ffd9d9; font-size: 12.5px;
+}
+
+/* ==========================================================================
+   1. ProfileCard —— 全息卡片本体（忠实移植 ProfileCard.css）
+   ========================================================================== */
+.profile-card {
+  --pc-light-x: 50%;
+  --pc-light-y: 50%;
+  --pc-pointer-x: 50%;
+  --pc-pointer-y: 50%;
+  --pc-band-x: 50%;
+  --pc-band-y: 50%;
+  --pc-reach: 0;
+  --pc-rotate-x: 0deg;
+  --pc-rotate-y: 0deg;
+  --pc-shift-x: 0px;
+  --pc-shift-y: 0px;
+  --pc-tilt: 0;
+  --pc-active: 0;
+  position: relative;
+  width: 340px;
+  max-width: 100%;
+  perspective: 1000px;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+.profile-card__body {
+  position: relative;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 10px;
+  border-radius: calc(var(--pc-radius) + 10px);
+  background: var(--pc-frame);
+  box-shadow: var(--pc-frame-shadow);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  transform: rotateX(var(--pc-rotate-x)) rotateY(var(--pc-rotate-y));
+  will-change: transform;
+}
+.profile-card__tile {
+  position: relative;
+  aspect-ratio: var(--pc-aspect, 4 / 5);
+  border-radius: var(--pc-radius);
+  background: var(--pc-backdrop);
+  box-shadow: var(--pc-tile-shadow);
+  overflow: hidden;
+  isolation: isolate;
+}
+.profile-card__sheen,
+.profile-card__holo,
+.profile-card__foil,
+.profile-card__scrim,
+.profile-card__tile-rim,
+.profile-card__glare,
+.profile-card__shade,
+.profile-card__rim {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+}
+.profile-card__sheen {
+  background: radial-gradient(
+    farthest-corner circle at calc(var(--pc-light-x) - 10px) calc(var(--pc-light-y) - 10px),
+    var(--pc-sheen) 0%, transparent 55%);
+  opacity: calc(var(--pc-holo) * var(--pc-active));
+}
+
+/* 彩虹箔层：斜纹 + 光谱 + 衰减，三层混合 */
+.profile-card__holo,
+.profile-card__foil {
+  --pc-spectrum: repeating-linear-gradient(0deg,
+    hsl(2, 100%, 73%) 5%, hsl(53, 100%, 69%) 10%, hsl(93, 100%, 69%) 15%,
+    hsl(176, 100%, 76%) 20%, hsl(228, 100%, 74%) 25%, hsl(260, 100%, 76%) 30%, hsl(2, 100%, 73%) 35%);
+  --pc-bars: repeating-linear-gradient(-45deg,
+    #0e152e 0%, hsl(180, 10%, 60%) 3.8%, hsl(180, 29%, 66%) 4.5%,
+    hsl(180, 10%, 60%) 5.2%, #0e152e 10%, #0e152e 12%);
+  --pc-falloff: radial-gradient(farthest-corner circle at var(--pc-pointer-x) var(--pc-pointer-y),
+    hsla(0, 0%, 0%, .1) 12%, hsla(0, 0%, 0%, .15) 20%, hsla(0, 0%, 0%, .25) 120%);
+  background-image: var(--pc-spectrum), var(--pc-bars), var(--pc-falloff);
+  background-position: 0 var(--pc-band-y), var(--pc-band-x) var(--pc-band-y), center;
+  background-size: 500% 500%, 300% 300%, 200% 200%;
+  background-blend-mode: color, hard-light;
+  filter:
+    brightness(calc(.66 + .19 * var(--pc-active)))
+    contrast(calc(1.33 + .17 * var(--pc-active)))
+    saturate(calc(.33 + .17 * var(--pc-active)))
+    var(--pc-holo-filter);
+}
+/* 1A：图片下方那层（视频里透明显形人像的效果就来自这里） */
+.profile-card__holo {
+  mix-blend-mode: var(--pc-blend);
+  opacity: calc(var(--pc-holo) * var(--pc-holo-gain) * (.5 + .5 * var(--pc-active)));
+  -webkit-mask-image: var(--pc-pattern);
+  -webkit-mask-size: var(--pc-pattern-size);
+  -webkit-mask-position: calc(50% - var(--pc-shift-x) * 1.5) calc(65% - var(--pc-shift-y) * 1.5);
+  -webkit-mask-repeat: repeat;
+  mask-image: var(--pc-pattern);
+  mask-size: var(--pc-pattern-size);
+  mask-position: calc(50% - var(--pc-shift-x) * 1.5) calc(65% - var(--pc-shift-y) * 1.5);
+  mask-repeat: repeat;
+}
+/* 1B：图片上方那层（普通不透明照片靠它才有金属箔感，强度由 --pc-foil 控制） */
+.profile-card__foil {
+  mix-blend-mode: color-dodge;
+  opacity: calc(var(--pc-foil) * (.3 + .7 * var(--pc-active)));
+  filter:
+    brightness(calc(.72 + .28 * var(--pc-active)))
+    contrast(calc(1.35 + .2 * var(--pc-active)))
+    saturate(calc(.5 + .35 * var(--pc-active)));
+}
+.profile-card__holo-glow,
+.profile-card__holo-shift { position: absolute; inset: 0; opacity: calc(var(--pc-active) * var(--pc-holo-detail)); }
+.profile-card__holo-glow {
+  background-image:
+    linear-gradient(45deg, hsl(176, 100%, 76%), hsl(228, 100%, 74%), hsl(260, 100%, 76%), hsl(2, 100%, 73%), hsl(53, 100%, 69%), hsl(93, 100%, 69%)),
+    radial-gradient(circle at var(--pc-pointer-x) var(--pc-pointer-y), hsl(0, 0%, 70%) 0%, hsla(0, 0%, 30%, .2) 90%),
+    var(--pc-grain);
+  background-size: 250% 250%, 100% 100%, 220px 220px;
+  background-position: var(--pc-pointer-x) var(--pc-pointer-y), center, 0 0;
+  background-blend-mode: color-dodge;
+  filter:
+    brightness(calc(2 - var(--pc-reach)))
+    contrast(calc(var(--pc-reach) + 2))
+    saturate(calc(.5 + var(--pc-reach)));
+  mix-blend-mode: luminosity;
+}
+.profile-card__holo-shift {
+  background-image: var(--pc-spectrum), var(--pc-bars), var(--pc-falloff);
+  background-position: 0 var(--pc-band-y), calc(var(--pc-band-x) * .4) calc(var(--pc-band-y) * .5), center;
+  background-size: 200% 300%, 700% 700%, 100% 100%;
+  background-blend-mode: color, hard-light;
+  mix-blend-mode: difference;
+  filter: brightness(.8) contrast(1.5);
+}
+.profile-card__photo {
+  position: absolute;
+  inset: calc(var(--pc-parallax) * -1);
+  width: calc(100% + var(--pc-parallax) * 2);
+  height: calc(100% + var(--pc-parallax) * 2);
+  object-fit: cover;
+  object-position: var(--pc-photo-pos, center bottom);
+  transform: translate3d(var(--pc-shift-x), var(--pc-shift-y), 0);
+  pointer-events: none; user-select: none; -webkit-user-select: none;
+}
+.profile-card__photo.is-missing {
+  object-fit: cover; opacity: .25;
+}
+.profile-card__placeholder {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: rgba(255, 255, 255, .35); font-size: 12.5px; pointer-events: none;
+}
+.profile-card__scrim {
+  background: linear-gradient(to top,
+    rgba(0, 0, 0, .6) 0%, rgba(0, 0, 0, .57) 6%, rgba(0, 0, 0, .5) 12%, rgba(0, 0, 0, .4) 19%,
+    rgba(0, 0, 0, .28) 26%, rgba(0, 0, 0, .16) 33%, rgba(0, 0, 0, .07) 40%, rgba(0, 0, 0, .02) 46%, rgba(0, 0, 0, 0) 52%);
+  opacity: var(--pc-scrim, 1);
+}
+.profile-card__info { position: absolute; left: 20px; right: 20px; bottom: 18px; color: #fff; }
+.profile-card__name { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.25; letter-spacing: -.01em; }
+.profile-card__title { margin: 4px 0 0; font-size: 14px; line-height: 1.45; color: rgba(255, 255, 255, .78); }
+
+/* —— 可编辑的名字 / 身份：点上去直接改，回车或点别处保存，Esc 撤销 —— */
+.profile-card__name[contenteditable="true"],
+.profile-card__title[contenteditable="true"] {
+  cursor: text; user-select: text; caret-color: #fff; border-radius: 3px;
+  text-decoration: underline dotted rgba(255, 255, 255, .34);
+  text-decoration-skip-ink: none; text-underline-offset: 3px;
+}
+.profile-card__name[contenteditable="true"]:hover,
+.profile-card__title[contenteditable="true"]:hover { text-decoration-color: rgba(255, 255, 255, .6); }
+.profile-card__name[contenteditable="true"]:focus,
+.profile-card__title[contenteditable="true"]:focus {
+  outline: none; text-decoration: none; background: rgba(255, 255, 255, .1);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .28);
+}
+
+/* —— 星级：底部居中一排裸露的小星星，无底托 ——
+   亮起 = 黑色星体 + 亮白细边 + 柔光晕；空位 = 很淡的空心轮廓。
+   黑星在暗底上本身不反光，靠外圈那层光把它「托」出来，一眼能数清亮了几颗。 */
+.profile-card__stars {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  display: flex; gap: var(--pc-star-gap, 6px); z-index: 4;
+  padding: var(--pc-star-pad, 0);
+  background: var(--pc-star-plate, transparent); border-radius: 999px;
+}
+.profile-card__star {
+  width: var(--pc-star, 16px); height: var(--pc-star, 16px);
+  padding: 0; border: 0; background: none; line-height: 0; cursor: pointer;
+  transition: transform .16s ease;
+}
+.profile-card__star svg { display: block; width: 100%; height: 100%; }
+.profile-card__star .st-fill { fill: var(--pc-star-fill, #08080c); opacity: 0; transition: opacity .16s ease; }
+/* 空位：淡到几乎看不见的空心轮廓 */
+.profile-card__star .st-line {
+  fill: var(--pc-star-ghost, rgba(255, 255, 255, .05));
+  stroke: var(--pc-star-edge, rgba(255, 255, 255, .3));
+  stroke-width: 1.3; stroke-linejoin: round;
+}
+.profile-card__star.is-on .st-fill { opacity: 1; }
+/* 亮起：黑体 + 亮白边 + 双层柔光 */
+.profile-card__star.is-on .st-line {
+  fill: none;
+  stroke: var(--pc-star-edge-on, rgba(255, 255, 255, .92));
+  stroke-width: 1.7; stroke-linejoin: round;
+}
+.profile-card__star.is-on svg {
+  filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, .75)) drop-shadow(0 0 5px rgba(255, 255, 255, .35));
+}
+.profile-card__star:hover { transform: scale(1.22); }
+.profile-card__star:focus-visible { outline: 2px solid rgba(255, 255, 255, .85); outline-offset: 3px; border-radius: 4px; }
+/* 有星级时把名字/身份抬到星星上方，别让两者抢位置（跟着星径自动让位） */
+.profile-card--stars .profile-card__info { bottom: calc(16px + var(--pc-star, 16px) + 14px); }
+.profile-card__tile-rim {
+  box-shadow: inset 0 0 0 1px var(--pc-tile-edge), inset 0 1px 0 var(--pc-tile-highlight);
+}
+.profile-card__footer { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 6px 20px 8px; }
+.profile-card__avatar { position: relative; flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--pc-tile); overflow: hidden; }
+.profile-card__avatar::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--pc-tile-edge); }
+.profile-card__avatar img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+.profile-card__meta { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.profile-card__handle { overflow: hidden; font-size: 14px; font-weight: 600; line-height: 1.25; color: var(--pc-ink); white-space: nowrap; text-overflow: ellipsis; }
+.profile-card__status { display: flex; align-items: center; gap: 6px; font-size: 12.5px; line-height: 1.25; color: var(--pc-muted); white-space: nowrap; }
+.profile-card__status::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--pc-status); }
+.profile-card__contact {
+  display: flex; align-items: center; gap: 6px; flex: none; height: 36px; padding: 0 14px;
+  border: none; border-radius: calc(var(--pc-radius) * .75);
+  background: var(--pc-tile);
+  box-shadow: inset 0 0 0 1px var(--pc-tile-edge), inset 0 1px 0 var(--pc-tile-highlight), var(--pc-tile-shadow);
+  color: var(--pc-ink); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: filter .2s ease, transform .2s ease;
+}
+.profile-card__contact:active { filter: var(--pc-press); transform: scale(.96); transition-duration: 0s; }
+.profile-card__contact:focus-visible { outline: 2px solid var(--pc-ink); outline-offset: 2px; }
+.profile-card__glare {
+  background: radial-gradient(farthest-corner circle at var(--pc-light-x) var(--pc-light-y),
+    rgba(255, 255, 255, .8) 0%, rgba(255, 255, 255, .36) 20%, rgba(255, 255, 255, 0) 60%);
+  mix-blend-mode: overlay;
+  opacity: calc(var(--pc-glare) * var(--pc-active));
+}
+.profile-card__shade {
+  background: radial-gradient(farthest-corner circle at var(--pc-light-x) var(--pc-light-y),
+    transparent 30%, var(--pc-shade) 100%);
+  opacity: calc(var(--pc-glare) * var(--pc-tilt));
+}
+.profile-card__rim { box-shadow: inset 0 0 0 1px var(--pc-frame-edge), inset 0 1px 0 var(--pc-frame-highlight); }
+@media (hover: hover) {
+  .profile-card__contact:hover { filter: var(--pc-hover); }
+  .profile-card__contact:hover:active { filter: var(--pc-press); }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>全息检视卡</h1>
+  <p>移动鼠标（手机上倾斜设备）看彩虹扫光 · 把任意图片拖到卡片上即可替换内容</p>
+</div>
+
+<div id="crash" class="crash" hidden></div>
+
+<div class="layout">
+  <aside class="panel">
+    <h2>效果调节</h2>
+    <div class="row"><label for="c-holo">彩虹强度</label><output id="o-holo">1.0</output><input id="c-holo" type="range" min="0" max="1" step="0.05" value="1"></div>
+    <div class="row"><label for="c-foil">覆膜强度</label><output id="o-foil">自动</output><input id="c-foil" type="range" min="0" max="1" step="0.05" value="0.3"></div>
+    <div class="row"><label for="c-glare">高光</label><output id="o-glare">1.0</output><input id="c-glare" type="range" min="0" max="1.5" step="0.05" value="1"></div>
+    <div class="row"><label for="c-tilt">倾斜角度</label><output id="o-tilt">25</output><input id="c-tilt" type="range" min="0" max="40" step="1" value="25"></div>
+    <div class="row"><label for="c-para">视差</label><output id="o-para">8</output><input id="c-para" type="range" min="0" max="30" step="1" value="8"></div>
+    <div class="row"><label for="c-radius">圆角</label><output id="o-radius">16</output><input id="c-radius" type="range" min="0" max="32" step="1" value="16"></div>
+    <div class="row"><label>主题</label><select id="c-theme"><option value="dark">暗色</option><option value="light">亮色</option></select></div>
+    <div class="row"><label>画幅</label><select id="c-aspect">
+      <option value="4 / 5">4 : 5（视频同款）</option>
+      <option value="3 / 4">3 : 4</option>
+      <option value="2 / 3">2 : 3</option>
+      <option value="1 / 1">1 : 1</option>
+      <option value="16 / 9">16 : 9</option>
+    </select></div>
+    <div class="row"><label>箔层花纹</label><select id="c-mask">
+      <option value="none">无（整面铺满）</option>
+      <option value="stripes">斜纹</option>
+      <option value="grating">光栅</option>
+      <option value="dots">星点</option>
+      <option value="hex">蜂窝</option>
+    </select></div>
+    <div class="row"><label>星星颗数</label><select id="c-stars">
+      <option value="4">4 颗</option>
+      <option value="5">5 颗</option>
+      <option value="6">6 颗</option>
+      <option value="7">7 颗</option>
+    </select></div>
+    <div class="row"><label for="c-rating">批量星级</label><output id="o-rating">4</output><input id="c-rating" type="range" min="0" max="5" step="1" value="4"></div>
+    <div class="row"><label for="c-starbox">显示星级</label><input id="c-starbox" type="checkbox" checked></div>
+    <div class="row"><label for="c-edit">文字可编辑</label><input id="c-edit" type="checkbox" checked></div>
+    <div class="row"><label for="c-footer">显示页脚</label><input id="c-footer" type="checkbox"></div>
+    <div class="row"><label for="c-intro">入场扫光</label><input id="c-intro" type="checkbox" checked></div>
+    <div class="row"><label for="c-mobile">手机陀螺仪</label><input id="c-mobile" type="checkbox" checked></div>
+    <div class="btns">
+      <button class="btn" id="b-add">＋ 新增卡片</button>
+      <button class="btn" id="b-reset">恢复示例</button>
+    </div>
+    <p class="hint">名字 / 身份：点卡片上的文字直接改，回车保存、Esc 撤销。<br>星级：点底部小星星设这一张的星级（再点最亮那颗退一颗）；面板那两个是批量改全部。<br>换图：拖图片到卡片上，或悬停卡片点「换图」。</p>
+  </aside>
+
+  <main class="stage" id="stage"></main>
+</div>
+
+<input type="file" id="picker" accept="image/*" multiple hidden>
+
+<script>
+'use strict';
+
+/* 出错时把原因显示在页面上——改配置数组时打错字不至于只剩一张白页 */
+window.addEventListener('error', function (e) {
+  const box = document.getElementById('crash');
+  if (!box) return;
+  box.hidden = false;
+  box.textContent = '脚本出错：' + (e.message || '未知错误') + '（' + (e.filename || '') + ' 第 ' + (e.lineno || '?') + ' 行）';
+});
+
+/* ==========================================================================
+   ①【内容配置区】想加卡片 / 换内容，只改这里就够了
+   --------------------------------------------------------------------------
+   image   : 图片地址。相对路径（../assets/x.png）、http(s) 链接、dataURL 都行，
+             留空 '' 则显示占位框，之后可以拖一张图上去。
+   name    : 主标题（大字）
+   title   : 副标题（小字）
+   handle  : @ 用户名，留空则不显示页脚
+   status  : 状态文字
+   stars   : 星级一共几颗（4 / 5 / 6…），底部居中那排黑色小星星
+   rating  : 亮起的颗数（0 ~ stars）
+   下面这些都可以省略，省略就用右侧面板的全局值：
+   holo / glare / foil / tilt / parallax / radius / theme / aspect /
+   backdrop（纯色背景，会覆盖主题底色）/ mask（花纹名）/ photoPos（图片对齐）
+   ========================================================================== */
+const CARDS = [
+  {
+    image: '../assets/models/linshen.cut.png',
+    name: '林深',
+    title: '档案管理员',
+    handle: 'linsen',
+    status: '在线',
+    stars: 5,
+    rating: 4,
+    backdrop: '#3a3644',
+    photoPos: 'center bottom'
+  },
+  {
+    image: '../assets/models/claire.cut.png',
+    name: '克莱尔',
+    title: '独立音乐人',
+    handle: 'claire',
+    status: '在线',
+    stars: 5,
+    rating: 5,
+    backdrop: '#2f3a44',
+    photoPos: 'center bottom'
+  },
+  {
+    image: '../assets/images/starry-night.jpg',
+    name: '《星月夜》',
+    title: '1889 · 布面油画',
+    handle: '',
+    stars: 4,
+    rating: 4,
+    backdrop: '#243040',
+    photoPos: 'center center'
+  },
+  {
+    image: '',
+    name: '拖一张图进来',
+    title: '名字和身份可以直接点着改',
+    handle: '',
+    stars: 5,
+    rating: 0,
+    backdrop: '#3a3644'
+  }
+];
+
+/* 全局默认值（面板会改写它） */
+const DEFAULTS = {
+  theme: 'dark',       // 主题
+  holo: 1,
+  glare: 1,
+  foil: null,          // null = 按图片是否透明底自动决定
+  tiltStrength: 25,
+  parallax: 8,
+  radius: 16,
+  aspect: '4 / 5',
+  mask: 'none',
+  showUserInfo: false, // 视频里没页脚
+  showStars: true,     // 底部居中的星级
+  stars: 5,            // 一共几颗
+  rating: 4,           // 默认亮起几颗
+  editable: true,      // 名字/身份可点击编辑
+  enableTilt: true,
+  enableMobileTilt: true,
+  mobileTiltSensitivity: 5,
+  intro: true
+};
+const DEFAULTS_INIT = JSON.parse(JSON.stringify(DEFAULTS));
+
+/* ==========================================================================
+   ② 主题与花纹表（照文档原样移植）
+   ========================================================================== */
+const THEMES = {
+  dark: {
+    '--pc-frame': 'rgba(38, 35, 46, 0.66)',
+    '--pc-frame-edge': 'rgba(255, 255, 255, 0.08)',
+    '--pc-frame-highlight': 'rgba(255, 255, 255, 0.07)',
+    '--pc-frame-shadow': '0 22px 44px -20px rgba(0, 0, 0, 0.8), 0 6px 16px -8px rgba(0, 0, 0, 0.5)',
+    '--pc-tile': 'linear-gradient(180deg, #3a3644 0%, #27242f 100%)',
+    '--pc-tile-edge': 'rgba(255, 255, 255, 0.07)',
+    '--pc-tile-highlight': 'rgba(255, 255, 255, 0.12)',
+    '--pc-tile-shadow': '0 4px 10px -4px rgba(0, 0, 0, 0.7)',
+    '--pc-ink': '#f4f4f5',
+    '--pc-muted': 'rgba(244, 244, 245, 0.6)',
+    '--pc-hover': 'brightness(1.12)',
+    '--pc-press': 'brightness(0.8)',
+    '--pc-shade': 'rgba(0, 0, 0, 0.4)'
+  },
+  light: {
+    '--pc-frame': 'rgba(240, 240, 243, 0.8)',
+    '--pc-frame-edge': 'rgba(24, 24, 27, 0.07)',
+    '--pc-frame-highlight': 'rgba(255, 255, 255, 0.95)',
+    '--pc-frame-shadow': '0 22px 44px -22px rgba(24, 24, 27, 0.3), 0 6px 16px -10px rgba(24, 24, 27, 0.16)',
+    '--pc-tile': 'linear-gradient(180deg, #ffffff 0%, #f6f6f8 100%)',
+    '--pc-tile-edge': 'rgba(24, 24, 27, 0.08)',
+    '--pc-tile-highlight': 'rgba(255, 255, 255, 1)',
+    '--pc-tile-shadow': '0 4px 10px -5px rgba(24, 24, 27, 0.25)',
+    '--pc-ink': '#27272a',
+    '--pc-muted': 'rgba(39, 39, 42, 0.6)',
+    '--pc-hover': 'brightness(0.97)',
+    '--pc-press': 'brightness(0.92)',
+    '--pc-shade': 'rgba(24, 24, 27, 0.14)'
+  }
+};
+
+const FOILS = {
+  dark:  { '--pc-blend': 'color-dodge', '--pc-holo-filter': 'hue-rotate(0deg)',   '--pc-sheen': 'rgba(255, 255, 255, 0.16)' },
+  light: { '--pc-blend': 'multiply',    '--pc-holo-filter': 'invert(1) hue-rotate(180deg)', '--pc-sheen': 'rgba(255, 255, 255, 0)' }
+};
+
+const GRAIN = 'url("data:image/svg+xml,' + encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='500' height='500'><filter id='g' x='0' y='0' width='100%' height='100%' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0.55 0 0 0 -0.24 0.55 0 0 0 -0.24 0.55 0 0 0 -0.24 0 0 0 0 1'/></filter><rect width='100%' height='100%' filter='url(#g)'/></svg>"
+) + '")';
+
+/* 箔层花纹（作为 mask-image 使用，决定彩虹出现在哪里） */
+const MASKS = {
+  none:     'linear-gradient(#000, #000)',
+  stripes:  'repeating-linear-gradient(-45deg, #000 0 5px, rgba(0,0,0,.25) 5px 9px, #000 9px 16px)',
+  grating:  'repeating-linear-gradient(90deg, #000 0 2px, rgba(0,0,0,.18) 2px 6px)',
+  hex:      'repeating-linear-gradient(60deg, #000 0 3px, rgba(0,0,0,.3) 3px 8px), repeating-linear-gradient(-60deg, #000 0 3px, rgba(0,0,0,.3) 3px 8px)',
+  dots:     'url("data:image/svg+xml,' + encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60'>" +
+    [ [8,9],[30,4],[50,14],[18,26],[40,32],[6,44],[28,48],[52,52],[46,20],[22,12] ]
+      .map(function (p) { return "<circle cx='" + p[0] + "' cy='" + p[1] + "' r='3.2' fill='#000'/>"; }).join('') +
+    "</svg>") + '")'
+};
+const MASK_SIZE = { none: '100% 100%', stripes: 'auto', grating: 'auto', hex: 'auto', dots: '60px 60px' };
+
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function isDark(color) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(color).trim());
+  if (!m) return null;
+  const hex = m[1].length === 3 ? m[1].replace(/./g, function (d) { return d + d; }) : m[1];
+  const rgb = [0, 2, 4].map(function (i) { return parseInt(hex.slice(i, i + 2), 16) / 255; });
+  return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2] < 0.5;
+}
+
+/* ==========================================================================
+   ③ 弹簧引擎（照 ProfileCard.jsx 的 useEffect 原样移植）
+   ========================================================================== */
+function attachEngine(root, api) {
+  const size = { width: root.offsetWidth, height: root.offsetHeight };
+  const x = { p: 0, v: 0, target: 0 };
+  const y = { p: 0, v: 0, target: 0 };
+  const light = { p: 0, target: 0 };
+  let raf = 0, last = 0, slowUntil = 0, touchId = null;
+
+  const write = function () {
+    const s = api.settings();
+    const angle = s.enableTilt && !REDUCED ? s.tiltStrength : 0;
+    const depth = s.parallax;
+    const tilt = Math.min(1, Math.hypot(x.p, y.p));
+    const st = root.style;
+    st.setProperty('--pc-light-x', ((x.p + 1) * 0.5 * size.width).toFixed(1) + 'px');
+    st.setProperty('--pc-light-y', ((y.p + 1) * 0.5 * size.height).toFixed(1) + 'px');
+    st.setProperty('--pc-pointer-x', ((x.p + 1) * 50).toFixed(2) + '%');
+    st.setProperty('--pc-pointer-y', ((y.p + 1) * 50).toFixed(2) + '%');
+    st.setProperty('--pc-band-x', (50 + x.p * 15).toFixed(2) + '%');
+    st.setProperty('--pc-band-y', (50 + y.p * 15).toFixed(2) + '%');
+    st.setProperty('--pc-rotate-x', (y.p * angle).toFixed(3) + 'deg');
+    st.setProperty('--pc-rotate-y', (-x.p * angle).toFixed(3) + 'deg');
+    st.setProperty('--pc-shift-x', (x.p * (REDUCED ? 0 : depth)).toFixed(2) + 'px');
+    st.setProperty('--pc-shift-y', (y.p * (REDUCED ? 0 : depth)).toFixed(2) + 'px');
+    st.setProperty('--pc-reach', tilt.toFixed(4));
+    st.setProperty('--pc-tilt', (tilt * light.p).toFixed(4));
+    st.setProperty('--pc-active', light.p.toFixed(4));
+  };
+
+  const frame = function (now) {
+    const dt = Math.min(0.05, (now - last) / 1000 || 0);
+    last = now;
+    const slow = now < slowUntil;
+    const stiffness = slow ? 24 : 120;
+    const damping = slow ? 9 : 16;
+    const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
+    const h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      [x, y].forEach(function (axis) {
+        axis.v += (stiffness * (axis.target - axis.p) - damping * axis.v) * h;
+        axis.p += axis.v * h;
+      });
+    }
+    const tau = light.target > light.p ? 0.18 : slow ? 0.9 : 0.45;
+    light.p += (light.target - light.p) * (1 - Math.exp(-dt / tau));
+    write();
+    const moving =
+      Math.abs(x.target - x.p) > 0.0005 || Math.abs(y.target - y.p) > 0.0005 ||
+      Math.abs(x.v) > 0.0005 || Math.abs(y.v) > 0.0005 ||
+      Math.abs(light.target - light.p) > 0.002;
+    if (moving) {
+      raf = requestAnimationFrame(frame);
+    } else {
+      x.p = x.target; y.p = y.target; light.p = light.target;
+      write(); raf = 0;
+    }
+  };
+
+  const wake = function () {
+    if (raf) return;
+    last = performance.now();
+    raf = requestAnimationFrame(frame);
+  };
+
+  const aim = function (nx, ny, on) {
+    x.target = clamp(nx, -1, 1);
+    y.target = clamp(ny, -1, 1);
+    light.target = on === false ? 0 : 1;
+    slowUntil = 0;
+    wake();
+  };
+  const aimAt = function (ev) {
+    const r = root.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    aim(((ev.clientX - r.left) / r.width) * 2 - 1, ((ev.clientY - r.top) / r.height) * 2 - 1);
+  };
+  const release = function () { aim(0, 0, false); };
+
+  const onEnter = function (e) { if (e.pointerType === 'mouse') aimAt(e); };
+  const onMove = function (e) { if (e.pointerType === 'mouse' || e.pointerId === touchId) aimAt(e); };
+  const onLeave = function (e) { if (e.pointerType === 'mouse') release(); };
+  const onDown = function (e) { if (e.pointerType === 'mouse') return; touchId = e.pointerId; aimAt(e); };
+  const onUp = function (e) { if (e.pointerId !== touchId) return; touchId = null; release(); };
+
+  root.addEventListener('pointerenter', onEnter);
+  root.addEventListener('pointermove', onMove);
+  root.addEventListener('pointerleave', onLeave);
+  root.addEventListener('pointerdown', onDown);
+  root.addEventListener('pointerup', onUp);
+  root.addEventListener('pointercancel', onUp);
+
+  const ro = new ResizeObserver(function () {
+    size.width = root.offsetWidth; size.height = root.offsetHeight; write();
+  });
+  ro.observe(root);
+
+  /* 入场扫光：从右上角慢慢回正 */
+  if (api.settings().intro && !REDUCED) {
+    x.p = 0.62; y.p = -0.55; light.p = 1;
+    slowUntil = performance.now() + 1400;
+    write(); wake();
+  } else {
+    write();
+  }
+
+  /* 手机陀螺仪 */
+  let listening = false;
+  const onOrientation = function (e) {
+    if (e.beta == null || e.gamma == null) return;
+    const k = api.settings().mobileTiltSensitivity;
+    aim((e.gamma * k) / 150, ((e.beta - 20) * k) / 150);
+  };
+  const listen = function () {
+    if (listening) return;
+    listening = true;
+    window.addEventListener('deviceorientation', onOrientation);
+  };
+  const onClick = function () {
+    if (!api.settings().enableMobileTilt) return;
+    const M = window.DeviceOrientationEvent;
+    if (M && typeof M.requestPermission === 'function') {
+      M.requestPermission().then(function (s) { if (s === 'granted') listen(); }).catch(function () {});
+    } else { listen(); }
+  };
+  root.addEventListener('click', onClick);
+
+  return {
+    write: write,
+    aim: aim,
+    replay: function () {
+      x.p = 0.62; y.p = -0.55; light.p = 1;
+      slowUntil = performance.now() + 1400; write(); wake();
+    },
+    destroy: function () {
+      cancelAnimationFrame(raf); ro.disconnect();
+      root.removeEventListener('pointerenter', onEnter);
+      root.removeEventListener('pointermove', onMove);
+      root.removeEventListener('pointerleave', onLeave);
+      root.removeEventListener('pointerdown', onDown);
+      root.removeEventListener('pointerup', onUp);
+      root.removeEventListener('pointercancel', onUp);
+      root.removeEventListener('click', onClick);
+      window.removeEventListener('deviceorientation', onOrientation);
+    }
+  };
+}
+
+/* ==========================================================================
+   ④ 卡片工厂
+   ========================================================================== */
+const cards = [];              // { data, root, engine, img }
+const stage = document.getElementById('stage');
+
+function el(tag, cls, html) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html != null) n.innerHTML = html;
+  return n;
+}
+
+function eff(data, key) {
+  if (data[key] !== undefined && data[key] !== null && data[key] !== '') return data[key];
+  return DEFAULTS[key];
+}
+
+function applyVars(root, data) {
+  const palette = eff(data, 'theme') === 'light' ? 'light' : 'dark';
+  const bd = data.backdrop;
+  const foilKind = bd ? ((isDark(bd) === false) ? 'light' : 'dark') : palette;
+  const maskName = eff(data, 'mask') || 'none';
+  const hasMask = maskName !== 'none';
+  const backdrop = bd
+    ? 'linear-gradient(180deg, color-mix(in srgb, ' + bd + ', #ffffff 12%) 0%, color-mix(in srgb, ' + bd + ', #000000 18%) 100%)'
+    : 'var(--pc-tile)';
+
+  const st = root.style;
+  const set = function (k, v) { st.setProperty(k, String(v)); };
+  /* 自定义属性必须走 setProperty，直接赋值 CSSStyleDeclaration 是不生效的 */
+  Object.keys(THEMES[palette]).forEach(function (k) { set(k, THEMES[palette][k]); });
+  Object.keys(FOILS[foilKind]).forEach(function (k) { set(k, FOILS[foilKind][k]); });
+  set('--pc-radius', Math.max(0, eff(data, 'radius')) + 'px');
+  set('--pc-backdrop', backdrop);
+  set('--pc-aspect', eff(data, 'aspect'));
+  set('--pc-holo', clamp(eff(data, 'holo'), 0, 1));
+  set('--pc-glare', clamp(eff(data, 'glare'), 0, 1.5));
+  set('--pc-parallax', Math.max(0, eff(data, 'parallax')) + 'px');
+  set('--pc-status', data.statusColor || '#22c55e');
+  set('--pc-grain', GRAIN);
+  set('--pc-pattern', MASKS[maskName] || MASKS.none);
+  set('--pc-pattern-size', MASK_SIZE[maskName] || 'auto');
+  set('--pc-holo-gain', hasMask ? 1.25 : 0.75);
+  set('--pc-holo-detail', hasMask && foilKind === 'dark' ? 1 : 0);
+  set('--pc-photo-pos', data.photoPos || 'center bottom');
+  set('--pc-foil', foilValue(data));
+  set('--pc-scrim', (data.name || data.title) ? 1 : 0);
+  set('--pc-star', (data.starSize || 16) + 'px');
+  set('--pc-star-fill', data.starColor || '#08080c');
+  set('--pc-star-edge', data.starEdge || 'rgba(255, 255, 255, .3)');
+  set('--pc-star-edge-on', data.starEdgeOn || 'rgba(255, 255, 255, .92)');
+  set('--pc-star-ghost', data.starGhost || 'rgba(255, 255, 255, .05)');
+  set('--pc-star-plate', data.starPlate || 'transparent');
+  set('--pc-star-pad', data.starPad || '0');
+}
+
+/* 覆膜强度：显式设了就用，否则按图片透明底自动判断 */
+function foilValue(data) {
+  if (DEFAULTS.foil !== null && data.foil == null) return clamp(DEFAULTS.foil, 0, 1);
+  if (data.foil != null) return clamp(data.foil, 0, 1);
+  return data.__alpha ? 0.08 : 0.3;   // 透明底→几乎不覆膜（视频同款），不透明→0.3
+}
+
+function buildCard(data) {
+  const root = el('div', 'profile-card');
+  const body = el('div', 'profile-card__body');
+  const tile = el('div', 'profile-card__tile');
+
+  tile.appendChild(el('span', 'profile-card__sheen'));
+  const holo = el('span', 'profile-card__holo');
+  holo.appendChild(el('span', 'profile-card__holo-glow'));
+  holo.appendChild(el('span', 'profile-card__holo-shift'));
+  tile.appendChild(holo);
+
+  const img = el('img', 'profile-card__photo');
+  img.alt = data.name || '';
+  img.draggable = false;
+  img.loading = 'lazy';
+  tile.appendChild(img);
+
+  tile.appendChild(el('span', 'profile-card__foil'));
+  tile.appendChild(el('span', 'profile-card__scrim'));
+
+  const info = el('div', 'profile-card__info');
+  const nameEl = el('h3', 'profile-card__name');
+  const titleEl = el('p', 'profile-card__title');
+  info.appendChild(nameEl); info.appendChild(titleEl);
+  tile.appendChild(info);
+
+  const starsEl = el('div', 'profile-card__stars');
+  starsEl.setAttribute('role', 'radiogroup');
+  starsEl.setAttribute('aria-label', '星级');
+  tile.appendChild(starsEl);
+
+  tile.appendChild(el('span', 'profile-card__tile-rim'));
+
+  const placeholder = el('div', 'profile-card__placeholder', '把图片拖到这里 · 或点下方「换图」');
+  tile.appendChild(placeholder);
+
+  body.appendChild(tile);
+
+  const footer = el('div', 'profile-card__footer');
+  const avatar = el('span', 'profile-card__avatar');
+  const avatarImg = el('img');
+  avatarImg.alt = ''; avatarImg.draggable = false;
+  avatar.appendChild(avatarImg);
+  const meta = el('div', 'profile-card__meta');
+  const handleEl = el('span', 'profile-card__handle');
+  const statusEl = el('span', 'profile-card__status');
+  meta.appendChild(handleEl); meta.appendChild(statusEl);
+  const contact = el('button', 'profile-card__contact');
+  contact.type = 'button';
+  contact.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>';
+  contact.appendChild(document.createTextNode(' ' + (data.contactText || 'Contact')));
+  contact.addEventListener('click', function () { flash(root); });
+  footer.appendChild(avatar); footer.appendChild(meta); footer.appendChild(contact);
+  body.appendChild(footer);
+
+  body.appendChild(el('span', 'profile-card__glare'));
+  body.appendChild(el('span', 'profile-card__shade'));
+  body.appendChild(el('span', 'profile-card__rim'));
+
+  const tools = el('div', 'card-tools');
+  const btnPick = el('button', null, '换图');
+  const btnNew = el('button', null, '＋');
+  const btnDel = el('button', null, '删除');
+  btnPick.addEventListener('click', function () { pickFor(entry); });
+  btnNew.addEventListener('click', function () { cards.push(buildCard({ image: '', name: '新卡片', title: '' })); save(); renderAll(); });
+  btnDel.addEventListener('click', function () { removeCard(entry); save(); });
+  tools.appendChild(btnPick); tools.appendChild(btnNew); tools.appendChild(btnDel);
+  body.appendChild(tools);
+
+  root.appendChild(body);
+
+  const entry = {
+    data: data, root: root, img: img, nameEl: nameEl, titleEl: titleEl,
+    starsEl: starsEl,
+    handleEl: handleEl, statusEl: statusEl, avatarImg: avatarImg,
+    footer: footer, placeholder: placeholder,
+    settings: function () {
+      return {
+        enableTilt: DEFAULTS.enableTilt,
+        tiltStrength: eff(data, 'tiltStrength'),
+        parallax: eff(data, 'parallax'),
+        mobileTiltSensitivity: DEFAULTS.mobileTiltSensitivity,
+        intro: DEFAULTS.intro
+      };
+    }
+  };
+
+  entry.engine = attachEngine(root, entry);
+  applyVars(root, data);
+  paint(entry);
+  setImage(entry, data.image);
+
+  /* 名字 / 身份：点上去直接改，回车或移开保存，Esc 撤销 */
+  makeEditable(entry, nameEl, 'name');
+  makeEditable(entry, titleEl, 'title');
+
+  /* 星级：点第 n 颗亮到 n；再点最亮那颗退一颗 */
+  starsEl.addEventListener('click', function (e) {
+    const b = e.target.closest('.profile-card__star');
+    if (!b) return;
+    const n = Number(b.dataset.n);
+    const cur = Number(eff(data, 'rating'));
+    data.rating = cur === n ? n - 1 : n;
+    renderStars(entry);
+    save();
+  });
+
+  /* 拖拽换图 */
+  root.addEventListener('dragover', function (e) { e.preventDefault(); root.classList.add('is-drop'); });
+  root.addEventListener('dragleave', function () { root.classList.remove('is-drop'); });
+  root.addEventListener('drop', function (e) {
+    /* 落在正在编辑的文字里就交给文字框自己处理，别当成换图 */
+    if (e.target.closest && e.target.closest('[contenteditable="true"]')) return;
+    e.preventDefault(); root.classList.remove('is-drop');
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) readImage(f, function (url, alpha) { entry.data.image = url; entry.data.__alpha = alpha; setImage(entry, url); save(); });
+    else if (e.dataTransfer && e.dataTransfer.getData('text')) { entry.data.image = e.dataTransfer.getData('text'); entry.data.__alpha = undefined; setImage(entry, entry.data.image); save(); }
+  });
+
+  return entry;
+}
+
+/* 名字 / 身份的原地编辑 */
+function makeEditable(entry, node, key) {
+  node.addEventListener('focus', function () {
+    if (!eff(entry.data, 'editable')) { node.blur(); return; }
+    node.dataset.before = node.textContent;
+    node.dataset.cancel = '';
+    entry.root.classList.add('is-editing');
+  });
+  node.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); node.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); node.dataset.cancel = '1'; node.blur(); }
+  });
+  /* 粘什么都只留一行纯文本 */
+  node.addEventListener('paste', function (e) {
+    const t = ((e.clipboardData || window.clipboardData).getData('text') || '').replace(/\s+/g, ' ');
+    e.preventDefault();
+    let ok = false;
+    try { ok = document.execCommand('insertText', false, t); } catch (err) { ok = false; }
+    if (!ok) {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        const r = sel.getRangeAt(0);
+        r.deleteContents();
+        r.insertNode(document.createTextNode(t));
+        r.setStartAfter(r.endContainer); r.collapse(true);
+        sel.removeAllRanges(); sel.addRange(r);
+      }
+    }
+  });
+  node.addEventListener('blur', function () {
+    entry.root.classList.remove('is-editing');
+    if (node.dataset.cancel === '1') { node.textContent = node.dataset.before; return; }
+    const v = node.textContent.replace(/\s+/g, ' ').trim();
+    node.textContent = v;
+    if (v !== (entry.data[key] || '')) { entry.data[key] = v; save(); }
+    paint(entry);
+  });
+}
+
+/* 底部居中的星级：实心黑星 + 浅色描边，空位只留描边 */
+const STAR_PATH = 'M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z';
+const STAR_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="st-fill" d="' + STAR_PATH + '"/><path class="st-line" d="' + STAR_PATH + '"/></svg>';
+
+function renderStars(entry) {
+  const d = entry.data;
+  const show = !!eff(d, 'showStars');
+  const total = clamp(Math.round(Number(eff(d, 'stars')) || 5), 1, 12);
+  const cur = clamp(Math.round(Number(eff(d, 'rating')) || 0), 0, total);
+  entry.root.classList.toggle('profile-card--stars', show);
+  entry.starsEl.style.display = show ? '' : 'none';
+  entry.starsEl.setAttribute('aria-label', '星级 ' + cur + ' / ' + total);
+  if (entry.starsEl.childElementCount !== total) {
+    entry.starsEl.innerHTML = '';
+    for (let i = 1; i <= total; i++) {
+      const b = el('button', 'profile-card__star');
+      b.type = 'button';
+      b.dataset.n = i;
+      b.innerHTML = STAR_SVG;
+      entry.starsEl.appendChild(b);
+    }
+  }
+  Array.prototype.forEach.call(entry.starsEl.children, function (b, i) {
+    b.classList.toggle('is-on', i < cur);
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', i < cur ? 'true' : 'false');
+    b.setAttribute('aria-label', '评 ' + (i + 1) + ' 星');
+    b.tabIndex = i === clamp(cur, 0, total - 1) ? 0 : -1;
+  });
+}
+
+function paint(entry) {
+  const d = entry.data;
+  const editing = document.activeElement === entry.nameEl || document.activeElement === entry.titleEl;
+  if (!editing) {
+    entry.nameEl.textContent = d.name || '';
+    entry.titleEl.textContent = d.title || '';
+  }
+  entry.nameEl.style.display = d.name ? '' : 'none';
+  entry.titleEl.style.display = d.title ? '' : 'none';
+  const ed = eff(d, 'editable') ? 'true' : 'false';
+  entry.nameEl.setAttribute('contenteditable', ed);
+  entry.titleEl.setAttribute('contenteditable', ed);
+  entry.handleEl.textContent = d.handle ? '@' + d.handle : '';
+  entry.handleEl.style.display = d.handle ? '' : 'none';
+  entry.statusEl.textContent = d.status || '';
+  entry.statusEl.style.display = d.status ? '' : 'none';
+  entry.footer.style.display = eff(d, 'showUserInfo') ? '' : 'none';
+  applyVars(entry.root, d);
+  renderStars(entry);
+}
+
+function setImage(entry, src) {
+  if (!src) {
+    entry.img.removeAttribute('src');
+    entry.img.style.display = 'none';
+    entry.placeholder.style.display = '';
+    return;
+  }
+  entry.img.style.display = '';
+  entry.placeholder.style.display = 'none';
+  entry.img.onerror = function () {
+    entry.placeholder.style.display = '';
+    entry.placeholder.textContent = '图片加载失败：' + src;
+  };
+  entry.img.onload = function () {
+    entry.placeholder.style.display = 'none';
+    if (entry.data.__alpha === undefined) detectAlpha(entry.img, function (alpha) {
+      entry.data.__alpha = alpha;
+      entry.root.style.setProperty('--pc-foil', foilValue(entry.data));
+    });
+  };
+  entry.img.src = src;
+  entry.avatarImg.src = src;
+}
+
+/* 读一张图，返回（压缩后的）dataURL 与是否透明底 */
+function readImage(file, cb) {
+  const url = URL.createObjectURL(file);
+  const im = new Image();
+  im.onload = function () {
+    detectAlpha(im, function (alpha) {
+      cb(toDataUrl(im, alpha ? 'image/png' : 'image/jpeg'), alpha);
+      URL.revokeObjectURL(url);
+    });
+  };
+  im.onerror = function () { URL.revokeObjectURL(url); };
+  im.src = url;
+}
+
+function toDataUrl(im, type) {
+  const MAX = 1000;
+  const scale = Math.min(1, MAX / Math.max(im.naturalWidth, im.naturalHeight));
+  const w = Math.max(1, Math.round(im.naturalWidth * scale));
+  const h = Math.max(1, Math.round(im.naturalHeight * scale));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(im, 0, 0, w, h);
+  try { return c.toDataURL(type, 0.86); } catch (e) { return ''; }
+}
+
+/* 是否透明底（跨域或 file:// 读不到像素时返回 undefined，走默认值） */
+function detectAlpha(img, cb) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 48; c.height = 60;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0, 48, 60);
+    const d = g.getImageData(0, 0, 48, 60).data;
+    let transparent = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 250) transparent++;
+    cb(transparent / (d.length / 4) > 0.08);
+  } catch (e) { cb(undefined); }
+}
+
+function flash(root) {
+  root.classList.add('is-focus');
+  setTimeout(function () { root.classList.remove('is-focus'); }, 1200);
+}
+
+/* 换图选择器 */
+const picker = document.getElementById('picker');
+let pickTargets = [];
+function pickFor(entry) { pickTargets = [entry]; picker.click(); }
+picker.addEventListener('change', function () {
+  const files = Array.prototype.slice.call(picker.files || []);
+  if (!files.length) return;
+  if (pickTargets.length === 1) {
+    readImage(files[0], function (url, alpha) {
+      pickTargets[0].data.image = url; pickTargets[0].data.__alpha = alpha;
+      setImage(pickTargets[0], url); save();
+    });
+  } else {
+    files.forEach(function (f, i) {
+      readImage(f, function (url, alpha) {
+        const d = { image: url, __alpha: alpha, name: f.name.replace(/\.[^.]+$/, ''), title: '' };
+        cards.push(buildCard(d));
+        if (i === files.length - 1) { save(); renderAll(); }
+      });
+    });
+  }
+  picker.value = '';
+});
+
+/* ==========================================================================
+   ⑤ 渲染、持久化、面板
+   ========================================================================== */
+/* 渲染：卡片自己持有引擎，这里只负责挂到舞台上，绝不重复 attach */
+function renderAll() {
+  stage.innerHTML = '';
+  if (!cards.length) {
+    stage.appendChild(el('p', 'empty-tip', '没有卡片了，点左侧「＋ 新增卡片」，或把图片直接拖进来。'));
+    return;
+  }
+  cards.forEach(function (e) { stage.appendChild(e.root); });
+}
+
+function removeCard(entry) {
+  const i = cards.indexOf(entry);
+  if (i < 0) return;
+  cards.splice(i, 1);
+  if (entry.engine) { entry.engine.destroy(); entry.engine = null; }
+  entry.root.remove();
+}
+
+const KEY = 'holo-cards.v1';
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(cards.map(function (e) {
+      const d = Object.assign({}, e.data); delete d.__alpha; return d;
+    })));
+  } catch (e) {
+    /* 图片太多超出本地存储上限：只存文字，不存图 */
+    try {
+      localStorage.setItem(KEY, JSON.stringify(cards.map(function (e) {
+        const d = Object.assign({}, e.data); delete d.__alpha;
+        if (String(d.image).startsWith('data:')) d.image = '';
+        return d;
+      })));
+    } catch (e2) { /* 存不了就算了，页面本身照常可用 */ }
+  }
+  saveSettings();
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : null;
+  } catch (e) { return null; }
+}
+
+/* 面板参数也一起记住 */
+const SKEY = 'holo-card.settings.v1';
+function saveSettings() {
+  try { localStorage.setItem(SKEY, JSON.stringify(DEFAULTS)); } catch (e) {}
+}
+function loadSettings() {
+  try {
+    const o = JSON.parse(localStorage.getItem(SKEY) || 'null');
+    if (o && typeof o === 'object') Object.assign(DEFAULTS, o);
+  } catch (e) {}
+}
+function syncUI() {
+  const map = { 'c-holo': 'holo', 'c-foil': 'foil', 'c-glare': 'glare', 'c-tilt': 'tiltStrength', 'c-para': 'parallax', 'c-radius': 'radius' };
+  Object.keys(map).forEach(function (id) {
+    const v = DEFAULTS[map[id]];
+    const input = document.getElementById(id);
+    input.value = v == null ? input.value : v;
+    document.getElementById('o-' + id.slice(2)).textContent =
+      v == null ? (id === 'c-foil' ? '自动' : input.value) : (Number(v) % 1 ? Number(v).toFixed(2) : String(v));
+  });
+  document.getElementById('c-theme').value = DEFAULTS.theme;
+  document.getElementById('c-aspect').value = DEFAULTS.aspect;
+  document.getElementById('c-mask').value = DEFAULTS.mask;
+  document.getElementById('c-footer').checked = !!DEFAULTS.showUserInfo;
+  document.getElementById('c-intro').checked = !!DEFAULTS.intro;
+  document.getElementById('c-mobile').checked = !!DEFAULTS.enableMobileTilt;
+  document.body.classList.toggle('light', DEFAULTS.theme === 'light');
+  DEFAULTS.stars = clamp(Math.round(Number(DEFAULTS.stars) || 5), 1, 12);
+  DEFAULTS.rating = clamp(Math.round(Number(DEFAULTS.rating) || 0), 0, DEFAULTS.stars);
+  document.getElementById('c-stars').value = String(DEFAULTS.stars);
+  const rr = document.getElementById('c-rating');
+  rr.max = DEFAULTS.stars;
+  rr.value = DEFAULTS.rating;
+  document.getElementById('o-rating').textContent = String(DEFAULTS.rating);
+  document.getElementById('c-starbox').checked = !!DEFAULTS.showStars;
+  document.getElementById('c-edit').checked = !!DEFAULTS.editable;
+}
+
+/* 面板绑定 */
+const SLIDERS = [
+  ['c-holo', 'o-holo', 'holo', 1],
+  ['c-foil', 'o-foil', 'foil', 1],
+  ['c-glare', 'o-glare', 'glare', 1],
+  ['c-tilt', 'o-tilt', 'tiltStrength', 0],
+  ['c-para', 'o-para', 'parallax', 0],
+  ['c-radius', 'o-radius', 'radius', 0]
+];
+SLIDERS.forEach(function (s) {
+  const input = document.getElementById(s[0]), out = document.getElementById(s[1]);
+  input.addEventListener('input', function () {
+    const v = Number(input.value);
+    DEFAULTS[s[2]] = v;
+    out.textContent = s[3] === 1 ? v.toFixed(2) : String(v);
+    if (s[2] === 'foil') out.textContent = '手动';
+    cards.forEach(function (e) { applyVars(e.root, e.data); });
+    save();
+  });
+});
+document.getElementById('c-theme').addEventListener('change', function (e) {
+  DEFAULTS.theme = e.target.value;
+  cards.forEach(function (c) { applyVars(c.root, c.data); });
+  document.body.classList.toggle('light', e.target.value === 'light');
+  save();
+});
+document.getElementById('c-aspect').addEventListener('change', function (e) {
+  DEFAULTS.aspect = e.target.value;
+  cards.forEach(function (c) { applyVars(c.root, c.data); });
+  save();
+});
+document.getElementById('c-mask').addEventListener('change', function (e) {
+  DEFAULTS.mask = e.target.value;
+  cards.forEach(function (c) { applyVars(c.root, c.data); });
+  save();
+});
+document.getElementById('c-stars').addEventListener('change', function (e) {
+  DEFAULTS.stars = Number(e.target.value);
+  DEFAULTS.rating = clamp(DEFAULTS.rating, 0, DEFAULTS.stars);
+  const rr = document.getElementById('c-rating');
+  rr.max = DEFAULTS.stars; rr.value = DEFAULTS.rating;
+  document.getElementById('o-rating').textContent = String(DEFAULTS.rating);
+  cards.forEach(function (c) { c.data.stars = DEFAULTS.stars; c.data.rating = clamp(Number(eff(c.data, 'rating')), 0, DEFAULTS.stars); renderStars(c); });
+  save();
+});
+document.getElementById('c-rating').addEventListener('input', function (e) {
+  DEFAULTS.rating = Number(e.target.value);
+  document.getElementById('o-rating').textContent = e.target.value;
+  cards.forEach(function (c) { c.data.rating = DEFAULTS.rating; renderStars(c); });
+  save();
+});
+document.getElementById('c-starbox').addEventListener('change', function (e) {
+  DEFAULTS.showStars = e.target.checked;
+  cards.forEach(renderStars);
+  save();
+});
+document.getElementById('c-edit').addEventListener('change', function (e) {
+  DEFAULTS.editable = e.target.checked;
+  cards.forEach(paint);
+  save();
+});
+document.getElementById('c-footer').addEventListener('change', function (e) {
+  DEFAULTS.showUserInfo = e.target.checked;
+  cards.forEach(function (c) { paint(c); });
+  save();
+});
+document.getElementById('c-intro').addEventListener('change', function (e) {
+  DEFAULTS.intro = e.target.checked;
+  if (e.target.checked) cards.forEach(function (c) { c.engine && c.engine.replay(); });
+});
+document.getElementById('c-mobile').addEventListener('change', function (e) {
+  DEFAULTS.enableMobileTilt = e.target.checked;
+});
+document.getElementById('b-add').addEventListener('click', function () {
+  cards.push(buildCard({ image: '', name: '新卡片', title: '' }));
+  save(); renderAll();
+});
+document.getElementById('b-reset').addEventListener('click', function () {
+  localStorage.removeItem(KEY);
+  localStorage.removeItem(SKEY);
+  Object.keys(DEFAULTS).forEach(function (k) { DEFAULTS[k] = DEFAULTS_INIT[k]; });
+  syncUI();
+  boot(CARDS.map(function (d) { return Object.assign({}, d); }));
+});
+/* 空白处拖图 = 新建一张卡 */
+stage.addEventListener('dragover', function (e) { e.preventDefault(); });
+stage.addEventListener('drop', function (e) {
+  if (e.target.closest('.profile-card')) return;
+  e.preventDefault();
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  readImage(f, function (url, alpha) {
+    cards.push(buildCard({ image: url, __alpha: alpha, name: f.name.replace(/\.[^.]+$/, ''), title: '' }));
+    save(); renderAll();
+  });
+});
+/* 多选图片一次成卡 */
+window.addEventListener('paste', function (e) {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  Array.prototype.slice.call(items).forEach(function (it) {
+    if (it.type.indexOf('image') !== 0) return;
+    const f = it.getAsFile();
+    if (f) readImage(f, function (url, alpha) {
+      cards.push(buildCard({ image: url, __alpha: alpha, name: '剪贴板图片', title: '' }));
+      save(); renderAll();
+    });
+  });
+});
+
+function boot(list) {
+  cards.forEach(function (e) { if (e.engine) e.engine.destroy(); });
+  cards.length = 0;
+  list.forEach(function (d) { cards.push(buildCard(Object.assign({}, d))); });
+  renderAll();
+}
+
+loadSettings();
+syncUI();
+const saved = load();
+boot(saved && saved.length ? saved : CARDS.map(function (d) { return Object.assign({}, d); }));
+
+/* 调试/截图用：地址后加 ?pose=0.7,-0.5 可把所有卡片固定在某个倾斜姿态 */
+const pose = /[?&]pose=([-\d.]+),([-\d.]+)/.exec(location.search);
+if (pose) cards.forEach(function (e) { e.engine.aim(parseFloat(pose[1]), parseFloat(pose[2]), true); });
+</script>
+</body>
+</html>

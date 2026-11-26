@@ -214,9 +214,41 @@ const fpsExpr = (ms) => `(async () => {
   return { frames: v.length, avgFps: 1000 / (avg || 1), p95ms: v[Math.floor(v.length * 0.95)] || 0, over20: v.filter((x) => x > 20).length };
 })()`;
 
+/** 轮询等一个条件成立（选择层的入场动画是异步落位的，固定 sleep 会时快时慢）。 */
+async function waitUntil(c, expr, timeout = 6000, step = 200) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeout) {
+    if (await evalValue(c, expr)) return true;
+    await sleep(step);
+  }
+  return false;
+}
+
+/**
+ * 进舞台：优先走当前的环形剧目选择（真实剧本 ≤10 部），
+ * 卡片多于 10 部时应用层会回退成旧的「选择剧本」陈列弹窗，两条路都支持。
+ * 第一章会先播开场动画，这里按 Esc 立刻跳过——舞台帧率要和没有开场动画的
+ * 上一版基线同口径，否则测的是 WebGL 开场而不是场景渲染。
+ */
 async function enterStage(c) {
   await evalValue(c, `document.getElementById('btn-start').click(); true`);
   await sleep(600);
+  const goExpr = `(() => {
+    const go = document.querySelector('[data-select-go]');
+    if (!go || go.hidden || go.classList.contains('is-shift')) return false;
+    go.click(); return true;
+  })()`;
+  if (await waitUntil(c, goExpr)) {
+    const chapExpr = `(() => {
+      const el = document.querySelector('.mumu-scripts__chap-main');
+      if (!el) return false; el.click(); return true;
+    })()`;
+    if (!await waitUntil(c, chapExpr)) throw new Error('未找到章节条目');
+    await sleep(500);
+    await evalValue(c, `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); true`);
+    await sleep(900);
+    return;
+  }
   const hasSeries = await evalValue(c, `(() => { const el = document.querySelector('.series-card[data-series]'); if (!el) return false; el.click(); return true; })()`);
   if (!hasSeries) throw new Error('未找到曲目卡');
   await sleep(400);

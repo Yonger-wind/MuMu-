@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { planPortraitBatches } from '../scripts/portraits.js';
+import { createLazySceneRenderer } from '../scripts/lazy-scene.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 
@@ -76,4 +77,84 @@ test('scene.js：四张场景大图只在 preloadImages 内赋 src，并经渲�
   }
   assert.doesNotMatch(src.slice(0, start), /(starry|cityDay|cityNight|scoreSheet)\.src\s*=/);
   assert.match(src, /preloadImages:\s*preloadSceneImages/);
+});
+
+/* ---------------- 场景模块延迟装载 ---------------- */
+
+const fakeModule = (rec) => ({
+  createSceneRenderer: () => ({
+    set: (p) => rec.sets.push(p),
+    start: () => rec.starts++,
+    stop: () => rec.stops++,
+    preloadImages: () => rec.preloads++,
+    onChange: (fn) => rec.changes.push(fn),
+    state: { fake: true },
+  }),
+});
+
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+test('main.js：scene.js 不再进首屏静态依赖', () => {
+  const src = read('scripts/main.js');
+  assert.doesNotMatch(src, /from '\.\/scene\.js'/, '首屏不该静态引入 scene.js');
+  assert.match(src, /createLazySceneRenderer\(\$\('scene'\)/);
+});
+
+test('lazy-scene：就绪前的画面与运行意图在装载完成后一次补齐', async () => {
+  const rec = { sets: [], starts: 0, stops: 0, preloads: 0, changes: [] };
+  const r = createLazySceneRenderer({}, { load: () => Promise.resolve(fakeModule(rec)) });
+  r.set({ cam: 'mid', scene: 'classroom' });
+  r.set({ cam: 'detail', scene: 'classroom' });
+  r.preloadImages();
+  r.start();
+  assert.deepEqual(rec.sets, [], '装载完成前不应有真实调用');
+  await tick();
+  assert.equal(rec.sets.length, 1, '只补最后一次画面');
+  assert.equal(rec.sets[0].cam, 'detail');
+  assert.equal(rec.starts, 1, '缓存的运行意图要补上');
+  r.set({ cam: 'wide' });
+  assert.equal(rec.sets.length, 2, '就绪后直接转发');
+});
+
+test('lazy-scene：装载期间回到首页就不开跑', async () => {
+  const rec = { sets: [], starts: 0, stops: 0, preloads: 0, changes: [] };
+  const r = createLazySceneRenderer({}, { load: () => Promise.resolve(fakeModule(rec)) });
+  r.start();
+  r.stop();
+  await tick();
+  assert.equal(rec.starts, 0);
+});
+
+test('lazy-scene：装载失败给中文提示入口，下次调用会重试', async () => {
+  const rec = { sets: [], starts: 0, stops: 0, preloads: 0, changes: [] };
+  let tries = 0;
+  let failed = 0;
+  const r = createLazySceneRenderer({}, {
+    onFail: () => { failed += 1; },
+    load: () => {
+      tries += 1;
+      return tries === 1 ? Promise.reject(new Error('boom')) : Promise.resolve(fakeModule(rec));
+    },
+  });
+  r.start();
+  await tick();
+  assert.equal(failed, 1, '失败要能被上层提示');
+  await r.whenReady();
+  assert.equal(tries, 2, '失败后允许重新装载');
+  assert.equal(rec.starts, 1);
+});
+
+test('lazy-scene：已就绪后重复 preloadImages 不再拉包', async () => {
+  const rec = { sets: [], starts: 0, stops: 0, preloads: 0, changes: [] };
+  let loads = 0;
+  const r = createLazySceneRenderer({}, {
+    load: () => { loads += 1; return Promise.resolve(fakeModule(rec)); },
+  });
+  r.preloadImages();
+  await tick();
+  r.preloadImages();
+  r.start();
+  await tick();
+  assert.equal(loads, 1);
+  assert.equal(rec.starts, 1);
 });

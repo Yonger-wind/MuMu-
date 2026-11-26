@@ -9,6 +9,7 @@ import { upgradeSave } from './state.js';
 const K_SCRIPTS = 'mumu.scripts.v1';
 const K_SAVES_V1 = 'mumu.saves.v1';   // 旧键，只读迁移用
 const K_SAVES_V2 = 'mumu.saves.v2';   // 新键
+const K_AUTOSAVE = 'mumu.autosave.v1'; // 自动存档：只保存当前这一程，不占手动存档名额
 
 function read(key, fallback) {
   try {
@@ -72,6 +73,31 @@ export function removeSave(id) {
 }
 export function getLatestSaveFor(scriptId) {
   return loadSaves().find((s) => s.scriptId === scriptId) || null;
+}
+
+/* ---------------- 自动存档（P3-1） ----------------
+   独立键，只保留当前这一程的最后一个停顿点；写失败按尽力而为处理，
+   不弹提示、不影响游玩。结构沿用引擎快照，另补 version / savedAt。 */
+export function loadAutosave() {
+  const raw = read(K_AUTOSAVE, null);
+  const ok = raw && typeof raw === 'object'
+    && typeof raw.scriptId === 'string' && raw.scriptId
+    && Number.isFinite(raw.idx) && raw.idx >= 0;
+  if (!ok) {
+    if (raw !== null) clearAutosave();   // 坏数据不留在本地，避免每次启动都读到
+    return null;
+  }
+  return raw;
+}
+
+export function saveAutosave(snap) {
+  if (!snap || typeof snap.scriptId !== 'string' || !snap.scriptId) return false;
+  return write(K_AUTOSAVE, { ...snap, version: 1, savedAt: Date.now() });
+}
+
+export function clearAutosave() {
+  try { localStorage.removeItem(K_AUTOSAVE); return true; }
+  catch (e) { return false; }
 }
 
 export function makeId(prefix = 's') {

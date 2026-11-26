@@ -6,7 +6,7 @@
 
 import { createState, cloneState, deserializeState, pushCheckpoint } from './state.js';
 
-export function createEngine({ renderer, ui, onEnd, endOptions }) {
+export function createEngine({ renderer, ui, onEnd, endOptions, onProgress }) {
   let script = null;
   let idx = 0;
   let cast = [];                 // 在场角色名
@@ -15,6 +15,7 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
   let choices = [];              // 已做的选择
   let lastSpeaker = '';          // 最近一句的说话人（舞台指示刷新时保持画面）
   let lastProp = '';             // 最近一句文本（特写镜头挑选道具）
+  let lastLine = null;           // 最近一句台词/旁白（终幕结算用）
   let typing = null;
   let fullText = '';
   let waiting = false;           // 正在等待玩家点击
@@ -22,9 +23,113 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
   let ended = false;
   let state = createState();        // 旗标 / 数值 / 结局标识 / 检查点
   let skipCheckpoint = false;       // 回退到选项时跳过一次检查点登记
+  // 逐句历史：每次停在台词上记一份完整画面，供「回退一句」使用
+  let history = [];
+  let historyPos = -1;
+  let view = 'none';                // 当前停下的画面：say / choice / end
+  const HISTORY_LIMIT = 300;
+
+  function setBackEnabled(on) {
+    if (ui && typeof ui.setBackEnabled === 'function') ui.setBackEnabled(!!on);
+  }
+  function canBack() {
+    if (!script || !history.length) return false;
+    if (view === 'say') return historyPos > 0;
+    return historyPos >= 0;
+  }
+  function updateBackUi() { setBackEnabled(canBack()); }
+
+  /** 停在台词上时记录当前画面；前进到新台词会丢弃曾回退掉的“未来”。 */
+  function recordSay(n, displayName) {
+    if (historyPos < history.length - 1) history.length = historyPos + 1;
+    history.push({
+      idx,
+      cast: [...cast],
+      sceneState: { ...sceneState },
+      actState: {
+        poses: { ...actState.poses },
+        actions: { ...actState.actions },
+        view: actState.view,
+      },
+      speaker: lastSpeaker,
+      propText: lastProp,
+      line: lastLine ? { ...lastLine } : null,
+      name: displayName,
+      text: n.text,
+      pose: n.voice ? null : (n.pose || null),
+      choices: [...choices],
+      state: cloneState(state),
+    });
+    if (history.length > HISTORY_LIMIT) history.shift();
+    historyPos = history.length - 1;
+    view = 'say';
+    updateBackUi();
+  }
+
+  /** 静态还原一帧历史画面：不重放打字机，也不重新推进剧本。 */
+  function restoreSay(i) {
+    const h = history[i];
+    if (!h) return false;
+    if (ui && typeof ui.clearFinale === 'function') ui.clearFinale();
+    clearInterval(typing);
+    typing = null;
+    idx = h.idx;
+    cast = [...h.cast];
+    sceneState = { ...h.sceneState };
+    actState = {
+      poses: { ...(h.actState.poses || {}) },
+      actions: { ...(h.actState.actions || {}) },
+      view: h.actState.view || 'normal',
+    };
+    state = deserializeState(h.state);
+    lastSpeaker = h.speaker;
+    lastProp = h.propText;
+    lastLine = h.line ? { ...h.line } : null;
+    choices = [...h.choices];
+    skipCheckpoint = false;
+    ended = false;
+    waiting = true;
+    waitingChoice = false;
+    historyPos = i;
+    view = 'say';
+    fullText = h.text;
+    ui.setChoices([]);
+    syncRenderer(h.speaker, h.pose, h.propText);
+    ui.setName(h.name);
+    ui.setText(h.text);
+    ui.showHint(true);
+    updateBackUi();
+    notifyProgress();
+    return true;
+  }
 
   function charOf(name) {
     return script.characters.find((c) => c.name === name);
+  }
+
+  /** 一句台词 → 结算用的 { who, text }；画外音把说明并进名字。 */
+  function lineOf(n) {
+    const who = n.voice ? `${n.who || '画外'}（${n.voice}）` : (n.who || '');
+    return { who, text: n.text };
+  }
+
+  /**
+   * 往前找回「特写道具」的文本，规则与 run() 里改写 lastProp 的那几行一致：
+   * 只认非画外音台词，且以最后一个 scene 节点为界（换场景时道具本就该清空）。
+   * 读档与回退到选项 / 结尾时不会重放台词，不找回就会停在特写空镜头上。
+   */
+  function propTextUpTo(atIdx) {
+    if (!script) return '';
+    const at = Math.min(atIdx, script.nodes.length - 1);
+    let from = 0;
+    for (let i = at; i >= 0; i--) {
+      if (script.nodes[i].t === 'scene') { from = i + 1; break; }
+    }
+    for (let i = at; i >= from; i--) {
+      const n = script.nodes[i];
+      if (n.t === 'say' && !n.voice) return n.text;
+    }
+    return '';
   }
 
   function pushCast(name) {
@@ -76,7 +181,14 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
     ui.setText(fullText);
     ui.showHint(true);
     waiting = true;
+    notifyProgress();
     return true;
+  }
+
+  /** 每到一个可停下来的位置（台词、选项、结束）交出快照，供自动存档使用。 */
+  function notifyProgress() {
+    if (typeof onProgress !== 'function' || !script) return;
+    onProgress(snapshot());
   }
 
   /** 条件行是否成立：只读布尔旗标；缺字段按“未发生”处理。 */
@@ -166,18 +278,22 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
         // 也不改写特写道具，避免录音台词把镜头里的物件换掉
         if (n.voice) {
           lastSpeaker = '';
+          lastLine = lineOf(n);
           syncRenderer('', null, lastProp);
           ui.setName(`${n.who || '画外'}（${n.voice}）`);
         } else {
           pushCast(n.who);
           lastSpeaker = n.who;
           lastProp = n.text;
+          lastLine = lineOf(n);
           syncRenderer(n.who, n.pose || null, n.text);
           ui.setName(n.who);
         }
         ui.setChoices([]);
         idx++;
-        typeText(n.text, () => { waiting = true; ui.showHint(true); });
+        // 记录这一帧：idx 已指向下一格，回退还原画面后再前进不会重播同一句
+        recordSay(n, n.voice ? `${n.who || '画外'}（${n.voice}）` : n.who);
+        typeText(n.text, () => { waiting = true; ui.showHint(true); notifyProgress(); });
         return;
       }
       if (n.t === 'choice') {
@@ -201,6 +317,8 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
         ui.setText('你会怎么做？');
         ui.showHint(false);
         waitingChoice = true;
+        view = 'choice';
+        updateBackUi();
         ui.setChoices(n.options.map((o) => o.text), (i) => {
           choices.push(n.options[i].text);
           // 检查点已在选项 UI 出现前入栈，因此 rewind 会连旗标一起回滚
@@ -209,6 +327,7 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
           idx = script.labels[n.options[i].to];
           run();
         });
+        notifyProgress();
         return;
       }
       if (n.t === 'end') {
@@ -217,8 +336,19 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
         ui.setName('');
         ui.setText('—— 故事暂时落幕 ——');
         ui.showHint(false);
+        view = 'end';
+        updateBackUi();
         // 章节结束时：先给外部追加的动作（继续下一章 / 换一个剧本），再接通用动作
-        const extra = (typeof endOptions === 'function' && endOptions(script)) || [];
+        // 第二个参数是结束现场摘要，供终幕结算卡使用（旧调用方可忽略）
+        const summary = {
+          scene: sceneState.scene,
+          time: sceneState.time,
+          cam: sceneState.cam,
+          choices: [...choices],
+          line: lastLine ? { ...lastLine } : null,
+          ending: n.ending || '',
+        };
+        const extra = (typeof endOptions === 'function' && endOptions(script, summary)) || [];
         const options = [
           ...extra,
           { label: '重新开始', run: () => start(script) },
@@ -228,6 +358,7 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
           const opt = options[i];
           if (opt) opt.run();
         });
+        notifyProgress();
         return;
       }
       idx++;
@@ -237,6 +368,8 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
   /* ---------- 对外接口 ---------- */
   function start(sc, snapshot = null, carry = null) {
     script = sc;
+    // 新的一程开始：终幕结算卡（如果还在）先收起来
+    if (ui && typeof ui.clearFinale === 'function') ui.clearFinale();
     ended = false;
     choices = [];
     cast = [];
@@ -248,9 +381,18 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
     skipCheckpoint = false;
     lastSpeaker = '';
     lastProp = '';
+    lastLine = null;
+    history = [];
+    historyPos = -1;
+    view = 'none';
     sceneState = { scene: sc.cover.scene, time: sc.cover.time, cam: 'mid' };
     if (snapshot) {
       idx = Math.max(0, Math.min(snapshot.idx, sc.nodes.length - 1));
+      // 自动存档正好停在选项上：该检查点已随快照恢复，不再重复登记
+      if (script.nodes[idx] && script.nodes[idx].t === 'choice') skipCheckpoint = true;
+      // 直接在结尾读档时，结算卡需要最后一句台词：从当前节点往前找
+      const priorSay = [...sc.nodes.slice(0, idx + 1)].reverse().find((n) => n.t === 'say');
+      lastLine = priorSay ? lineOf(priorSay) : null;
       cast = (snapshot.cast || []).filter((n) => charOf(n));
       choices = snapshot.choices || [];
       sceneState = snapshot.sceneState || sceneState;
@@ -261,11 +403,12 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
           view: snapshot.actState.view || 'normal',
         };
       }
-      syncRenderer(snapshot.speaker || '');
-      // 存档回读：直接定位到该节点
+      // 存档回读：停在选项 / 结尾 / 画外音特写时台词不会被重放，道具文本要自己找回来
+      lastProp = propTextUpTo(idx);
+      syncRenderer(snapshot.speaker || '', null, lastProp);
     }
     ui.setTitle(sc.title);
-    syncRenderer();
+    syncRenderer(snapshot ? (snapshot.speaker || '') : '', null, lastProp);
     run();
   }
 
@@ -317,6 +460,8 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
     const list = state.checkpoints || [];
     const t = waitingChoice ? list.length - 2 : list.length - 1;
     if (t < 0) return false;
+    // 从结束页退回选项时，结算卡不应该继续留在画面里
+    if (ui && typeof ui.clearFinale === 'function') ui.clearFinale();
     const cp = list[t];
     // 目标检查点不再重复登记：回到该选项时由 skipCheckpoint 拦掉
     state.checkpoints = list.slice(0, t);
@@ -333,17 +478,36 @@ export function createEngine({ renderer, ui, onEnd, endOptions }) {
     state.vars = { ...cp.vars };
     state.endingId = '';
     lastSpeaker = '';
-    lastProp = '';
+    // 回到选项时同样要带着道具文本：检查点正停在特写镜头上时不能变成空画面
+    lastProp = propTextUpTo(cp.idx);
+    lastLine = null;
     ended = false;
-    syncRenderer();
+    // 选项回退会改变剧情走向，逐句历史随之作废，避免退回到已不成立的画面
+    history = [];
+    historyPos = -1;
+    view = 'none';
+    syncRenderer('', null, lastProp);
     run();
     return true;
   }
 
+  /**
+   * 回退一句：停在台词上时退到上一条；停在选项 / 结局上时退到最近一句。
+   * 一次只退一屏，可以一直退。
+   */
+  function back() {
+    if (!script) return false;
+    const target = view === 'say' ? historyPos - 1 : historyPos;
+    if (target < 0 || target >= history.length) return false;
+    return restoreSay(target);
+  }
+
   return {
-    start, advance, snapshot, rewind, setFlag, getFlag, setVar, getVar,
+    start, advance, back, canBack, snapshot, rewind, setFlag, getFlag, setVar, getVar,
     get script() { return script; },
     get ended() { return ended; },
     get state() { return state; },
+    get choices() { return [...choices]; },
+    get lastLine() { return lastLine ? { ...lastLine } : null; },
   };
 }

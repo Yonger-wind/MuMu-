@@ -3,21 +3,48 @@
    ============================================================ */
 import { createSunset } from './sunset.js';
 import { createAudio } from './audio.js';
-import { createSceneRenderer } from './scene.js';
+import { createLazySceneRenderer } from './lazy-scene.js';
 import { createEngine } from './engine.js';
 import { createCharacterManager } from './character-manager.js';
 import { schedulePortraitPreload } from './portraits.js';
 import { loadBuiltinScripts } from './builtin.js';
-import { loadCustomScripts, addCustomScript, removeCustomScript, loadSaves, upsertSave, removeSave, makeId } from './storage.js';
+import { loadCustomScripts, addCustomScript, removeCustomScript, loadSaves, upsertSave, removeSave, makeId, loadAutosave, saveAutosave, clearAutosave, saveCustomScripts } from './storage.js';
 import { exportPackage, downloadPackage, importPackage, safeFileName } from './package.js';
-import { openLibrary, openSaves, openImport, openHow, closeModal } from './modals.js';
+import { openLibrary, openChapters, groupScripts, openSaves, openImport, closeModal } from './modals.js';
+import { openGallery, grantChapterCards } from './gallery.js';
+import { openScriptSelect, closeScriptSelect } from './selector.js';
+import { buildSelection, SERIES_ORDER } from './selector-data.js';
+import { identityOfSpeaker } from './series-meta.js';
+import { buildFinale } from './finale.js';
+import { playOpening, isOpeningActive, hasOpening, prefetchOpenings } from './openings/index.js';
+import { createGlideNav } from './glide-nav.js';
+import { createRotateHint } from './rotate-hint.js';
 
 const $ = (id) => document.getElementById(id);
 
 /* ---------------- 基础 ---------------- */
 const audio = createAudio();
 const sunset = createSunset($('sunset'));
-const sceneRenderer = createSceneRenderer($('scene'));
+const sceneRenderer = createLazySceneRenderer($('scene'), {
+  // 场景模块是按需加载的：网络异常时给一句中文提示，而不是留一个黑舞台
+  onFail: () => toast('场景加载失败，请刷新页面重试。'),
+});
+
+/**
+ * 开场动画撤层用的信号：等 scene.js 装载完成、舞台真的画出下一帧。
+ * 不画完就撤层的话，切屏 + 装载 scene.js（约 950KB）这段时间会把首页透出来几帧。
+ * 装载失败时代理只会走 onFail 提示、不抛错，所以这里照样放行（外壳另有兜底超时）。
+ */
+function stagePainted() {
+  if (!sceneRenderer.ready) sceneRenderer.preloadImages();
+  return sceneRenderer.whenReady().then((real) => new Promise((resolve) => {
+    if (!real) { resolve(false); return; }
+    let left = 2;                       // 再等两帧，保证屏幕上真有画面
+    const tick = () => { if (--left <= 0) resolve(true); else requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  }));
+}
+
 const castManager = createCharacterManager();
 schedulePortraitPreload();
 const builtins = castManager.decorateAll(loadBuiltinScripts());
@@ -64,8 +91,8 @@ function showScreen(name) {
   $('stage').setAttribute('aria-hidden', name === 'stage' ? 'false' : 'true');
   $('home').toggleAttribute('inert', name !== 'home');
   $('stage').toggleAttribute('inert', name !== 'stage');
-  if (name === 'stage') { sceneRenderer.preloadImages(); sceneRenderer.start(); sunset.stop(); }
-  else { sunset.start(); sceneRenderer.stop(); }
+  if (name === 'stage') { sceneRenderer.preloadImages(); sceneRenderer.start(); sunset.stop(); revealStageGlide(); }
+  else { $('home').scrollTop = 0; sunset.start(); sceneRenderer.stop(); refreshResume(); }
 }
 
 /* ---------------- 音乐 UI ---------------- */
@@ -84,21 +111,121 @@ $('now-playing').addEventListener('click', () => audio.next());
 $('now-playing').style.cursor = 'pointer';
 $('now-playing').title = '点击切换曲目';
 
+// 首页右上功能组：接管成滑行药丸（悬停时一枚暖白药丸在按钮间滑过）
+const topGlide = createGlideNav(document.querySelector('.mumu-top-actions'));
+
+// 舞台右上功能组：同一套滑行药丸，托板换成暗色垫板（舞台昼夜亮度不定，纯字会被洗掉）
+const stageGlide = createGlideNav(document.querySelector('.stage-top-right'), {
+  itemSelector: '.stage-btn:not([data-mg-twin])',
+});
+let stageGlideIntro = false;
+/** 每次进舞台都要重量一次（顶栏此前不可见），揭开动画只在本页第一次进舞台时播。 */
+function revealStageGlide() {
+  stageGlide.refresh();
+  if (stageGlideIntro || isOpeningActive()) return;
+  stageGlideIntro = true;
+  stageGlide.playIntro();
+}
+
 // 入场遮罩：用户的第一次点击同时解锁音频
 $('boot-veil').addEventListener('click', () => {
   $('boot-veil').classList.add('gone');
   audio.start();
+  topGlide.playIntro();
 });
 
 /* ---------------- 游玩 ---------------- */
 const dlg = {
-  name: $('dlg-name'), text: $('dlg-text'), choices: $('dlg-choices'), hint: $('dlg-hint'),
+  name: $('dlg-name'), role: $('dlg-role'), text: $('dlg-text'), choices: $('dlg-choices'), hint: $('dlg-hint'),
+  finale: $('dlg-finale'), back: $('dlg-back'),
 };
+
+/** 终幕结算卡：一幕、一句台词、做过的选择、本轮获得的卡牌。 */
+function clearFinale() {
+  if (!dlg.finale) return;
+  dlg.finale.replaceChildren();
+  dlg.finale.hidden = true;
+}
+
+function renderFinale(data) {
+  const box = dlg.finale;
+  if (!box || !data) { clearFinale(); return; }
+  box.replaceChildren();
+
+  const kicker = document.createElement('p');
+  kicker.className = 'mumu-finale__kicker';
+  kicker.textContent = '幕落 · 本章结算';
+
+  const title = document.createElement('p');
+  title.className = 'mumu-finale__title';
+  title.textContent = data.title;
+  box.append(kicker, title);
+
+  if (data.subtitle) {
+    const sub = document.createElement('p');
+    sub.className = 'mumu-finale__sub';
+    sub.textContent = data.subtitle;
+    box.append(sub);
+  }
+
+  const rows = document.createElement('dl');
+  rows.className = 'mumu-finale__rows';
+  const addRow = (label, child) => {
+    const row = document.createElement('div');
+    row.className = 'mumu-finale__row';
+    const dt = document.createElement('dt');
+    dt.textContent = label;
+    const dd = document.createElement('dd');
+    dd.append(child);
+    row.append(dt, dd);
+    rows.append(row);
+  };
+
+  addRow('这一幕', document.createTextNode(data.where));
+
+  if (data.line) {
+    const quote = document.createElement('span');
+    quote.className = 'mumu-finale__line';
+    if (data.line.who) {
+      const who = document.createElement('em');
+      who.textContent = `${data.line.who}：`;
+      quote.append(who);
+    }
+    quote.append(document.createTextNode(data.line.text));
+    addRow('一句台词', quote);
+  }
+
+  addRow('你的选择', document.createTextNode(
+    data.choices.length ? data.choices.join(' → ') : '没有分歧，一路读到结尾'
+  ));
+
+  if (data.cards.length) {
+    const wrap = document.createElement('span');
+    wrap.className = 'mumu-finale__cards';
+    for (const card of data.cards) {
+      const chip = document.createElement('span');
+      chip.className = 'mumu-finale__card';
+      chip.textContent = card.stars ? `${card.name} · ${card.stars}★` : card.name;
+      wrap.append(chip);
+    }
+    addRow('获得卡牌', wrap);
+  }
+
+  box.append(rows);
+  box.hidden = false;
+}
 const engine = createEngine({
   renderer: sceneRenderer,
   ui: {
     setText: (t) => { dlg.text.textContent = t; },
-    setName: (n) => { dlg.name.textContent = n; },
+    setName: (n) => {
+      dlg.name.textContent = n;
+      // 名称下方的小字身份：只对内置曲目生效，蝉鸣的小悠真 / 小葵不显示
+      const seriesKey = engine && engine.script ? engine.script.series : '';
+      const role = identityOfSpeaker(n, seriesKey);
+      dlg.role.textContent = role;
+      dlg.role.hidden = !role;
+    },
     setTitle: (t) => { $('stage-title').textContent = t; },
     showHint: (v) => dlg.hint.classList.toggle('hidden', !v),
     setChoices: (list, cb) => {
@@ -115,37 +242,118 @@ const engine = createEngine({
       const s = $('stage');
       s.animate([{ filter: 'brightness(0.2)' }, { filter: 'brightness(1)' }], { duration: 700, easing: 'ease-out' });
     },
+    clearFinale,
+    // 回退一句：只有存在更早的画面时才显示按钮
+    setBackEnabled: (on) => { if (dlg.back) dlg.back.hidden = !on; },
   },
   onEnd: () => leaveStage(),
-  endOptions: (sc) => {
+  endOptions: (sc, summary) => {
+    // 内置曲目：一章落幕时按配额随机送出角色卡（同一章只结算一次）
+    const grant = grantChapterCards(sc);
+    if (grant && grant.cards && grant.cards.length && !grant.alreadyGranted) {
+      const names = grant.cards.map((c) => c.name);
+      const shown = names.slice(0, 3).join('、') + (names.length > 3 ? ` 等 ${names.length} 位` : '');
+      toast(`获得角色卡：${shown}（可在「角色图鉴」检视）`);
+      if (!grant.persisted) {
+        toast(grant.error || '浏览器存储空间不足，本次获得的角色卡可能无法保留。');
+      }
+    }
     const options = [];
     const next = nextChapterOf(sc);
+    // 终章（没有下一章）才出结算卡，非终章保持「继续下一章」的节奏
+    const finale = buildFinale(sc, summary, {
+      hasNext: !!next,
+      cards: grant && !grant.alreadyGranted ? grant.cards : [],
+    });
+    if (finale) renderFinale(finale);
+    else clearFinale();
     if (next) options.push({ label: '继续下一章', run: () => play(next, null, { ...engine.state.flags }) });
     options.push({ label: '换一个剧本', run: () => { leaveStage(); showLibrary(); } });
     return options;
   },
+  // 自动存档：每到一个停顿点覆写当前这一程；本章落幕即清除
+  onProgress: (snap) => {
+    if (!snap) return;
+    if (engine.ended) { clearAutosave(); return; }
+    saveAutosave({ ...snap, title: (engine.script && engine.script.title) || '' });
+  },
 });
 
 function play(script, snapshot = null, carry = null) {
+  // 开新的一程（新章 / 重新开始 / 换剧本）先丢掉旧的自动存档，免得开头
+  // 还没写出新进度就刷新被拉回上一本；读档 / 继续上次则立刻改指向这一程
+  clearFinale();
+  if (snapshot) saveAutosave({ ...snapshot, title: script.title });
+  else clearAutosave();
+  refreshResume();
   showScreen('stage');
   engine.start(script, snapshot, carry);
 }
 
+/** 从剧本 / 章节列表点进一部戏：四部内置曲目的第一章先放各自的开场动画。 */
+function startScript(script) {
+  const first = script && script.builtin && script.chapterNo === 1 && hasOpening(script.series);
+  if (!first) { play(script); return; }
+  playOpening(script.series, { onDone: () => play(script), onStageReady: stagePainted });
+}
+
 function leaveStage() {
+  clearFinale();
+  if (dlg.back) dlg.back.hidden = true;
   showScreen('home');
+}
+
+/** 首页「继续上次」：有自动存档且剧本仍在库里时才显示。 */
+function refreshResume() {
+  const btn = $('btn-resume');
+  if (!btn) return;
+  const snap = loadAutosave();
+  if (!snap) { btn.hidden = true; return; }
+  const sc = findScript(snap.scriptId);
+  if (!sc) { clearAutosave(); btn.hidden = true; return; }
+  const book = sc.seriesTitle || sc.title;
+  const chapter = sc.chapterNo ? `第 ${sc.chapterNo} 章 · ` : '';
+  btn.textContent = `继续上次 ·《${book}》${chapter}${snap.progress || 0}%`;
+  btn.title = snap.preview ? `上次读到：${snap.preview}…` : '回到上次的进度';
+  btn.hidden = false;
 }
 
 $('stage').addEventListener('click', (e) => {
   if (e.target.closest('.stage-top') || e.target.closest('.choice')) return;
+  if (e.target.closest('#dlg-back')) return;
   engine.advance();
 });
+// 回退一句：点一次退一屏，可以连续点
+if (dlg.back) {
+  dlg.back.addEventListener('click', (e) => {
+    e.stopPropagation();
+    engine.back();
+  });
+}
 document.addEventListener('keydown', (e) => {
   if ($('stage').getAttribute('aria-hidden') === 'true') return;
   if ($('modal-root').children.length) return;
+  // 开场动画盖在舞台上：标题出现前的回车 / 空格不能推进剧情
+  if (isOpeningActive()) return;
+  // 剧情中打开「选章节」时，全屏选择层盖在舞台上：回车/空格要交给选择层，
+  // 不能再推进后面的剧情
+  if (document.querySelector('.mumu-scripts')) return;
   if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); engine.advance(); }
 });
 
 $('stage-back').addEventListener('click', () => leaveStage());
+// 舞台右上角：换个剧本（留在剧情上打开完整选择层，误触可「返回剧情」）/
+// 选章节（不绕剧目选择页，直接在剧情上滑出当前曲目的章节面板）
+$('stage-switch').addEventListener('click', () => showLibrary());
+$('stage-chapters').addEventListener('click', () => {
+  const sc = engine && engine.script;
+  if (!sc) return;
+  showLibrary({
+    initialKey: sc.series || sc.id,
+    openChapters: true,
+    chapterOnly: true,
+  });
+});
 $('stage-save').addEventListener('click', () => {
   const snap = engine.snapshot();
   if (!snap) return;
@@ -209,23 +417,70 @@ async function handleExport({ kind, script, scripts } = {}) {
   }
 }
 
-function showLibrary() {
+function removeScripts(ids) {
+  // 单个 id 或一组 id（整本曲目）都能传进来
+  const list = Array.isArray(ids) ? ids : [ids];
+  for (const id of list) removeCustomScript(id);
+  // removeCustomScript 不返回写入结果，重新读一次存储确认是否真的删掉了
+  const left = loadCustomScripts().map((s) => s.id);
+  const failed = list.filter((id) => left.includes(id));
+  if (failed.length) toast(`有 ${failed.length} 个剧本没有移除成功，可能是浏览器存储写入失败。`);
+  else toast('已移除该剧本。');
+  refreshResume();
+  showLibrary();
+}
+
+/** 给导入作品换封面：只改存储里的封面字段，不调整顺序，整本共用一个封面。 */
+function saveEntryCover(entry, dataUrl) {
+  if (!entry || !entry.custom) return { ok: false, error: '内置曲目不能更换封面。' };
+  const ids = new Set(entry.chapters.filter((c) => c.builtin !== true).map((c) => c.id));
+  if (!ids.size) return { ok: false, error: '没有可更新的剧本。' };
+  const list = loadCustomScripts().map((s) => (ids.has(s.id) ? { ...s, coverImage: dataUrl } : s));
+  if (!saveCustomScripts(list)) return { ok: false, error: '浏览器存储空间不足，封面没有保存成功。' };
+  entry.coverImage = dataUrl;
+  entry.chapters.forEach((c) => { if (ids.has(c.id)) c.coverImage = dataUrl; });
+  return { ok: true };
+}
+
+/** 剧本选择：条目不超过 10 时用封面环形动画，超过则回落到原来的陈列。 */
+function showLibrary(opts = {}) {
   sceneRenderer.preloadImages();
-  openLibrary({
-    scripts: allScripts(),
-    onPlay: (sc) => play(sc),
-    onDelete: (ids) => {
-      // 单个 id 或一组 id（整本曲目）都能传进来
-      const list = Array.isArray(ids) ? ids : [ids];
-      for (const id of list) removeCustomScript(id);
-      // removeCustomScript 不返回写入结果，重新读一次存储确认是否真的删掉了
-      const left = loadCustomScripts().map((s) => s.id);
-      const failed = list.filter((id) => left.includes(id));
-      if (failed.length) toast(`有 ${failed.length} 个剧本没有移除成功，可能是浏览器存储写入失败。`);
-      else toast('已移除该剧本。');
-      showLibrary();
-    },
+  // 四段开场动画的美术模块合计约 100KB，等用户点「开始体验」再取会白等半秒；
+  // 选择页一开就顺手预热（开场动画播完留台，下次换曲也不必再取）
+  prefetchOpenings(SERIES_ORDER);
+  closeScriptSelect({ restoreFocus: false });
+  const scripts = allScripts();
+  const selection = buildSelection(scripts);
+  // 从剧情里打开时关闭按钮是「返回剧情」：误触「换个剧本」也能原句回到舞台
+  const onStage = $('stage').getAttribute('aria-hidden') !== 'true';
+  const closeLabel = opts.closeLabel || (onStage ? '返回剧情' : '');
+  const actions = {
+    onPlay: startScript,
+    onDelete: removeScripts,
     onExport: handleExport,
+  };
+  if (!selection.useCarousel) {
+    // 超过 10 部时回退成陈列弹窗。剧情里点「选章节」不能因此变成「先挑曲目」：
+    // 直接按当前曲目打开章节列表，返回键才回到陈列页。
+    const sc = engine && engine.script;
+    const key = sc && (sc.series || sc.id);
+    const group = key && groupScripts(scripts).find((g) => g.kind === 'series' && g.key === key);
+    if (opts.chapterOnly && group) {
+      openChapters(group, startScript, () => openLibrary({ scripts, ...actions }), (arg) => actions.onExport(arg));
+      return;
+    }
+    openLibrary({ scripts, ...actions });
+    return;
+  }
+  openScriptSelect({
+    scripts,
+    ...actions,
+    onImport: showImport,
+    onCover: saveEntryCover,
+    initialKey: opts.initialKey || '',
+    openChapters: !!opts.openChapters,
+    chapterOnly: !!opts.chapterOnly,
+    closeLabel,
   });
 }
 function showSaves() {
@@ -295,12 +550,37 @@ function importSummary(res) {
 }
 
 $('btn-library').addEventListener('click', showLibrary);
+$('btn-gallery').addEventListener('click', openGallery);
 $('btn-import').addEventListener('click', showImport);
 $('btn-saves').addEventListener('click', showSaves);
 $('btn-start').addEventListener('click', showLibrary);
-$('btn-how').addEventListener('click', openHow);
+/* 首页下滑：「项目介绍」按钮与下方提示都滚到第二屏，第二屏底部回到首页 */
+const reduceMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+const homeScrollTo = (top) => $('home').scrollTo({ top, behavior: reduceMotion() ? 'auto' : 'smooth' });
+const scrollToIntro = () => homeScrollTo($('intro').offsetTop);
+$('btn-intro').addEventListener('click', scrollToIntro);
+$('btn-scroll-intro').addEventListener('click', scrollToIntro);
+$('intro-top').addEventListener('click', () => homeScrollTo(0));
+$('intro-start').addEventListener('click', () => { homeScrollTo(0); showLibrary(); });
+$('btn-resume').addEventListener('click', () => {
+  const snap = loadAutosave();
+  if (!snap) { refreshResume(); return; }
+  const sc = findScript(snap.scriptId);
+  if (!sc) {
+    clearAutosave();
+    refreshResume();
+    toast('上次的剧本已被移除，无法继续。');
+    return;
+  }
+  play(sc, snap);
+});
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
+refreshResume();
+
+/* 手机竖屏：舞台是横向分镜，先请用户转成横屏（可拒绝，本标签页内不再打扰） */
+const rotateHint = createRotateHint();
+
 // 对外暴露，便于调试
-window.__mumu = { engine, audio, sunset, castManager, sceneRenderer, get state() { return engine.state; } };
+window.__mumu = { engine, audio, sunset, castManager, sceneRenderer, rotate: rotateHint, get state() { return engine.state; } };

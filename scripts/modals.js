@@ -3,6 +3,7 @@
    ============================================================ */
 import { LIMITS, SCENES, readFileToScript, FORMAT_EXAMPLE, countChars, parseScriptText } from './parser.js';
 import { fmtTime } from './storage.js';
+import { keywordOf, AI_DISCLAIMER } from './series-meta.js';
 
 const root = () => document.getElementById('modal-root');
 
@@ -52,8 +53,11 @@ function coverStyle(s) {
   return `background:${THUMB[scene] || THUMB.classroom}`;
 }
 
-/** 曲目卡可直接用原图做封面：漩涡 =《星月夜》，月光 =《悲怆》第二乐章乐谱。 */
+/** 曲目卡可直接用原图做封面：蝉鸣 = 黄昏海面，青绿 = 青绿山水，
+ *  漩涡 =《星月夜》，月光 =《悲怆》第二乐章乐谱。 */
 const SERIES_COVER = {
+  cicada: "linear-gradient(180deg, rgba(20,16,30,0.06), rgba(20,16,30,0.52)), url('./assets/images/covers/cicada-dusk.jpg') center/cover no-repeat",
+  qinglv: "linear-gradient(180deg, rgba(14,24,20,0.06), rgba(14,24,20,0.50)), url('./assets/images/covers/qinglv-spring.jpg') center/cover no-repeat",
   vortex: "linear-gradient(180deg, rgba(18,22,38,0.10), rgba(18,22,38,0.58)), url('./assets/images/starry-night.jpg') center/cover no-repeat",
   moonlight: "linear-gradient(180deg, rgba(20,22,32,0.06), rgba(20,22,32,0.62)), url('./assets/images/pathetique-score.png') center/cover no-repeat",
 };
@@ -143,7 +147,7 @@ function seriesCard(g) {
       </div>
       <div class="script-body">
         <div class="script-name">${esc(g.title)}</div>
-        <span class="script-tag">曲目 · ${g.chapters.length} 章</span>
+        <span class="script-tag">${keywordOf(g.key) ? esc(keywordOf(g.key)) + ' · ' : ''}曲目 · ${g.chapters.length} 章</span>
         <div class="script-brief">${esc(g.brief)}</div>
         <div class="chapter-chips">${chips}</div>
         <div class="script-actions">
@@ -195,7 +199,7 @@ export function openChapters(group, onPlay, onBack, onExport) {
 export function openLibrary({ scripts, onPlay, onDelete, onExport }) {
   const entries = groupScripts(scripts);
   const cards = entries.map((e) => (e.kind === 'series' ? seriesCard(e) : singleCard(e.script))).join('');
-  const m = openModal('选择剧本', `<div class="script-grid">${cards}</div>`, true);
+  const m = openModal('选择剧本', `<div class="script-grid">${cards}</div><p class="mumu-ai-note">${esc(AI_DISCLAIMER)}</p>`, true);
 
   // 曲目卡：先选曲目，再选章节
   m.querySelectorAll('.series-card').forEach((el) => {
@@ -345,23 +349,5 @@ export function openImport({ onImported, onPackage }) {
   });
 }
 
-/* ---------------- 玩法说明 ---------------- */
-export function openHow() {
-  openModal('玩法与格式', `
-    <div class="how-body">
-      <h4>怎么玩</h4>
-      <p>选择内置剧本，或导入你自己的剧本。点击画面下方对话框推进剧情，遇到选项时选择你的走向。</p>
-      <p>一章结束时可以直接「继续下一章」，也可以「换一个剧本」回到曲目选择。</p>
-      <p>剧情中的场景切换、远景 / 中景 / 近景 / 特写，就是这部小戏的“分镜”。</p>
-      <h4>人物与场景</h4>
-      <p>人物以半身剪影立绘演出：画师少年、调色少女、小厮男童、侍女女童、官袍长者、凤袍太后，以及《漩涡与深蓝》的八位人物（卢卡斯、克莱尔、玛格丽特、亨利、朱利安、索菲娅、艾蒂安、埃莱娜），还有《月光下的未完奏鸣》的七位人物（林深、苏晚、顾言、夏晴、陈默、周慕白、叶知秋），以及少年 / 少女 / 儿童 / 中年人等通用模型。剧本在角色第五列写明模型，同一角色每次游玩外观不变；没有写明时只按性别回落到少年 / 少女，不根据姓名猜测。</p>
-      <p>只有对白或舞台指示会让人物出场。纯环境描写的段落不写台词，画面就只展示场景，让人静静看一会儿黄昏。</p>
-      <p>写作时可用 <b>【姿态】</b> <b>【动作】</b> <b>【视角】</b> 指挥走位，用 <b>【清场】</b> 让人物退场；<b>【镜头：特写】</b> 会画出台词里提到的物件（长卷、令牌、紫檀木盒、颜料研钵、磁带、耳机、纸质文件、《星月夜》、放大镜、档案袋、账册、星图、手机、画布碎片、咖啡、手抄乐谱、小提琴、钢琴键盘、橘子汽水、素圈戒指等），同一段特写里道具会延续到下一句。<b>名字（录音）：台词</b> 只出声，不出人。</p>
-      <h4>存档</h4>
-      <p>游玩中点击右上角“保存进度”即可存档；首页“选择存档”可随时读取或删除。存档保存在你的浏览器本地。</p>
-      <h4>音乐</h4>
-      <p>首页与游玩时会播放内置轻音乐，右上角的 ♪ 可随时静音。</p>
-      <h4>剧本限制</h4>
-      <p>字数 ${LIMITS.minChars}–${LIMITS.maxChars.toLocaleString()} 字；格式详见“导入剧本”窗口内的说明与示例。</p>
-    </div>`);
-}
+/* 「玩法与格式」的内容已合并进首页下滑后的「项目介绍」屏（index.html #intro），
+   首页按钮 #btn-intro 直接滚过去，不再开弹窗；剧本格式的完整示例仍在上面的导入窗口里。 */

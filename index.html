@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>暮幕 · 互动式剧本体验</title>
+  <title>暮幕 · 纸上幕启</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b1430'/%3E%3Ccircle cx='32' cy='36' r='13' fill='%23ff9d57'/%3E%3C/svg%3E" />
   <meta name="description" content="暮幕 —— 一个唯美的网页版互动剧本体验。导入你的剧本，在印象派黄昏里展开一段故事。" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="./styles/main.css" />
@@ -29,13 +30,16 @@
     <!-- 左上角品牌 -->
     <div class="brand">
       <span class="brand-mark">暮幕</span>
-      <span class="brand-sub">MUMU</span>
+      <span class="brand-sub mumu-brand-sub">MUMU</span>
     </div>
 
     <!-- 右上角功能按钮组 -->
-    <nav class="top-actions" aria-label="主功能">
+    <nav class="top-actions mumu-top-actions" aria-label="主功能">
       <button class="glass-btn" id="btn-library" title="选择剧本">
         <span class="gi">❖</span><span class="gl">选择剧本</span>
+      </button>
+      <button class="glass-btn" id="btn-gallery" title="角色图鉴">
+        <span class="gi">▦</span><span class="gl">角色图鉴</span>
       </button>
       <button class="glass-btn" id="btn-import" title="导入剧本">
         <span class="gi">↥</span><span class="gl">导入剧本</span>
@@ -51,12 +55,17 @@
     <!-- 主标题（中间偏左） -->
     <div class="hero">
       <div class="hero-kicker">AN INTERACTIVE TWILIGHT</div>
-      <h1 class="hero-title">互动式<br />剧本体验</h1>
+      <h1 class="hero-title">纸上幕启</h1>
+      <p class="hero-tag">微互动式剧本</p>
       <p class="hero-desc">在一场缓缓沉落的黄昏里，让你的剧本成为一段可以走进去的故事。</p>
       <div class="hero-cta">
         <button class="primary-cta" id="btn-start">开始体验</button>
-        <button class="ghost-cta" id="btn-how">玩法与格式</button>
+        <button class="ghost-cta mumu-resume" id="btn-resume" hidden>继续上次</button>
+        <button class="ghost-cta" id="btn-intro">项目介绍</button>
       </div>
+      <button class="scroll-cue" id="btn-scroll-intro">
+        <span class="sc-text">下滑看项目介绍</span><span class="sc-arrow" aria-hidden="true">⌄</span>
+      </button>
     </div>
 
     <!-- 底部音乐条 -->
@@ -64,6 +73,52 @@
       <span class="np-dot"></span>
       <span class="np-text" id="np-text">轻音乐 · 暮色</span>
     </div>
+
+    <!-- 首页第一屏的占位块：品牌 / 标题 / 按钮都是绝对定位，靠它撑出一屏滚动高度 -->
+    <div class="home-space" aria-hidden="true"></div>
+
+    <!-- ===================== 项目介绍（下滑后的第二屏） ===================== -->
+    <section class="intro" id="intro" aria-label="项目介绍">
+      <div class="intro-inner">
+        <p class="intro-kicker">ABOUT MUMU</p>
+        <h2 class="intro-title">把一部剧本，演成一场小戏</h2>
+        <p class="intro-lede">暮幕是一个打开浏览器就能开演的剧本舞台。它不装框架、不搭服务器，剧本就是纯文本；你写下的每一句，都会被取景、打光、配上音乐演出来。</p>
+
+        <div class="intro-grid">
+          <article class="intro-card">
+            <h3>演什么</h3>
+            <p>首页选一部<b>曲目</b>，进入它的<b>章节</b>——每一章就是「一幕」。内置四部：<b>《蝉鸣止于逢魔时》</b>青春校园、<b>《青绿长卷·千里未归》</b>古风、<b>《月光下的未完奏鸣》</b>言情、<b>《漩涡与深蓝：星月夜的回响》</b>悬疑。也可以导入自己写的剧本，或别人分享的<b>作品包（.mumu）</b>。</p>
+          </article>
+          <article class="intro-card">
+            <h3>怎么玩</h3>
+            <p>点击画面下方的对话框推进剧情，遇到选项时选择你的走向；选择会被记住，后面的台词与结局跟着变。一幕结束可以直接<b>「继续下一章」</b>，也可以<b>「换一个剧本」</b>回到曲目选择；读错了想回头，对话框右上角有<b>「回退一句」</b>。</p>
+          </article>
+          <article class="intro-card">
+            <h3>怎么演</h3>
+            <p>场景切换与<b>远景 / 中景 / 近景 / 特写</b>就是这部小戏的分镜，四部曲的第一章各有专属开场动画。人物以半身剪影立绘演出，剧本在角色第五列写明模型，同一角色每次游玩外观不变；没写明时只按性别回落，<b>不根据姓名猜测</b>。纯环境段落不写台词，画面就只留场景。</p>
+          </article>
+          <article class="intro-card">
+            <h3>剧本怎么写</h3>
+            <p>写作时可用<b>【姿态】【动作】【视角】</b>指挥走位，<b>【清场】</b>让人物退场；<b>【镜头：特写】</b>会画出台词里的物件（长卷、令牌、磁带、旧照片、手抄乐谱……），同一段特写里道具延续到下一句。<b>名字（录音）：台词</b> 只出声，不出人。完整格式与示例在<b>「导入剧本」</b>窗口里。</p>
+          </article>
+          <article class="intro-card">
+            <h3>存档与音乐</h3>
+            <p>游玩中点右上角<b>「保存进度」</b>存档，首页<b>「选择存档」</b>可读取或删除；进度也会自动记录，刷新后首页出现<b>「继续上次」</b>，一下回到刚才那句。首页与游玩时播放内置轻音乐，右上角的 ♪ 可静音。</p>
+          </article>
+          <article class="intro-card">
+            <h3>图鉴与卡片</h3>
+            <p>首页<b>「角色图鉴」</b>收着典藏卡与曲目角色卡，通关章节会收到新卡；旁边一页<b>「自定义卡片」</b>能上传自己的图片做成全息卡，卡面效果逐项可调，最多 12 张、五星为限，点开还能单独检视、翻页细看。</p>
+          </article>
+        </div>
+
+        <p class="intro-note">单部剧本 200–30000 字；文本剧本不超过 5MB，作品包不超过 32MB。剧本、存档、自定义卡片都只留在你这台设备的浏览器里，不上传。</p>
+
+        <div class="intro-foot">
+          <button class="primary-cta" id="intro-start">开始体验</button>
+          <button class="ghost-cta" id="intro-top">回到首页</button>
+        </div>
+      </div>
+    </section>
   </main>
 
   <!-- ===================== 剧情舞台 ===================== -->
@@ -75,14 +130,19 @@
       <button class="stage-btn" id="stage-back">← 返回首页</button>
       <div class="stage-meta" id="stage-title">序章</div>
       <div class="stage-top-right">
+        <button class="stage-btn" id="stage-switch">换个剧本</button>
+        <button class="stage-btn" id="stage-chapters">选章节</button>
         <button class="stage-btn" id="stage-save">保存进度</button>
         <button class="stage-btn icon-only" id="stage-audio" title="音乐 / 静音">♪</button>
       </div>
     </div>
 
     <div class="dialogue" id="dialogue">
+      <button type="button" class="mumu-dlg-back" id="dlg-back" title="点一次退一屏画面，可连续点击一直往回退" hidden>‹ 回退一句</button>
       <div class="dlg-name" id="dlg-name"></div>
+      <div class="mumu-dlg-role" id="dlg-role" hidden></div>
       <div class="dlg-text" id="dlg-text"></div>
+      <div class="mumu-finale" id="dlg-finale" hidden></div>
       <div class="dlg-choices" id="dlg-choices"></div>
       <div class="dlg-hint" id="dlg-hint">点击继续 ▸</div>
     </div>

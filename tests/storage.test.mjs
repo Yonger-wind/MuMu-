@@ -66,3 +66,34 @@ test('旧存档没有 time 字段时时间显示不出现 NaN', async () => {
   assert.equal(fmtTime('not-a-date'), '时间未知');
   assert.match(fmtTime(1700000000000), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
 });
+
+test('自动存档写入独立键，可读取与清除，不碰手动存档', async () => {
+  globalThis.localStorage = makeStorage();
+  const { saveAutosave, loadAutosave, clearAutosave } = await import('../scripts/storage.js');
+  assert.equal(loadAutosave(), null);
+  const ok = saveAutosave({ scriptId: 'cicada_01', idx: 4, progress: 12, state: { flags: { a: true } } });
+  assert.equal(ok, true);
+  const snap = loadAutosave();
+  assert.equal(snap.scriptId, 'cicada_01');
+  assert.equal(snap.idx, 4);
+  assert.equal(snap.state.flags.a, true);
+  assert.equal(snap.version, 1);
+  assert.ok(snap.savedAt > 0);
+  assert.equal(globalThis.localStorage.getItem('mumu.saves.v2'), null);
+  clearAutosave();
+  assert.equal(loadAutosave(), null);
+});
+
+test('自动存档坏数据按空处理并清掉，写失败返回 false', async () => {
+  globalThis.localStorage = makeStorage({
+    'mumu.autosave.v1': JSON.stringify({ idx: 3 }),
+  });
+  const { loadAutosave, saveAutosave } = await import('../scripts/storage.js');
+  assert.equal(loadAutosave(), null);
+  assert.equal(globalThis.localStorage.getItem('mumu.autosave.v1'), null);
+  const store = makeStorage();
+  store.setItem = () => { throw new Error('QuotaExceededError'); };
+  globalThis.localStorage = store;
+  assert.equal(saveAutosave({ scriptId: 'x', idx: 0 }), false);
+  assert.equal(saveAutosave(null), false);
+});

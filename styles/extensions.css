@@ -15,3 +15,3381 @@
 .mumu-ui-layer > * {
   pointer-events: auto;
 }
+
+/* P3-1 自动存档：首页「继续上次」入口，没有进度时隐藏。
+   .ghost-cta 自带 display，必须显式让 hidden 生效。 */
+.mumu-resume[hidden] {
+  display: none;
+}
+
+/* 七星卡的创作者名使用 ᥫ（Tai Le）与 ᩣ（Tai Tham）字符；
+   Windows / 部分移动端缺 Tai Tham 字形，这里内嵌两个字体的最小子集
+   （Google Fonts 的 Noto Sans Tai Le / Tai Tham，SIL Open Font License 1.1）。 */
+@font-face {
+  font-family: "Mumu Tai Le";
+  src: url("../assets/fonts/noto-sans-tai-le.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+0300-0301, U+0307-0308, U+030C, U+1950-197F, U+200C-200D, U+25CC;
+}
+
+@font-face {
+  font-family: "Mumu Tai Tham";
+  src: url("../assets/fonts/noto-sans-tai-tham.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+1A20-1AAF, U+200C-200D, U+25CC;
+}
+
+/* ==========================================================================
+   角色图鉴 · 全屏悬浮层
+   ========================================================================== */
+
+.mumu-gallery {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(12px, 3vw, 36px);
+  font-family: var(--mumu-font-sans);
+}
+
+.mumu-gallery__veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(86, 56, 120, 0.32), transparent 60%),
+    rgba(8, 6, 14, 0.82);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.mumu-gallery__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1180px, 100%);
+  max-height: min(92vh, 1040px);
+  border: 1px solid rgba(255, 244, 230, 0.14);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(34, 26, 46, 0.92) 0%, rgba(20, 16, 30, 0.96) 100%);
+  box-shadow:
+    0 40px 90px -40px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  animation: mumu-gallery-in 0.4s cubic-bezier(0.22, 0.7, 0.25, 1) both;
+}
+
+.mumu-gallery__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px 30px 16px;
+  border-bottom: 1px solid rgba(255, 244, 230, 0.08);
+}
+
+.mumu-gallery__titles {
+  min-width: 0;
+}
+
+.mumu-gallery__kicker {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.34em;
+  color: rgba(255, 196, 142, 0.72);
+}
+
+.mumu-gallery__title {
+  margin: 0;
+  font-family: var(--mumu-font-serif);
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--mumu-color-cream);
+}
+
+.mumu-gallery__count {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: rgba(255, 244, 230, 0.58);
+}
+
+.mumu-gallery__close {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 244, 230, 0.18);
+  border-radius: 50%;
+  background: rgba(255, 244, 230, 0.06);
+  color: rgba(255, 244, 230, 0.82);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.mumu-gallery__close:hover {
+  background: rgba(255, 244, 230, 0.14);
+  transform: rotate(90deg);
+}
+
+.mumu-gallery__close:focus-visible,
+.mumu-gcard:focus-visible,
+.mumu-gallery__detail-close:focus-visible {
+  outline: 2px solid rgba(255, 196, 142, 0.9);
+  outline-offset: 3px;
+}
+
+.mumu-gallery__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 22px 30px 34px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 244, 230, 0.22) transparent;
+}
+
+.mumu-gallery__scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.mumu-gallery__scroll::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 244, 230, 0.22);
+  background-clip: padding-box;
+}
+
+.mumu-gallery__disclaimer {
+  flex: none;
+  margin: 0;
+  padding: 10px 30px 12px;
+  border-top: 1px solid rgba(255, 244, 230, 0.06);
+  color: rgba(255, 244, 230, 0.3);
+  font-size: 10.5px;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  text-align: center;
+  user-select: none;
+}
+
+.mumu-gallery__section {
+  margin-top: 30px;
+}
+
+.mumu-gallery__section:first-child {
+  margin-top: 0;
+}
+
+.mumu-gallery__section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 244, 230, 0.08);
+}
+
+.mumu-gallery__section-head h3 {
+  margin: 0;
+  font-family: var(--mumu-font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(255, 244, 230, 0.92);
+}
+
+.mumu-gallery__section-head span {
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 244, 230, 0.48);
+}
+
+.mumu-gallery__section--seven .mumu-gallery__section-head h3 {
+  color: #ffd9a0;
+}
+
+.mumu-gallery__section--seven .mumu-gallery__section-head h3::before {
+  content: '✦';
+  margin-right: 8px;
+  font-size: 13px;
+  color: rgba(255, 202, 128, 0.8);
+}
+
+.mumu-gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 20px 18px;
+  align-items: start;
+}
+
+.mumu-gallery__grid--seven {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px;
+}
+
+/* 网格里的卡是按钮：只做定位与焦点，视觉全部交给卡片本体 */
+.mumu-gcard {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mumu-gcard .mumu-holo-card {
+  transition: transform 0.28s cubic-bezier(0.22, 0.7, 0.25, 1);
+}
+
+.mumu-gcard:hover .mumu-holo-card,
+.mumu-gcard:focus-visible .mumu-holo-card {
+  transform: translateY(-4px);
+}
+
+.mumu-gcard:hover .mumu-holo-card__body {
+  filter: brightness(1.07);
+}
+
+.mumu-gcard.is-locked {
+  cursor: default;
+}
+
+.mumu-gcard.is-locked .mumu-holo-card__body {
+  filter: saturate(0.35) brightness(0.82);
+}
+
+.mumu-gcard.is-locked .mumu-holo-card__photo {
+  filter: grayscale(1) brightness(0.62) contrast(0.95);
+}
+
+.mumu-gcard.is-locked .mumu-holo-card__name {
+  color: rgba(255, 244, 230, 0.55);
+}
+
+.mumu-gcard.is-locked .mumu-holo-card__title {
+  color: rgba(255, 244, 230, 0.36);
+}
+
+.mumu-gcard__badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  padding: 3px 9px;
+  border: 1px solid rgba(255, 244, 230, 0.14);
+  border-radius: 999px;
+  background: rgba(12, 9, 18, 0.62);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: rgba(255, 244, 230, 0.62);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.6;
+  pointer-events: none;
+}
+
+.mumu-gcard.is-unlocked .mumu-gcard__badge {
+  color: rgba(255, 244, 230, 0.82);
+  border-color: rgba(255, 244, 230, 0.22);
+}
+
+.mumu-gcard.is-seven .mumu-gcard__badge {
+  color: #2a1c10;
+  border-color: rgba(255, 214, 150, 0.7);
+  background: linear-gradient(135deg, #ffe4b0, #e8a95e);
+  font-weight: 700;
+}
+
+.mumu-gcard__hint {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 244, 230, 0.1);
+  color: rgba(255, 244, 230, 0.74);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+  pointer-events: none;
+}
+
+.mumu-gcard:hover .mumu-gcard__hint,
+.mumu-gcard:focus-visible .mumu-gcard__hint {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ==========================================================================
+   全息卡本体（从 holo-card 移植；圆角固定 0、画幅 4:5、斜纹）
+   ========================================================================== */
+
+.mumu-holo-card {
+  --pc-light-x: 50%;
+  --pc-light-y: 50%;
+  --pc-pointer-x: 50%;
+  --pc-pointer-y: 50%;
+  --pc-band-x: 50%;
+  --pc-band-y: 50%;
+  --pc-reach: 0;
+  --pc-rotate-x: 0deg;
+  --pc-rotate-y: 0deg;
+  --pc-shift-x: 0px;
+  --pc-shift-y: 0px;
+  --pc-tilt: 0;
+  --pc-active: 0;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  perspective: 1000px;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mumu-holo-card__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  background: var(--pc-frame);
+  box-shadow: var(--pc-frame-shadow);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  transform: rotateX(var(--pc-rotate-x)) rotateY(var(--pc-rotate-y));
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition: filter 0.28s ease;
+}
+
+.mumu-holo-card__tile {
+  position: relative;
+  aspect-ratio: var(--pc-aspect, 4 / 5);
+  border-radius: var(--pc-radius, 0);
+  background: var(--pc-backdrop, #1a1720);
+  box-shadow: var(--pc-tile-shadow);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.mumu-holo-card__sheen,
+.mumu-holo-card__holo,
+.mumu-holo-card__foil,
+.mumu-holo-card__scrim,
+.mumu-holo-card__tile-rim,
+.mumu-holo-card__glare,
+.mumu-holo-card__shade,
+.mumu-holo-card__rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.mumu-holo-card__art {
+  position: absolute;
+  inset: 0;
+  background: var(--pc-art, linear-gradient(160deg, #3a3644, #27242f));
+}
+
+.mumu-holo-card__art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(70% 55% at 50% 34%, var(--pc-glow, rgba(255, 255, 255, 0.22)), transparent 72%);
+  opacity: 0.85;
+}
+
+.mumu-holo-card__sheen {
+  background: radial-gradient(
+    farthest-corner circle at calc(var(--pc-light-x) - 10px) calc(var(--pc-light-y) - 10px),
+    var(--pc-sheen) 0%, transparent 55%);
+  opacity: calc(var(--pc-holo) * var(--pc-active));
+}
+
+.mumu-holo-card__holo,
+.mumu-holo-card__foil {
+  --pc-spectrum: repeating-linear-gradient(0deg,
+    hsl(2, 100%, 73%) 5%, hsl(53, 100%, 69%) 10%, hsl(93, 100%, 69%) 15%,
+    hsl(176, 100%, 76%) 20%, hsl(228, 100%, 74%) 25%, hsl(260, 100%, 76%) 30%, hsl(2, 100%, 73%) 35%);
+  --pc-bars: repeating-linear-gradient(-45deg,
+    #0e152e 0%, hsl(180, 10%, 60%) 3.8%, hsl(180, 29%, 66%) 4.5%,
+    hsl(180, 10%, 60%) 5.2%, #0e152e 10%, #0e152e 12%);
+  --pc-falloff: radial-gradient(farthest-corner circle at var(--pc-pointer-x) var(--pc-pointer-y),
+    hsla(0, 0%, 0%, 0.1) 12%, hsla(0, 0%, 0%, 0.15) 20%, hsla(0, 0%, 0%, 0.25) 120%);
+  background-image: var(--pc-spectrum), var(--pc-bars), var(--pc-falloff);
+  background-position: 0 var(--pc-band-y), var(--pc-band-x) var(--pc-band-y), center;
+  background-size: 500% 500%, 300% 300%, 200% 200%;
+  background-blend-mode: color, hard-light;
+  filter:
+    brightness(calc(0.66 + 0.19 * var(--pc-active)))
+    contrast(calc(1.33 + 0.17 * var(--pc-active)))
+    saturate(calc(0.33 + 0.17 * var(--pc-active)))
+    var(--pc-holo-filter, hue-rotate(0deg));
+}
+
+.mumu-holo-card__holo {
+  mix-blend-mode: var(--pc-blend, color-dodge);
+  opacity: calc(var(--pc-holo) * var(--pc-holo-gain) * (0.5 + 0.5 * var(--pc-active)));
+  -webkit-mask-image: var(--pc-pattern);
+  -webkit-mask-size: var(--pc-pattern-size, auto);
+  -webkit-mask-position: calc(50% - var(--pc-shift-x) * 1.5) calc(65% - var(--pc-shift-y) * 1.5);
+  -webkit-mask-repeat: repeat;
+  mask-image: var(--pc-pattern);
+  mask-size: var(--pc-pattern-size, auto);
+  mask-position: calc(50% - var(--pc-shift-x) * 1.5) calc(65% - var(--pc-shift-y) * 1.5);
+  mask-repeat: repeat;
+}
+
+/* 覆膜层必须压在照片之上：它是卡面的第一层，而不是渗到卡底背景里。
+   照片有 z-index: 2，这里用 3 让 color-dodge 与画面本身发生混合。 */
+.mumu-holo-card__foil {
+  z-index: 3;
+  mix-blend-mode: color-dodge;
+  opacity: calc(var(--pc-foil) * (0.3 + 0.7 * var(--pc-active)));
+  filter:
+    brightness(calc(0.72 + 0.28 * var(--pc-active)))
+    contrast(calc(1.35 + 0.2 * var(--pc-active)))
+    saturate(calc(0.5 + 0.35 * var(--pc-active)));
+}
+
+.mumu-holo-card__holo-glow,
+.mumu-holo-card__holo-shift {
+  position: absolute;
+  inset: 0;
+  opacity: calc(var(--pc-active) * var(--pc-holo-detail));
+}
+
+.mumu-holo-card__holo-glow {
+  background-image:
+    linear-gradient(45deg, hsl(176, 100%, 76%), hsl(228, 100%, 74%), hsl(260, 100%, 76%), hsl(2, 100%, 73%), hsl(53, 100%, 69%), hsl(93, 100%, 69%)),
+    radial-gradient(circle at var(--pc-pointer-x) var(--pc-pointer-y), hsl(0, 0%, 70%) 0%, hsla(0, 0%, 30%, 0.2) 90%),
+    var(--pc-grain);
+  background-size: 250% 250%, 100% 100%, 220px 220px;
+  background-position: var(--pc-pointer-x) var(--pc-pointer-y), center, 0 0;
+  background-blend-mode: color-dodge;
+  filter:
+    brightness(calc(2 - var(--pc-reach)))
+    contrast(calc(var(--pc-reach) + 2))
+    saturate(calc(0.5 + var(--pc-reach)));
+  mix-blend-mode: luminosity;
+}
+
+.mumu-holo-card__holo-shift {
+  background-image: var(--pc-spectrum), var(--pc-bars), var(--pc-falloff);
+  background-position: 0 var(--pc-band-y), calc(var(--pc-band-x) * 0.4) calc(var(--pc-band-y) * 0.5), center;
+  background-size: 200% 300%, 700% 700%, 100% 100%;
+  background-blend-mode: color, hard-light;
+  mix-blend-mode: difference;
+  filter: brightness(0.8) contrast(1.5);
+}
+
+.mumu-holo-card__photo {
+  position: absolute;
+  inset: calc(var(--pc-parallax) * -1);
+  width: calc(100% + var(--pc-parallax) * 2);
+  height: calc(100% + var(--pc-parallax) * 2);
+  object-fit: cover;
+  object-position: var(--pc-photo-pos, center bottom);
+  transform: translate3d(var(--pc-shift-x), var(--pc-shift-y), 0);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: 2;
+}
+
+.mumu-holo-card__photo--model {
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.35));
+}
+
+.mumu-holo-card__photo.is-missing {
+  opacity: 0.18;
+}
+
+.mumu-holo-card__fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.3);
+  font-family: var(--mumu-font-serif);
+  font-size: 46px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.mumu-holo-card__fallback.is-on {
+  opacity: 1;
+}
+
+.mumu-holo-card__scrim {
+  background: linear-gradient(to top,
+    rgba(0, 0, 0, 0.66) 0%, rgba(0, 0, 0, 0.6) 6%, rgba(0, 0, 0, 0.52) 12%, rgba(0, 0, 0, 0.42) 19%,
+    rgba(0, 0, 0, 0.3) 26%, rgba(0, 0, 0, 0.17) 33%, rgba(0, 0, 0, 0.07) 40%, rgba(0, 0, 0, 0.02) 46%, rgba(0, 0, 0, 0) 52%);
+  opacity: var(--pc-scrim, 1);
+  z-index: 4;
+}
+
+.mumu-holo-card__info {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 18px;
+  z-index: 5;
+  color: #fff;
+  pointer-events: none;
+}
+
+.mumu-holo-card__name {
+  margin: 0;
+  font-family: "Mumu Tai Le", "Mumu Tai Tham", var(--mumu-font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.mumu-holo-card__title {
+  margin: 4px 0 0;
+  font-family: "Mumu Tai Le", "Mumu Tai Tham", var(--mumu-font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.78);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.mumu-holo-card__stars {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: var(--pc-star-gap, 6px);
+  z-index: 6;
+  padding: 0;
+}
+
+.mumu-holo-card__star {
+  width: var(--pc-star, 16px);
+  height: var(--pc-star, 16px);
+  line-height: 0;
+  pointer-events: none;
+}
+
+.mumu-holo-card__star svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mumu-holo-card__star .st-fill {
+  fill: var(--pc-star-fill, rgba(255, 238, 200, 0.96));
+  opacity: 0;
+}
+
+.mumu-holo-card__star .st-line {
+  fill: var(--pc-star-ghost, rgba(255, 255, 255, 0.05));
+  stroke: var(--pc-star-edge, rgba(255, 255, 255, 0.3));
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+}
+
+.mumu-holo-card__star.is-on .st-fill {
+  opacity: 1;
+}
+
+.mumu-holo-card__star.is-on .st-line {
+  fill: none;
+  stroke: var(--pc-star-edge-on, rgba(255, 250, 232, 0.98));
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+}
+
+.mumu-holo-card__star.is-on svg {
+  filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.75)) drop-shadow(0 0 5px rgba(255, 255, 255, 0.35));
+}
+
+.mumu-holo-card--stars .mumu-holo-card__info {
+  bottom: calc(16px + var(--pc-star, 16px) + 13px);
+}
+
+.mumu-holo-card__tile-rim {
+  box-shadow: inset 0 0 0 1px var(--pc-tile-edge), inset 0 1px 0 var(--pc-tile-highlight);
+  z-index: 7;
+}
+
+.mumu-holo-card__glare {
+  background: radial-gradient(farthest-corner circle at var(--pc-light-x) var(--pc-light-y),
+    rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.36) 20%, rgba(255, 255, 255, 0) 60%);
+  mix-blend-mode: overlay;
+  opacity: calc(var(--pc-glare) * var(--pc-active));
+  z-index: 8;
+}
+
+.mumu-holo-card__shade {
+  background: radial-gradient(farthest-corner circle at var(--pc-light-x) var(--pc-light-y),
+    transparent 30%, var(--pc-shade) 100%);
+  opacity: calc(var(--pc-glare) * var(--pc-tilt));
+  z-index: 8;
+}
+
+.mumu-holo-card__rim {
+  box-shadow: inset 0 0 0 1px var(--pc-frame-edge), inset 0 1px 0 var(--pc-frame-highlight);
+  z-index: 9;
+}
+
+/* —— 网格缩略卡：只缩小排版，不改变层与效果 —— */
+.mumu-holo-card--mini .mumu-holo-card__body {
+  padding: 6px;
+  border-radius: 0;
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  backdrop-filter: blur(10px) saturate(1.4);
+}
+
+.mumu-holo-card--mini .mumu-holo-card__info {
+  left: 12px;
+  right: 12px;
+  bottom: 11px;
+}
+
+.mumu-holo-card--mini .mumu-holo-card__name {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.mumu-holo-card--mini .mumu-holo-card__title {
+  margin-top: 2px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mumu-holo-card--mini.mumu-holo-card--stars .mumu-holo-card__info {
+  bottom: calc(9px + var(--pc-star, 11px) + 8px);
+}
+
+.mumu-holo-card--mini .mumu-holo-card__stars {
+  bottom: 9px;
+}
+
+/* ==========================================================================
+   角色卡：深靛斜纹底，立式画幅；剪影 contain 完整露出，不被卡框裁切
+   ========================================================================== */
+
+.mumu-holo-card--char .mumu-holo-card__body {
+  background: rgba(10, 10, 18, 0.72);
+}
+
+.mumu-holo-card--char .mumu-holo-card__art {
+  background:
+    repeating-linear-gradient(-45deg, rgba(150, 168, 232, 0.09) 0 2px, rgba(150, 168, 232, 0) 2px 11px),
+    linear-gradient(155deg, #2c2c45 0%, #1b1b2d 46%, #121120 100%);
+}
+
+.mumu-holo-card--char .mumu-holo-card__art::after {
+  background:
+    radial-gradient(74% 58% at 50% 28%, rgba(126, 150, 220, 0.2), transparent 70%),
+    radial-gradient(60% 40% at 78% 78%, rgba(120, 220, 196, 0.07), transparent 72%);
+  opacity: 1;
+}
+
+/* contain：整个半身剪影都留在卡内，不再被 cover 裁掉肩颈与发梢 */
+.mumu-holo-card--char .mumu-holo-card__photo {
+  object-fit: contain;
+  object-position: center bottom;
+}
+
+.mumu-holo-card--char .mumu-holo-card__photo--model {
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.5));
+}
+
+/* 只压暗脚下一小块，脸与轮廓保持干净 */
+.mumu-holo-card--char .mumu-holo-card__scrim {
+  background: linear-gradient(to top,
+    rgba(5, 5, 13, 0.88) 0%, rgba(5, 5, 13, 0.55) 9%,
+    rgba(5, 5, 13, 0.18) 20%, transparent 34%);
+}
+
+/* 名字居左下，星点居右下，同一条基线 */
+.mumu-holo-card--char .mumu-holo-card__info {
+  left: 16px;
+  right: 122px;
+  bottom: 14px;
+}
+
+.mumu-holo-card--char .mumu-holo-card__name {
+  font-size: 18px;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
+}
+
+.mumu-holo-card--char .mumu-holo-card__title {
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.62);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+}
+
+.mumu-holo-card--char .mumu-holo-card__stars {
+  left: auto;
+  right: 16px;
+  bottom: 16px;
+  transform: none;
+}
+
+.mumu-holo-card--char.mumu-holo-card--stars .mumu-holo-card__info {
+  bottom: 14px;
+}
+
+/* 网格缩略：只留名字，身份放进详情 */
+.mumu-holo-card--char.mumu-holo-card--mini .mumu-holo-card__info {
+  left: 12px;
+  right: 72px;
+  bottom: 9px;
+}
+
+.mumu-holo-card--char.mumu-holo-card--mini .mumu-holo-card__name {
+  font-size: 15px;
+}
+
+.mumu-holo-card--char.mumu-holo-card--mini .mumu-holo-card__title {
+  display: none;
+}
+
+.mumu-holo-card--char.mumu-holo-card--mini .mumu-holo-card__stars {
+  right: 10px;
+  bottom: 10px;
+}
+
+/* ==========================================================================
+   图鉴分页 + 自定义卡片页
+   —— 面板参数只作用于 .mumu-ccard 里的卡，内置角色卡不受影响
+   ========================================================================== */
+
+.mumu-gallery__tabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 30px;
+  border-bottom: 1px solid rgba(255, 244, 230, 0.1);
+}
+
+.mumu-gallery__tab {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 9px 13px 11px;
+  color: rgba(244, 244, 245, 0.54);
+  font-family: var(--mumu-font-serif);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.mumu-gallery__tab:hover { color: rgba(255, 244, 230, 0.86); }
+
+.mumu-gallery__tab.is-on {
+  color: #fff9ef;
+  border-bottom-color: rgba(255, 208, 138, 0.72);
+}
+
+.mumu-gallery__tab:focus-visible {
+  outline: 1px solid rgba(255, 208, 138, 0.7);
+  outline-offset: 2px;
+}
+
+.mumu-ccard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 22px;
+  align-items: start;
+}
+
+.mumu-ccard__stage { min-width: 0; }
+
+.mumu-ccard__bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.mumu-ccard__h {
+  margin: 0;
+  font-family: var(--mumu-font-serif);
+  font-size: 19px;
+  color: rgba(255, 244, 230, 0.95);
+}
+
+.mumu-ccard__count {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: rgba(244, 244, 245, 0.5);
+}
+
+.mumu-ccard__tools { display: flex; gap: 8px; }
+
+.mumu-ccard__btn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 244, 230, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 244, 230, 0.9);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.mumu-ccard__btn:hover { background: rgba(255, 255, 255, 0.12); }
+
+.mumu-ccard__btn--primary {
+  border-color: rgba(255, 208, 138, 0.5);
+  background: rgba(255, 208, 138, 0.14);
+  color: #ffe6bf;
+}
+
+.mumu-ccard__btn:focus-visible {
+  outline: 1px solid rgba(255, 208, 138, 0.7);
+  outline-offset: 2px;
+}
+
+.mumu-ccard__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 18px;
+  min-height: 220px;
+  padding: 2px;
+  border-radius: 16px;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mumu-ccard__grid.is-drop {
+  background: rgba(255, 208, 138, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 208, 138, 0.4);
+}
+
+.mumu-ccard__item {
+  position: relative;
+  min-width: 0;
+}
+
+.mumu-ccard__item .mumu-holo-card { width: 100%; }
+
+.mumu-ccard__item.is-drop .mumu-holo-card__tile {
+  outline: 2px dashed rgba(255, 208, 138, 0.85);
+  outline-offset: 3px;
+}
+
+.mumu-ccard__ops {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 12;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.mumu-ccard__item:hover .mumu-ccard__ops,
+.mumu-ccard__item:focus-within .mumu-ccard__ops {
+  opacity: 1;
+  transform: none;
+}
+
+.mumu-ccard__op {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(10, 8, 16, 0.74);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11.5px;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.mumu-ccard__op:hover { background: rgba(26, 21, 34, 0.94); }
+
+.mumu-ccard__op--danger {
+  border-color: rgba(255, 122, 122, 0.44);
+  color: #ffd6d6;
+}
+
+@media (hover: none) {
+
+  .mumu-ccard__ops {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.mumu-ccard__empty {
+  grid-column: 1 / -1;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  min-height: 210px;
+  padding: 26px;
+  border: 1px dashed rgba(255, 244, 230, 0.22);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.mumu-ccard__empty-title {
+  margin: 0;
+  font-family: var(--mumu-font-serif);
+  font-size: 16px;
+  color: rgba(255, 244, 230, 0.8);
+}
+
+.mumu-ccard__empty-sub {
+  margin: 0;
+  font-size: 12.5px;
+  color: rgba(244, 244, 245, 0.5);
+}
+
+.mumu-ccard__panel {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 16px 16px 18px;
+  border: 1px solid rgba(255, 244, 230, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(40, 32, 54, 0.72), rgba(22, 18, 32, 0.88));
+}
+
+.mumu-ccard__panel-title {
+  margin: 0;
+  font-family: var(--mumu-font-serif);
+  font-size: 16px;
+  color: rgba(255, 244, 230, 0.92);
+}
+
+.mumu-ccard__panel-note {
+  margin: -6px 0 2px;
+  font-size: 11.5px;
+  color: rgba(244, 244, 245, 0.48);
+}
+
+.mumu-ccard__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.mumu-ccard__row label {
+  font-size: 12.5px;
+  color: rgba(244, 244, 245, 0.74);
+}
+
+.mumu-ccard__out {
+  font-size: 11.5px;
+  color: rgba(255, 208, 138, 0.86);
+  font-variant-numeric: tabular-nums;
+}
+
+.mumu-ccard__row input[type='range'] {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: #ffcf86;
+}
+
+.mumu-ccard__row select {
+  grid-column: 2;
+  min-width: 150px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 244, 230, 0.16);
+  background: rgba(12, 10, 18, 0.86);
+  color: #f4f4f5;
+  font-size: 12.5px;
+}
+
+.mumu-ccard__row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: #ffcf86;
+}
+
+.mumu-ccard__panel-hint {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: rgba(244, 244, 245, 0.44);
+  white-space: pre-line;
+}
+
+/* 自定义卡的卡框跟着「圆角」一起收，别只圆里面那层 */
+.mumu-ccard .mumu-holo-card--custom .mumu-holo-card__body {
+  border-radius: calc(var(--pc-radius, 0px) + 8px);
+  overflow: hidden;
+}
+
+/* 星槽在自定义卡上是要点的按钮（内置卡仍是静态 span） */
+.mumu-holo-card--custom .mumu-holo-card__star {
+  pointer-events: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.mumu-holo-card--custom .mumu-holo-card__star:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 名字 / 身份直接点着改 */
+.mumu-holo-card--custom .mumu-holo-card__info { pointer-events: auto; }
+
+.mumu-holo-card--custom .mumu-holo-card__name,
+.mumu-holo-card--custom .mumu-holo-card__title {
+  cursor: text;
+  outline: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mumu-holo-card--custom .mumu-holo-card__name:focus,
+.mumu-holo-card--custom .mumu-holo-card__title:focus {
+  box-shadow: inset 0 -2px 0 rgba(255, 236, 200, 0.65);
+}
+
+/* 透明底（剪影 / 图标类）整幅放进卡面，底部留出台词与星槽的位置 */
+.mumu-holo-card--custom.mumu-holo-card--alpha .mumu-holo-card__photo {
+  object-fit: contain;
+  box-sizing: border-box;
+  padding: 7% 9% 24%;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.35));
+}
+
+@media (max-width: 760px) {
+
+  .mumu-ccard {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .mumu-ccard__panel {
+    position: static;
+  }
+
+  .mumu-ccard__grid {
+    grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+    gap: 12px;
+  }
+}
+
+/* ==========================================================================
+   详情：特殊检视
+   ========================================================================== */
+
+.mumu-gallery__detail {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(14px, 3vw, 28px);
+  animation: mumu-gallery-fade 0.24s ease both;
+}
+
+/* 参考视频的展示台：近乎纯黑的背景，只留下卡片与它的光。 */
+.mumu-gallery__detail-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(68% 58% at 50% 42%, rgba(58, 42, 86, 0.24), transparent 72%),
+    rgba(4, 3, 8, 0.965);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.mumu-gallery__detail-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  animation: mumu-gallery-pop 0.42s cubic-bezier(0.22, 0.7, 0.25, 1) both;
+}
+
+.mumu-gallery__detail .mumu-holo-card {
+  width: min(440px, 84vw, 62vh);
+  filter:
+    drop-shadow(0 40px 72px rgba(0, 0, 0, 0.72))
+    drop-shadow(0 0 48px rgba(125, 160, 230, 0.12));
+}
+
+/* 视频里的卡框是近黑的实心厚边，卡面本身不变。 */
+.mumu-gallery__detail .mumu-holo-card__body {
+  padding: 10px;
+  border-color: rgba(255, 255, 255, 0.09);
+  background: linear-gradient(180deg, rgba(19, 16, 25, 0.97), rgba(8, 7, 12, 0.99));
+  box-shadow:
+    0 34px 84px -24px rgba(0, 0, 0, 0.92),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.mumu-gallery__detail .mumu-holo-card__name {
+  font-size: 22px;
+}
+
+.mumu-gallery__detail .mumu-holo-card__title {
+  font-size: 14px;
+}
+
+.mumu-gallery__detail-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  z-index: 10;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 244, 230, 0.22);
+  border-radius: 50%;
+  background: rgba(16, 12, 24, 0.9);
+  color: rgba(255, 244, 230, 0.86);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.mumu-gallery__detail-close:hover {
+  background: rgba(48, 38, 62, 0.95);
+  transform: rotate(90deg);
+}
+
+/* 自定义卡全屏检视的翻页条：只有多于一张时才出现 */
+.mumu-gallery__detail-pager {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.mumu-gallery__detail-step {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 244, 230, 0.2);
+  border-radius: 50%;
+  background: rgba(22, 18, 32, 0.82);
+  color: rgba(255, 244, 230, 0.86);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.mumu-gallery__detail-step:hover {
+  background: rgba(58, 46, 74, 0.95);
+  transform: translateY(-1px);
+}
+
+.mumu-gallery__detail-step:focus-visible {
+  outline: 2px solid rgba(255, 196, 142, 0.9);
+  outline-offset: 3px;
+}
+
+.mumu-gallery__detail-pos {
+  font-family: var(--mumu-font-sans);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 244, 230, 0.62);
+  min-width: 48px;
+  text-align: center;
+}
+
+/* 自定义卡本体可以点开单独检视 */
+.mumu-ccard__item .mumu-holo-card {
+  cursor: zoom-in;
+}
+
+/* 全屏检视里的自定义卡：圆角跟面板参数走（列表页那条规则管不到这里） */
+.mumu-gallery__detail .mumu-holo-card--custom .mumu-holo-card__body {
+  border-radius: calc(var(--pc-radius, 0px) + 10px);
+  overflow: hidden;
+}
+
+@media (max-width: 760px) {
+  .mumu-gallery__detail-pager {
+    margin-top: 14px;
+  }
+
+  .mumu-gallery__detail .mumu-holo-card {
+    width: min(360px, 82vw, 52vh);
+  }
+}
+
+/* ==========================================================================
+   提示条与动效
+   ========================================================================== */
+
+.mumu-gallery__notice {
+  position: absolute;
+  left: 50%;
+  bottom: 54px;
+  z-index: 30;
+  max-width: min(520px, calc(100% - 48px));
+  margin: 0;
+  padding: 9px 18px;
+  border: 1px solid rgba(255, 244, 230, 0.16);
+  border-radius: 999px;
+  background: rgba(16, 12, 24, 0.92);
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.8);
+  color: rgba(255, 244, 230, 0.82);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity 0.24s ease, transform 0.24s ease;
+  pointer-events: none;
+}
+
+.mumu-gallery__notice.is-show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@keyframes mumu-gallery-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes mumu-gallery-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mumu-gallery-pop {
+  from { opacity: 0; transform: translateY(20px) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ==========================================================================
+   响应式
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .mumu-gallery__head {
+    padding: 22px 22px 14px;
+  }
+
+  .mumu-gallery__tabs {
+    padding: 0 22px;
+  }
+
+  .mumu-gallery__scroll {
+    padding: 18px 22px 30px;
+  }
+
+  .mumu-gallery__grid {
+    grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+    gap: 16px 14px;
+  }
+
+  .mumu-gallery__grid--seven {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .mumu-gallery {
+    padding: 0;
+  }
+
+  .mumu-gallery__panel {
+    width: 100%;
+    max-height: 100vh;
+    height: 100vh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .mumu-gallery__head {
+    padding: 18px 16px 12px;
+  }
+
+  .mumu-gallery__tabs {
+    padding: 0 16px;
+  }
+
+  .mumu-gallery__scroll {
+    padding: 16px 16px 28px;
+  }
+
+  .mumu-gallery__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
+  }
+
+  .mumu-gallery__grid--seven {
+    gap: 14px 12px;
+  }
+
+  .mumu-gallery__section {
+    margin-top: 24px;
+  }
+
+  .mumu-holo-card--mini .mumu-holo-card__info {
+    left: 10px;
+    right: 10px;
+  }
+
+  .mumu-holo-card--mini .mumu-holo-card__name {
+    font-size: 14px;
+  }
+
+  .mumu-gallery__detail {
+    padding: 16px;
+  }
+
+  .mumu-gallery__detail .mumu-holo-card {
+    width: min(360px, 84vw, 58vh);
+  }
+
+  .mumu-gallery__detail-close {
+    top: -10px;
+    right: -6px;
+  }
+
+  .mumu-gallery__notice {
+    bottom: 52px;
+  }
+
+  .mumu-gallery__disclaimer {
+    padding: 10px 16px 12px;
+  }
+}
+
+/* 首页：新增「角色图鉴」后，小屏把右上功能组收紧，避免压住品牌 */
+@media (max-width: 720px) {
+  .mumu-top-actions {
+    top: 16px;
+    right: 14px;
+    gap: 7px;
+  }
+
+  .mumu-top-actions .glass-btn {
+    padding: 9px 11px;
+  }
+
+  .mumu-top-actions .glass-btn .gi {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .mumu-brand-sub {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mumu-gallery__panel,
+  .mumu-gallery__detail,
+  .mumu-gallery__detail-stage,
+  .mumu-gcard .mumu-holo-card,
+  .mumu-gallery__close,
+  .mumu-gallery__detail-close {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ============================================================
+   剧本选择动画（.mumu-scripts）与 3D 环形封面（.mumu-cc）
+   ============================================================ */
+
+/* ---------- 对白身份小字 ---------- */
+.mumu-dlg-role {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -9px 0 10px;
+  font-family: var(--font-sans, "PingFang SC", "Microsoft YaHei", sans-serif);
+  font-size: 11.5px;
+  line-height: 1.4;
+  letter-spacing: 0.2em;
+  color: rgba(255, 244, 230, 0.46);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.mumu-dlg-role::before {
+  content: "";
+  width: 16px;
+  height: 1px;
+  flex: none;
+  background: rgba(255, 157, 87, 0.55);
+}
+
+.mumu-dlg-role[hidden] {
+  display: none;
+}
+
+/* 原陈列弹窗角落的 AI 免责声明 */
+.mumu-ai-note {
+  margin-top: 16px;
+  text-align: right;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 244, 230, 0.36);
+  user-select: none;
+}
+
+/* ---------- 全屏层 ---------- */
+.mumu-scripts {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--cream, #fff4e6);
+  background: #0d0918;
+  font-family: var(--font-sans, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif);
+  animation: mumu-scripts-in 0.55s ease both;
+}
+
+.mumu-scripts__bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(1100px 720px at 50% 36%, rgba(236, 150, 90, 0.17), transparent 64%),
+    radial-gradient(900px 760px at 10% 6%, rgba(92, 70, 164, 0.34), transparent 62%),
+    radial-gradient(820px 600px at 92% 82%, rgba(150, 62, 96, 0.18), transparent 60%),
+    linear-gradient(180deg, #0c0817 0%, #191026 48%, #0a0712 100%);
+  pointer-events: none;
+}
+
+.mumu-scripts__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 244, 230, 0.7) 0.6px, transparent 0.7px);
+  background-size: 3px 3px;
+  mix-blend-mode: overlay;
+}
+
+.mumu-scripts__head {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 34px 6px;
+  flex: none;
+}
+
+.mumu-scripts__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+}
+
+.mumu-scripts__mark {
+  font-family: var(--font-serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 20px;
+  letter-spacing: 0.34em;
+  color: rgba(255, 244, 230, 0.94);
+}
+
+.mumu-scripts__sub {
+  position: relative;
+  padding-left: 15px;
+  font-size: 10.5px;
+  letter-spacing: 0.34em;
+  color: rgba(255, 244, 230, 0.42);
+}
+
+.mumu-scripts__sub::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 12px;
+  transform: translateY(-50%);
+  background: rgba(255, 244, 230, 0.22);
+}
+
+.mumu-scripts__head-r {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.mumu-scripts__link {
+  padding: 9px 17px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 244, 230, 0.16);
+  background: rgba(255, 244, 230, 0.045);
+  color: rgba(255, 244, 230, 0.78);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  transition: border-color 0.22s ease, background 0.22s ease, color 0.22s ease;
+}
+
+.mumu-scripts__link:hover,
+.mumu-scripts__link:focus-visible {
+  border-color: rgba(255, 157, 87, 0.6);
+  background: rgba(255, 157, 87, 0.14);
+  color: #fff7ec;
+  outline: none;
+}
+
+.mumu-scripts__stage {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  opacity: 0;
+  transition: opacity 0.7s ease 0.08s;
+}
+
+.mumu-scripts.is-ready .mumu-scripts__stage {
+  opacity: 1;
+}
+
+.mumu-scripts.is-dim .mumu-scripts__stage {
+  opacity: 0.3;
+}
+
+/* 防呆：两侧的单步切换按钮，不抢封面视觉 */
+.mumu-scripts__arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0 0 2px;
+  border: 1px solid rgba(255, 244, 230, 0.16);
+  border-radius: 50%;
+  background: rgba(12, 8, 22, 0.38);
+  color: rgba(255, 244, 230, 0.6);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transform: translateY(-50%);
+  touch-action: manipulation;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.mumu-scripts__arrow--prev {
+  left: clamp(8px, 2.2vw, 30px);
+}
+
+.mumu-scripts__arrow--next {
+  right: clamp(8px, 2.2vw, 30px);
+}
+
+.mumu-scripts__arrow:hover,
+.mumu-scripts__arrow:focus-visible {
+  border-color: rgba(255, 157, 87, 0.65);
+  background: rgba(255, 157, 87, 0.16);
+  color: #fff7ec;
+  outline: none;
+}
+
+.mumu-scripts__arrow:active {
+  transform: translateY(-50%) scale(0.94);
+}
+
+/* 居中封面正下方的「开始体验」：裸露文字，不加玻璃框。
+   热区撑到约 42px 高，再用负 margin-top 抵掉多出来的上半部分，
+   字仍停在 selector.js 算出的原位置（框底 + 14px）。 */
+.mumu-scripts__go {
+  position: absolute;
+  z-index: 5;
+  margin: -10px 0 0;
+  padding: 12px 22px;
+  border: 0;
+  background: none;
+  color: rgba(255, 247, 236, 0.92);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.26em;
+  text-indent: 0.26em;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transform: translateX(-50%);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+  transition: color 0.22s ease, text-shadow 0.22s ease, opacity 0.28s ease;
+}
+
+.mumu-scripts__go.is-shift {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mumu-scripts__go:hover,
+.mumu-scripts__go:focus-visible {
+  color: #fff;
+  text-shadow: 0 0 18px rgba(255, 224, 190, 0.6), 0 2px 14px rgba(0, 0, 0, 0.55);
+  outline: none;
+}
+
+.mumu-scripts__go:active {
+  opacity: 0.72;
+}
+
+.mumu-scripts.is-dim .mumu-scripts__go {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mumu-scripts.is-dim .mumu-scripts__title,
+.mumu-scripts.is-dim .mumu-scripts__meta,
+.mumu-scripts.is-dim .mumu-scripts__brief,
+.mumu-scripts.is-dim .mumu-scripts__foot {
+  opacity: 0.18;
+}
+
+/* ---------- 字幕 ---------- */
+.mumu-scripts__caption {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  padding: 4px 26px 2px;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+.mumu-scripts__title {
+  font-family: var(--font-serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: clamp(23px, 2.4vw, 34px);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  color: #fff7ec;
+  text-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+  animation: mumu-scripts-caption 0.55s ease both;
+}
+
+.mumu-scripts__meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 9px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 244, 230, 0.46);
+}
+
+.mumu-scripts__kw {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 157, 87, 0.42);
+  background: rgba(255, 157, 87, 0.12);
+  color: #ffc08a;
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+}
+
+.mumu-scripts__dot {
+  color: rgba(255, 244, 230, 0.24);
+}
+
+.mumu-scripts__brief {
+  max-width: 720px;
+  margin: 9px auto 0;
+  font-size: 13px;
+  line-height: 1.7;
+  letter-spacing: 0.03em;
+  color: rgba(255, 244, 230, 0.56);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---------- 底栏 / 免责声明 / 提示 ---------- */
+.mumu-scripts__foot {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 34px 22px;
+  transition: opacity 0.35s ease;
+}
+
+.mumu-scripts__hint {
+  grid-column: 2;
+  justify-self: center;
+  font-size: 10.5px;
+  letter-spacing: 0.24em;
+  color: rgba(255, 244, 230, 0.32);
+  white-space: nowrap;
+}
+
+.mumu-scripts__count {
+  grid-column: 3;
+  justify-self: end;
+  font-family: var(--font-serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 11.5px;
+  letter-spacing: 0.24em;
+  color: rgba(255, 244, 230, 0.42);
+  font-variant-numeric: tabular-nums;
+}
+
+.mumu-scripts__disclaimer {
+  position: absolute;
+  left: 34px;
+  bottom: 18px;
+  z-index: 4;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 244, 230, 0.3);
+  user-select: none;
+}
+
+.mumu-scripts__notice {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  z-index: 12;
+  max-width: min(80vw, 460px);
+  padding: 11px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 244, 230, 0.18);
+  background: rgba(18, 12, 30, 0.86);
+  color: rgba(255, 244, 230, 0.86);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 10px);
+  transition: opacity 0.28s ease, transform 0.28s ease;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45);
+}
+
+.mumu-scripts__notice.is-show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.mumu-scripts__notice.is-warn {
+  border-color: rgba(255, 140, 120, 0.5);
+  color: #ffc2b8;
+}
+
+/* ---------- 剧情内的章节面板（.mumu-scripts--chapter） ----------
+   从舞台点「选章节」时不再铺一整页剧目选择：底色透明、环形卡带那几个区块
+   压根不生成，只留 veil + 右侧章节抽屉，舞台画面继续透在后面。
+   必须排在 .mumu-scripts 基础规则之后（同为单类选择器，后来者胜）。 */
+.mumu-scripts--chapter {
+  background: transparent;
+  animation: mumu-scripts-fade 0.24s ease both;
+}
+
+.mumu-scripts--chapter .mumu-scripts__bg,
+.mumu-scripts--chapter .mumu-scripts__grain {
+  display: none;
+}
+
+/* 面板下的托底：舞台白天很亮，veil 要比剧目选择里更实一点才压得住 */
+.mumu-scripts--chapter .mumu-scripts__drawer-veil {
+  background: rgba(7, 5, 13, 0.56);
+  backdrop-filter: blur(7px);
+}
+
+.mumu-scripts--chapter .mumu-scripts__disclaimer {
+  opacity: 0.55;
+}
+
+/* 头部收紧：剧目选择里的标题是两行 22px，这里压成一行小字。
+   不放在 @media (max-width: 720px) 里——844×390 / 812×375 宽度过不到那条，
+   而矮屏恰恰是这里最挤的地方（实测省下的 30px 让第四章不用滚）。 */
+.mumu-scripts--chapter .mumu-scripts__sheet-head {
+  padding: 13px 18px 9px;
+}
+
+.mumu-scripts--chapter .mumu-scripts__sheet-title {
+  font-size: 16px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mumu-scripts--chapter .mumu-scripts__sheet-meta {
+  margin-top: 3px;
+  font-size: 10.5px;
+}
+
+/* 剧情里只用来换章：导出整本 / 换封面 / 移除这些库管理动作留在剧目选择页。
+   省下的这一条（矮屏实测 71px）正好让第三章不用滚就能看见 */
+.mumu-scripts--chapter .mumu-scripts__sheet-foot {
+  display: none;
+}
+
+/* 关闭处用文字「返回剧情」，比一个 ✕ 更能说明点了会回哪。
+   基础 .mumu-scripts__sheet-close 在本块之后（1900+ 行），所以要写双类把特异性抬上去 */
+.mumu-scripts__sheet-close.mumu-scripts__sheet-close--label {
+  width: auto;
+  height: auto;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+}
+
+/* 章节面板没有剧目字幕区，提示改挂在面板底部居中 */
+.mumu-scripts--chapter .mumu-scripts__notice {
+  bottom: 24px;
+  left: 50%;
+  transform: translate(-50%, 6px);
+}
+
+.mumu-scripts--chapter .mumu-scripts__notice.is-show {
+  transform: translate(-50%, 0);
+}
+
+@keyframes mumu-scripts-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---------- 章节抽屉 ---------- */
+.mumu-scripts__drawer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  visibility: hidden;
+  pointer-events: none;
+  transition: visibility 0s linear 0.42s;
+}
+
+.mumu-scripts__drawer.is-open {
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.mumu-scripts__drawer-veil {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 5, 13, 0.62);
+  backdrop-filter: blur(5px);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.mumu-scripts__drawer.is-open .mumu-scripts__drawer-veil {
+  opacity: 1;
+}
+
+.mumu-scripts__sheet {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: min(462px, 94vw);
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(255, 244, 230, 0.12);
+  background: linear-gradient(160deg, rgba(30, 20, 46, 0.98), rgba(12, 8, 20, 0.99));
+  box-shadow: -34px 0 80px rgba(0, 0, 0, 0.55);
+  transform: translateX(103%);
+  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mumu-scripts__drawer.is-open .mumu-scripts__sheet {
+  transform: translateX(0);
+}
+
+.mumu-scripts__sheet-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 26px 24px 16px;
+  border-bottom: 1px solid rgba(255, 244, 230, 0.08);
+}
+
+.mumu-scripts__sheet-titles {
+  min-width: 0;
+}
+
+.mumu-scripts__sheet-title {
+  font-family: var(--font-serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.35;
+  color: #fff7ec;
+}
+
+.mumu-scripts__sheet-meta {
+  margin-top: 6px;
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 244, 230, 0.42);
+}
+
+.mumu-scripts__sheet-close {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 244, 230, 0.16);
+  background: rgba(255, 244, 230, 0.04);
+  color: rgba(255, 244, 230, 0.72);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.mumu-scripts__sheet-close:hover,
+.mumu-scripts__sheet-close:focus-visible {
+  border-color: rgba(255, 157, 87, 0.6);
+  color: #ffc08a;
+  outline: none;
+}
+
+.mumu-scripts__chap-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mumu-scripts__chap-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.mumu-scripts__chap-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 244, 230, 0.14);
+}
+
+.mumu-scripts__chap-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mumu-scripts__chap {
+  display: flex;
+  align-items: stretch;
+  gap: 7px;
+}
+
+.mumu-scripts__chap-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 244, 230, 0.09);
+  background: rgba(255, 244, 230, 0.035);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.mumu-scripts__chap-main:hover,
+.mumu-scripts__chap-main:focus-visible {
+  border-color: rgba(255, 157, 87, 0.52);
+  background: rgba(255, 157, 87, 0.09);
+  transform: translateX(2px);
+  outline: none;
+}
+
+.mumu-scripts__chap-no {
+  font-family: var(--font-serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 19px;
+  color: rgba(255, 244, 230, 0.3);
+  font-variant-numeric: tabular-nums;
+}
+
+.mumu-scripts__chap-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.mumu-scripts__chap-name {
+  font-family: var(--font-serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 14.5px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 244, 230, 0.9);
+  line-height: 1.5;
+}
+
+.mumu-scripts__chap-brief {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: rgba(255, 244, 230, 0.38);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+.mumu-scripts__chip {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 157, 87, 0.12);
+  color: #f0b98a;
+  font-family: var(--font-sans, "PingFang SC", sans-serif);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+.mumu-scripts__chip.is-end {
+  background: rgba(255, 122, 138, 0.14);
+  color: #ffb3bc;
+}
+
+.mumu-scripts__chap-go {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 193, 138, 0.72);
+  white-space: nowrap;
+}
+
+.mumu-scripts__chap-export {
+  flex: none;
+  width: 50px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 244, 230, 0.09);
+  background: rgba(255, 244, 230, 0.03);
+  color: rgba(255, 244, 230, 0.42);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.mumu-scripts__chap-export:hover,
+.mumu-scripts__chap-export:focus-visible {
+  border-color: rgba(255, 157, 87, 0.5);
+  color: #ffc08a;
+  outline: none;
+}
+
+.mumu-scripts__sheet-foot {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 20px 22px;
+  border-top: 1px solid rgba(255, 244, 230, 0.08);
+}
+
+.mumu-scripts__sheet-foot[hidden] {
+  display: none;
+}
+
+.mumu-scripts__action {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 244, 230, 0.16);
+  background: rgba(255, 244, 230, 0.04);
+  color: rgba(255, 244, 230, 0.68);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.mumu-scripts__action:hover,
+.mumu-scripts__action:focus-visible {
+  border-color: rgba(255, 157, 87, 0.55);
+  background: rgba(255, 157, 87, 0.1);
+  color: #ffe0c4;
+  outline: none;
+}
+
+.mumu-scripts__action.is-danger:hover,
+.mumu-scripts__action.is-danger:focus-visible {
+  border-color: rgba(255, 122, 138, 0.55);
+  background: rgba(255, 122, 138, 0.1);
+  color: #ffc2c8;
+}
+
+/* ---------- 3D 环形封面 ---------- */
+.mumu-cc {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  user-select: none;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+
+.mumu-cc[data-ready] {
+  opacity: 1;
+}
+
+.mumu-cc[data-draggable] {
+  cursor: grab;
+}
+
+.mumu-cc[data-dragging] {
+  cursor: grabbing;
+}
+
+.mumu-cc__view {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 7%, #000 93%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 7%, #000 93%, transparent 100%);
+}
+
+.mumu-cc__stage {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.mumu-cc__camera {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.mumu-cc__ring {
+  position: absolute;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.mumu-cc__card {
+  position: absolute;
+  transform-style: preserve-3d;
+  pointer-events: auto;
+}
+
+.mumu-cc__tile {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+
+.mumu-cc__frame {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #17102a;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.mumu-cc__photo {
+  position: absolute;
+  display: block;
+  object-fit: cover;
+  object-position: center;
+  user-select: none;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+.mumu-cc__inner {
+  position: absolute;
+  inset: 0;
+  background: #0c0816;
+  pointer-events: none;
+}
+
+.mumu-cc__shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(9, 6, 18, 0.42), rgba(9, 6, 18, 0) 26%, rgba(9, 6, 18, 0) 62%, rgba(9, 6, 18, 0.55)),
+    rgba(8, 5, 16, 0.55);
+  opacity: var(--mumu-cc-depth, 0);
+}
+
+.mumu-cc__face {
+  position: absolute;
+  pointer-events: none;
+  border-radius: var(--mumu-cc-radius, 14px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 30%);
+}
+
+.mumu-cc__face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 244, 230, 0.35);
+  box-shadow: inset 0 0 40px rgba(255, 180, 120, 0.08);
+  opacity: var(--mumu-cc-focus, 0);
+  transition: opacity 0.25s ease;
+}
+
+.mumu-cc__label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 26px 14px 13px;
+  border-radius: 0 0 var(--mumu-cc-radius, 14px) var(--mumu-cc-radius, 14px);
+  background: linear-gradient(180deg, rgba(9, 6, 18, 0), rgba(9, 6, 18, 0.78));
+  opacity: var(--mumu-cc-focus, 0);
+}
+
+.mumu-cc__label-t {
+  font-family: var(--font-serif, "Noto Serif SC", "Songti SC", serif);
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  line-height: 1.45;
+  color: rgba(255, 247, 236, 0.94);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+.mumu-cc__label-s {
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: rgba(255, 208, 168, 0.68);
+}
+
+.mumu-cc__live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@keyframes mumu-scripts-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mumu-scripts-caption {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- 窄屏 ---------- */
+@media (max-width: 900px) {
+  .mumu-scripts__head {
+    padding: 18px 20px 4px;
+  }
+
+  .mumu-scripts__caption {
+    padding: 2px 18px 0;
+  }
+
+  .mumu-scripts__brief {
+    max-width: 560px;
+    font-size: 12.5px;
+  }
+
+  .mumu-scripts__foot {
+    padding: 10px 20px 18px;
+  }
+
+  .mumu-scripts__disclaimer {
+    left: 20px;
+    bottom: 14px;
+  }
+
+  .mumu-scripts__arrow {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+  }
+
+  .mumu-scripts__arrow--prev {
+    left: 12px;
+  }
+
+  .mumu-scripts__arrow--next {
+    right: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .mumu-scripts__brand {
+    gap: 10px;
+  }
+
+  .mumu-scripts__mark {
+    font-size: 17px;
+    letter-spacing: 0.26em;
+  }
+
+  .mumu-scripts__sub {
+    display: none;
+  }
+
+  .mumu-scripts__link {
+    padding: 8px 13px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+
+  .mumu-scripts__title {
+    font-size: 21px;
+  }
+
+  .mumu-scripts__meta {
+    margin-top: 7px;
+    font-size: 12px;
+  }
+
+  .mumu-scripts__brief {
+    max-width: 88vw;
+    margin-top: 7px;
+    -webkit-line-clamp: 2;
+  }
+
+  .mumu-scripts__hint {
+    display: none;
+  }
+
+  .mumu-scripts__foot {
+    grid-template-columns: 1fr auto;
+    padding: 8px 18px 16px;
+  }
+
+  .mumu-scripts__count {
+    grid-column: 2;
+  }
+
+  .mumu-scripts__disclaimer {
+    left: 18px;
+    bottom: 12px;
+    max-width: calc(100vw - 130px);
+    font-size: 9.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mumu-scripts__arrow {
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+  }
+
+  .mumu-scripts__arrow--prev {
+    left: 6px;
+  }
+
+  .mumu-scripts__arrow--next {
+    right: 6px;
+  }
+
+  .mumu-scripts__notice {
+    bottom: calc(100% + 8px);
+    font-size: 12px;
+    padding: 9px 16px;
+  }
+
+  .mumu-scripts__sheet {
+    width: 100%;
+    border-left: none;
+  }
+
+  .mumu-scripts__sheet-head {
+    padding: 20px 18px 14px;
+  }
+
+  .mumu-scripts__sheet-title {
+    font-size: 20px;
+  }
+
+  .mumu-scripts__chap-list {
+    padding: 12px 12px 16px;
+  }
+
+  .mumu-scripts__chap-main {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 9px;
+    padding: 11px 12px;
+  }
+
+  .mumu-scripts__chap-export {
+    width: 44px;
+  }
+
+  .mumu-scripts__sheet-foot {
+    padding: 12px 16px 18px;
+  }
+
+  .mumu-dlg-role {
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+  }
+}
+
+@media (max-height: 640px) {
+  .mumu-scripts__head {
+    padding-top: 14px;
+  }
+
+  .mumu-scripts__title {
+    font-size: 20px;
+  }
+
+  .mumu-scripts__brief {
+    display: none;
+  }
+
+  .mumu-scripts__foot {
+    padding-bottom: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mumu-scripts,
+  .mumu-scripts__stage,
+  .mumu-scripts__caption,
+  .mumu-scripts__foot,
+  .mumu-scripts__title,
+  .mumu-scripts__notice,
+  .mumu-scripts__drawer,
+  .mumu-scripts__drawer-veil,
+  .mumu-scripts__sheet,
+  .mumu-cc,
+  .mumu-cc__face::after {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ============================================================
+   终幕结算卡（P2-4）
+   只在曲目终章 / 单章剧本的结束页出现，位于落幕文案与按钮之间。
+   ============================================================ */
+.mumu-finale {
+  max-height: 38vh;
+  margin-top: 16px;
+  padding: 16px 18px 17px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 157, 87, 0.28);
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255, 157, 87, 0.14), transparent 55%),
+    linear-gradient(165deg, rgba(37, 24, 52, 0.78), rgba(17, 10, 27, 0.86));
+  box-shadow: inset 0 1px 0 rgba(255, 244, 230, 0.06), 0 14px 36px rgba(0, 0, 0, 0.32);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 157, 87, 0.35) transparent;
+  animation: mumu-finale-in 0.5s ease-out both;
+}
+
+.mumu-finale[hidden] {
+  display: none;
+}
+
+.mumu-finale::-webkit-scrollbar {
+  width: 5px;
+}
+
+.mumu-finale::-webkit-scrollbar-thumb {
+  border-radius: 99px;
+  background: rgba(255, 157, 87, 0.32);
+}
+
+.mumu-finale__kicker {
+  margin: 0;
+  font-family: var(--mumu-font-sans);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.32em;
+  color: rgba(255, 193, 138, 0.72);
+}
+
+.mumu-finale__title {
+  margin: 6px 0 0;
+  font-family: var(--mumu-font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.06em;
+  color: var(--mumu-color-cream);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+
+.mumu-finale__sub {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  letter-spacing: 0.24em;
+  color: rgba(255, 244, 230, 0.48);
+}
+
+.mumu-finale__rows {
+  display: grid;
+  gap: 9px;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.mumu-finale__row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+
+.mumu-finale__row dt {
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  color: rgba(255, 193, 138, 0.66);
+  white-space: nowrap;
+}
+
+.mumu-finale__row dd {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: rgba(255, 244, 230, 0.86);
+  overflow-wrap: anywhere;
+}
+
+.mumu-finale__line {
+  font-family: var(--mumu-font-serif);
+  font-size: 14px;
+  color: #ffe9d2;
+}
+
+.mumu-finale__line em {
+  font-style: normal;
+  color: rgba(255, 193, 138, 0.82);
+}
+
+.mumu-finale__cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mumu-finale__card {
+  padding: 2px 10px;
+  border: 1px solid rgba(255, 157, 87, 0.34);
+  border-radius: 999px;
+  background: rgba(255, 157, 87, 0.1);
+  color: #ffd9b8;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+@keyframes mumu-finale-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 560px) {
+  .mumu-finale {
+    max-height: 34vh;
+    margin-top: 12px;
+    padding: 13px 13px 14px;
+    border-radius: 14px;
+  }
+
+  .mumu-finale__title {
+    font-size: 17px;
+  }
+
+  .mumu-finale__row {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .mumu-finale__row dt {
+    font-size: 10px;
+    letter-spacing: 0.16em;
+  }
+
+  .mumu-finale__row dd {
+    font-size: 12.5px;
+    line-height: 1.7;
+  }
+
+  .mumu-finale__line {
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mumu-finale {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   曲目第一章开场动画（四部曲目共用外壳）
+   ------------------------------------------------------------
+   全屏生长动画 + 裸露标题 / 「点击任意处开始剧本」提示 / 右上「跳过动画」。
+   画布尺寸与字体随视口伸缩；配色由 .mumu-opening--<key> 主题变量决定，
+   青绿是亮底深字，其余三部是深底亮字。
+   ============================================================ */
+.mumu-opening {
+  --op-bg: #081019;
+  --op-title: #ece2c0;
+  --op-hint: #fdf3d2;
+  --op-veil: 4, 9, 16;        /* 标题背后光晕（亮画面用深色，亮底画面用浅色） */
+  --op-veil-a: 0.5;
+  --op-veil-inset: -12% -16%; /* 光晕椭圆外扩，长标题 / 亮底曲目需要更宽 */
+  --op-glow: 227, 205, 132;   /* 文字外发光 */
+  --op-skip-bg: 6, 13, 21;
+  --op-skip-line: 236, 226, 192;
+  --op-skip-text: #f0e7c8;
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden;
+  background: var(--op-bg);
+  opacity: 1;
+  transition: opacity 0.42s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mumu-opening--cicada {
+  --op-bg: #0d0a08;
+  --op-title: #ffe9c4;
+  --op-hint: #fff2d4;
+  --op-veil: 16, 9, 5;
+  --op-veil-a: 0.52;
+  --op-glow: 246, 187, 94;
+  --op-skip-bg: 18, 11, 7;
+  --op-skip-line: 255, 233, 196;
+  --op-skip-text: #ffe9c4;
+}
+
+/* 青绿长卷：薄荷亮底，字是深墨绿，光晕改成白 */
+.mumu-opening--qinglv {
+  --op-bg: #cfeadb;
+  --op-title: #0b332c;
+  --op-hint: #0e3b33;
+  --op-veil: 246, 253, 249;
+  --op-veil-a: 0.88;
+  --op-veil-inset: -34% -30%;
+  --op-glow: 255, 253, 242;
+  --op-skip-bg: 250, 255, 252;
+  --op-skip-line: 11, 51, 44;
+  --op-skip-text: #0b332c;
+}
+
+.mumu-opening--moonlight {
+  --op-bg: #070d18;
+  --op-title: #f0e2b6;
+  --op-hint: #fbf1d4;
+  --op-veil: 6, 11, 22;
+  --op-veil-a: 0.5;
+  --op-glow: 232, 200, 119;
+  --op-skip-bg: 8, 14, 26;
+  --op-skip-line: 240, 226, 182;
+  --op-skip-text: #f2e6c4;
+}
+
+/* is-cold：setup 里的重活（造粒子、填空间网格、首帧纹理上传）跑完之前先把面板压住，
+   撤掉这个类时淡入 —— 观众看到的第一帧就是稳定帧率的画面，而不是开头那几帧长任务 */
+.mumu-opening.is-cold {
+  opacity: 0;
+  transition: opacity 0.26s ease;
+}
+
+.mumu-opening.is-ready {
+  cursor: pointer;
+}
+
+/* 建场那几百毫秒里屏幕还是空的幕布（底涂是主线程上的长任务，躲不掉）。
+   给幕布压一层极缓的呼吸光，让它读作「幕启」而不是「卡死」——
+   纯 CSS 合成器动画，主线程被 paintUnder 占满时照样在走。第一次真画后自动消失。 */
+.mumu-opening:not(.is-painted)::before {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  pointer-events: none;
+  background: radial-gradient(46% 42% at 50% 46%, rgba(var(--op-glow), 0.14), transparent 70%);
+  animation: mumu-opening-coldbreath 2.4s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+@keyframes mumu-opening-coldbreath {
+  0%, 100% { opacity: 0.3; transform: scale(0.98); }
+  50% { opacity: 0.85; transform: scale(1.05); }
+}
+
+.mumu-opening.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mumu-opening__sky {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100vw, 160vh);
+  height: max(100vh, 62.5vw);
+  width: max(100vw, 160svh);
+  height: max(100svh, 62.5vw);
+  display: block;
+}
+
+/* 第一次 present 之前 sky 是透明的，观众只看到幕布底色。画上去时淡入，
+   避免「纯色幕布 → 整幅画」的硬切（分帧建场让这一刀变得更明显，所以要补上） */
+.mumu-opening__sky {
+  opacity: 0;
+  transition: opacity 0.55s ease;
+}
+
+.mumu-opening.is-painted .mumu-opening__sky {
+  opacity: 1;
+}
+
+/* 裸露居中标题 + 提示：无边框 / 无底色 / 无容器；
+   只有标题背后一层极淡的椭圆光晕，压住画面最亮处，保证小字可读 */
+.mumu-opening__cap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(92vw, 900px);
+  transform: translate(-50%, -46%);
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 0;
+  isolation: isolate;
+  transition: opacity 2.2s ease, transform 2.2s ease;
+}
+
+.mumu-opening__cap::before {
+  content: "";
+  position: absolute;
+  inset: var(--op-veil-inset, -12% -16%);
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%,
+    rgba(var(--op-veil), var(--op-veil-a)) 0%,
+    rgba(var(--op-veil), calc(var(--op-veil-a) * 0.6)) 48%,
+    rgba(var(--op-veil), calc(var(--op-veil-a) * 0.24)) 68%,
+    rgba(var(--op-veil), 0) 80%);
+}
+
+.mumu-opening__cap.is-show {
+  opacity: 1;
+  transform: translate(-50%, -50%);
+}
+
+.mumu-opening__title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(17px, 4.6vw, 46px);
+  line-height: 1.7;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  color: var(--op-title);
+  text-shadow:
+    0 0 18px rgba(var(--op-veil), 0.85),
+    0 0 46px rgba(var(--op-veil), 0.6),
+    0 0 60px rgba(var(--op-glow), 0.28);
+}
+
+.mumu-opening__sub {
+  display: inline-block;
+}
+
+.mumu-opening__hint {
+  margin: clamp(18px, 3.4vh, 34px) auto 0;
+  font-family: var(--serif);
+  font-size: clamp(14px, 1.5vw, 18px);
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  color: var(--op-hint);
+  opacity: 0;
+  text-shadow:
+    0 1px 2px rgba(var(--op-veil), 0.95),
+    0 0 12px rgba(var(--op-veil), 0.95),
+    0 0 22px rgba(var(--op-veil), 0.8),
+    0 0 28px rgba(var(--op-glow), 0.32);
+  transition: opacity 1.4s ease 0.45s;
+}
+
+.mumu-opening__cap.is-show .mumu-opening__hint {
+  opacity: 0.92;
+  animation: mumu-opening-breathe 2.8s ease-in-out 2.1s infinite;
+}
+
+/* 青绿是亮底深字：山脊本身是中间调，墨绿字会被吃掉，
+   所以光晕改用更宽更实的白，字缘再补一层白色柔光把笔锋从山体里拎出来；
+   亮底上的呼吸动画也要抬高下限，否则小字在波谷会融进山体 */
+.mumu-opening--qinglv .mumu-opening__title {
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 0.96),
+    0 0 26px rgba(255, 253, 242, 0.9),
+    0 0 54px rgba(255, 253, 242, 0.7);
+}
+
+.mumu-opening--qinglv .mumu-opening__hint {
+  text-shadow:
+    0 1px 2px rgba(255, 255, 255, 0.95),
+    0 0 12px rgba(255, 255, 255, 0.95),
+    0 0 24px rgba(255, 253, 242, 0.85);
+}
+
+/* 小号但显眼的「跳过动画」 */
+.mumu-opening__skip {
+  position: absolute;
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  right: calc(20px + env(safe-area-inset-right, 0px));
+  z-index: 2;
+  appearance: none;
+  border: 1px solid rgba(var(--op-skip-line), 0.55);
+  border-radius: 999px;
+  padding: 8px 15px;
+  background: rgba(var(--op-skip-bg), 0.52);
+  color: var(--op-skip-text);
+  font-family: var(--serif);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow:
+    0 0 0 1px rgba(var(--op-skip-bg), 0.35),
+    0 6px 18px rgba(0, 0, 0, 0.38),
+    inset 0 0 12px rgba(var(--op-glow), 0.1);
+  transition: border-color 0.25s ease, color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.mumu-opening__skip:hover {
+  border-color: rgba(var(--op-skip-line), 0.9);
+  background: rgba(var(--op-skip-bg), 0.66);
+  box-shadow:
+    0 0 0 1px rgba(var(--op-skip-bg), 0.35),
+    0 6px 22px rgba(0, 0, 0, 0.45),
+    0 0 18px rgba(var(--op-glow), 0.22),
+    inset 0 0 14px rgba(var(--op-glow), 0.16);
+}
+
+.mumu-opening--qinglv .mumu-opening__skip:hover {
+  color: #062822;
+}
+
+.mumu-opening--qinglv .mumu-opening__skip {
+  box-shadow:
+    0 0 0 1px rgba(var(--op-skip-line), 0.18),
+    0 6px 18px rgba(11, 51, 44, 0.18),
+    inset 0 0 12px rgba(255, 255, 255, 0.5);
+}
+
+.mumu-opening__skip:focus-visible {
+  outline: 2px solid rgba(var(--op-skip-line), 0.75);
+  outline-offset: 2px;
+}
+
+@keyframes mumu-opening-breathe {
+  0%, 100% { opacity: 0.92; }
+  50% { opacity: 0.55; }
+}
+
+@keyframes mumu-opening-breathe-light {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.mumu-opening--qinglv .mumu-opening__cap.is-show .mumu-opening__hint {
+  opacity: 1;
+  animation-name: mumu-opening-breathe-light;
+}
+
+@media (max-width: 560px) {
+  .mumu-opening__cap {
+    width: 94vw;
+  }
+
+  .mumu-opening__hint {
+    font-size: 14px;
+    letter-spacing: 0.26em;
+    text-indent: 0.26em;
+  }
+
+  .mumu-opening__skip {
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    padding: 7px 11px;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-indent: 0.16em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mumu-opening,
+  .mumu-opening__cap,
+  .mumu-opening__hint {
+    transition: none;
+  }
+
+  /* 减少动态时不做预热淡入：开场层直接可见，点一下就能开演 */
+  .mumu-opening.is-cold {
+    opacity: 1;
+  }
+
+  .mumu-opening__sky {
+    transition: none;
+  }
+
+  /* 呼吸光属于装饰动效，减少动态时只留静态微光 */
+  .mumu-opening:not(.is-painted)::before {
+    animation: none;
+    opacity: 0.5;
+  }
+
+  .mumu-opening__cap.is-show .mumu-opening__hint {
+    animation: none;
+    opacity: 0.92;
+  }
+}
+
+/* ============================================================
+   滑行药丸（scripts/glide-nav.js）· 首页右上功能组 + 剧情舞台右上功能组
+   轨道本身不再铺玻璃底，静置时只剩一行淡字（舞台那组多一块暗托板）；
+   悬停时一枚暖白药丸在条目间滑行，墨色文字层被裁成药丸形状覆在上面。
+   ============================================================ */
+/* 两组共用：条目一律由 scripts/glide-nav.js 打上 data-mg-item，选择器只认这个标记，
+   这样 .glass-btn / .stage-btn 两套皮都能被同一条规则接管（叠写 .mumu-glide
+   是为了压过 main.css 里 .top-actions .glass-btn 这类双类媒体规则）。 */
+.mumu-glide {
+  --mg-h: 40px;
+  --mg-x: 17px;
+  --mg-icon-x: 13px;
+  --mg-gap: 2px;
+  --mg-face: 9px;
+  --mg-font: 14px;
+  --mg-track: 0.06em;
+  --mg-text: rgba(255, 244, 230, 0.6);
+  --mg-lit: rgba(255, 244, 230, 0.78);
+  --mg-strong: #fff6ea;
+  --mg-pill: linear-gradient(180deg, #fffaf0 0%, #f7e3c8 100%);
+  --mg-pill-ink: #2a1f33;
+  --mg-pill-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 8px 18px -8px rgba(20, 10, 30, 0.62),
+    0 10px 26px -14px rgba(255, 150, 90, 0.5);
+  --mg-ring: rgba(255, 244, 230, 0.55);
+  /* 托板：剧场上白天/黄昏亮度不定，纯文字会被洗掉，所以那一组在轨道背后垫一块暗板。
+     默认 transparent = 首页不铺底，静置时只剩一行淡字。 */
+  --mg-scrim: transparent;
+  --mg-scrim-brd: transparent;
+  --mg-scrim-blur: none;
+  --mg-scrim-shadow: none;
+  --mg-scrim-y: 0px;
+  --mg-scrim-x: 0px;
+}
+
+.mumu-glide.mumu-glide { gap: 0; }
+
+.mumu-glide__track {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--mg-gap);
+  height: var(--mg-h);
+}
+
+.mumu-glide__track::before {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--mg-scrim-y)) calc(-1 * var(--mg-scrim-x));
+  /* 托板必须沉到文字底下：定位伪元素默认排在普通流内容之上，
+     再叠 backdrop-filter 就会把按钮自己的字糊进模糊里（实测文字整条消失）。 */
+  z-index: -1;
+  border-radius: 999px;
+  background: var(--mg-scrim);
+  border: 1px solid var(--mg-scrim-brd);
+  box-shadow: var(--mg-scrim-shadow);
+  backdrop-filter: var(--mg-scrim-blur);
+  -webkit-backdrop-filter: var(--mg-scrim-blur);
+  pointer-events: none;
+}
+
+/* 真按钮与墨层共用一套字体度量，否则墨字与亮字会错开半个像素。 */
+.mumu-glide.mumu-glide [data-mg-item],
+.mumu-glide.mumu-glide .mumu-glide__ink {
+  font-family: var(--sans);
+  font-size: var(--mg-font);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: var(--mg-track);
+}
+
+.mumu-glide.mumu-glide [data-mg-item] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mg-face);
+  height: 100%;
+  padding: 0 var(--mg-x);
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--mg-text);
+  white-space: nowrap;
+  overflow: hidden;
+  transform: none;
+  transition: color 0.25s ease;
+}
+
+.mumu-glide.mumu-glide [data-mg-item][data-lit] { color: var(--mg-strong); }
+.mumu-glide.mumu-glide [data-mg-item]:hover {
+  transform: none;
+  background: none;
+  box-shadow: none;
+  color: var(--mg-lit);
+}
+.mumu-glide.mumu-glide [data-mg-item]:focus-visible {
+  outline: none;
+  color: var(--mg-strong);
+}
+.mumu-glide.mumu-glide [data-mg-item] .gi { font-size: 15px; line-height: 1; opacity: 0.95; }
+.mumu-glide.mumu-glide [data-mg-item].icon-only { padding: 0 var(--mg-icon-x); }
+.mumu-glide.mumu-glide [data-mg-item].icon-only .gi { font-size: 17px; }
+.mumu-glide.mumu-glide [data-mg-item].muted { opacity: 1; color: rgba(255, 244, 230, 0.38); }
+.mumu-glide.mumu-glide [data-mg-item].muted[data-lit],
+.mumu-glide.mumu-glide [data-mg-item].muted:hover { color: var(--mg-lit); }
+
+/* 滑行药丸 */
+.mumu-glide__pill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  border-radius: 999px;
+  background: var(--mg-pill);
+  box-shadow: var(--mg-pill-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  will-change: transform, width, opacity;
+}
+
+.mumu-glide[data-mg-focus] .mumu-glide__pill {
+  box-shadow: var(--mg-pill-shadow), 0 0 0 2px var(--mg-ring);
+}
+
+/* 墨层：深色的一份克隆文字，clip-path 精确套在药丸矩形里 */
+.mumu-glide__ink {
+  position: absolute;
+  inset: 0;
+  color: var(--mg-pill-ink);
+  pointer-events: none;
+  opacity: 0;
+  clip-path: inset(0 100% 0 0 round 999px);
+}
+
+.mumu-glide__ink-item {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 克隆体只借排版，不继承按钮的皮肤。 */
+.mumu-glide.mumu-glide .mumu-glide__ink [data-mg-twin] {
+  gap: var(--mg-face);
+  height: auto;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  transform: none;
+  overflow: visible;
+}
+
+/* 剧情舞台右上功能组：同一套滑行药丸，压一档字号，底下垫暗色托板。
+   托板让左侧的「← 返回首页」小 chip 与这一组仍像一家人。 */
+.mumu-glide.stage-top-right {
+  --mg-h: 32px;
+  --mg-x: 13px;
+  --mg-icon-x: 11px;
+  --mg-gap: 2px;
+  --mg-face: 0px;
+  --mg-font: 13px;
+  --mg-track: 0.04em;
+  --mg-text: rgba(255, 244, 230, 0.74);
+  --mg-lit: rgba(255, 244, 230, 0.9);
+  --mg-scrim: rgba(18, 11, 28, 0.46);
+  --mg-scrim-brd: rgba(255, 244, 230, 0.16);
+  --mg-scrim-blur: blur(10px);
+  --mg-scrim-shadow: 0 8px 22px -14px rgba(8, 4, 16, 0.8);
+  --mg-scrim-y: 5px;
+  --mg-scrim-x: 6px;
+  --mg-pill-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 6px 14px -7px rgba(8, 4, 16, 0.78),
+    0 8px 20px -12px rgba(255, 150, 90, 0.42);
+}
+
+@media (max-width: 720px) {
+  .mumu-glide {
+    --mg-h: 34px;
+    --mg-x: 12px;
+    --mg-icon-x: 10px;
+    --mg-gap: 1px;
+  }
+
+  .mumu-glide.mumu-glide [data-mg-item] .gi { font-size: 16px; }
+
+  .mumu-glide.stage-top-right {
+    --mg-h: 30px;
+    --mg-x: 10px;
+    --mg-icon-x: 9px;
+    --mg-font: 12px;
+    --mg-scrim-y: 4px;
+    --mg-scrim-x: 5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mumu-glide.mumu-glide [data-mg-item] { transition: none; }
+}
+
+/* ============================================================
+   横屏引导：手机竖屏时盖一层「请横屏体验」
+   只覆盖画面，不改布局；「仍以竖屏继续」写入 sessionStorage，
+   转成横屏即清掉记忆，下次再竖屏还能问一次。
+   ============================================================ */
+.mumu-rotate {
+  position: fixed; inset: 0; z-index: 120;
+  display: flex; align-items: center; justify-content: center;
+  padding: 26px 22px;
+  background: radial-gradient(120% 92% at 50% 42%, rgba(32,21,55,0.95), rgba(9,6,18,0.98));
+  backdrop-filter: blur(10px);
+  text-align: center; color: var(--cream);
+}
+.mumu-rotate[hidden] { display: none; }
+.mumu-rotate__inner { width: min(320px, 100%); }
+.mumu-rotate__phone {
+  height: 84px; display: grid; place-items: center; margin-bottom: 20px;
+}
+.mumu-rotate__phone i {
+  display: block; width: 38px; height: 62px; border-radius: 8px;
+  border: 2px solid rgba(255,220,180,0.78);
+  box-shadow: 0 0 22px rgba(255,157,87,0.26), inset 0 0 12px rgba(255,200,150,0.12);
+  animation: mumu-rotate-phone 2.8s ease-in-out infinite;
+}
+@keyframes mumu-rotate-phone {
+  0%, 16% { transform: rotate(0deg); }
+  44%, 72% { transform: rotate(-90deg); }
+  100% { transform: rotate(0deg); }
+}
+.mumu-rotate__title {
+  font-family: var(--serif); font-size: 21px; letter-spacing: 0.16em;
+  margin-bottom: 10px; color: #fff7ef;
+}
+.mumu-rotate__sub {
+  font-size: 12.5px; line-height: 1.9; letter-spacing: 0.04em;
+  color: rgba(255,244,230,0.72); margin-bottom: 24px;
+}
+.mumu-rotate__skip {
+  padding: 11px 20px; border-radius: 999px; cursor: pointer;
+  background: transparent; border: 1px solid rgba(255,244,230,0.22);
+  color: rgba(255,244,230,0.74);
+  font-family: var(--sans); font-size: 12.5px; letter-spacing: 0.1em;
+  transition: background .2s ease, color .2s ease;
+}
+.mumu-rotate__skip:hover { background: rgba(255,244,230,0.12); color: var(--cream); }
+@media (prefers-reduced-motion: reduce) {
+  .mumu-rotate__phone i { animation: none; transform: rotate(-90deg); }
+}
+
+/* ==========================================================================
+   横屏手机（视口很矮，如 844×390）：图鉴整体收拢
+   —— 卡面按高度收列（455px 的典藏卡在 359px 的面板里看不全），
+   —— 效果调节面板改为面板内自带滚动，12 项不至于沉到屏幕外。
+   ========================================================================== */
+@media (max-height: 460px) {
+  .mumu-gallery { padding: 8px 10px; }
+
+  .mumu-gallery__panel { max-height: 100%; }
+
+  .mumu-gallery__head { gap: 14px; padding: 11px 18px 8px; }
+  .mumu-gallery__kicker { margin-bottom: 2px; font-size: 9.5px; }
+  .mumu-gallery__title { font-size: 19px; }
+  .mumu-gallery__count { margin-top: 3px; font-size: 11px; }
+  .mumu-gallery__close { width: 30px; height: 30px; font-size: 13px; }
+
+  .mumu-gallery__tabs { padding: 0 18px; }
+  .mumu-gallery__tab { padding: 6px 11px 8px; font-size: 12.5px; }
+
+  .mumu-gallery__scroll { padding: 12px 18px 18px; }
+  .mumu-gallery__section { margin-top: 18px; }
+  .mumu-gallery__section-head { margin-bottom: 9px; padding-bottom: 6px; }
+  .mumu-gallery__section-head h3 { font-size: 14.5px; }
+  .mumu-gallery__section-head span { font-size: 10.5px; }
+
+  .mumu-gallery__grid {
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: 12px 10px;
+  }
+
+  .mumu-gallery__grid--seven {
+    grid-template-columns: repeat(4, minmax(0, 168px));
+    justify-content: center;
+    gap: 12px 10px;
+  }
+
+  .mumu-gallery__disclaimer { padding: 6px 18px 8px; font-size: 9.5px; }
+
+  .mumu-gallery__detail { padding: 12px; }
+
+  .mumu-gallery__detail .mumu-holo-card { width: min(240px, 36vw, 74vh); }
+
+  /* 环形剧目的「开始体验」贴在居中封面正下方（selector.js placeGo：框底 + 14）。
+     矮视口里卡带按容器高等比铺满，框底几乎贴着容器底，那行字就会压到标题上，
+     所以先给容器封顶（封面随之变小），再用字幕区上内边距把标题让到按钮下方。 */
+  .mumu-scripts__head { padding: 8px 24px 4px; }
+  .mumu-scripts__stage { max-height: calc(100vh - 195px); }
+  .mumu-scripts__caption { padding-top: 40px; }
+  .mumu-scripts__meta { margin-top: 6px; font-size: 12px; }
+  .mumu-scripts__foot { padding: 6px 26px 12px; }
+
+  .mumu-ccard { grid-template-columns: minmax(0, 1fr) 258px; gap: 14px; }
+  .mumu-ccard__bar { gap: 10px; margin-bottom: 10px; }
+  .mumu-ccard__h { font-size: 16px; }
+  .mumu-ccard__grid {
+    grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+    gap: 12px;
+    min-height: 150px;
+  }
+
+  .mumu-ccard__panel {
+    gap: 7px;
+    padding: 11px 12px 12px;
+    max-height: calc(100vh - 170px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .mumu-ccard__panel-title { font-size: 14.5px; }
+  .mumu-ccard__panel-note { font-size: 10.5px; }
+  .mumu-ccard__row { gap: 3px 8px; }
+  .mumu-ccard__row label { font-size: 11.5px; }
+  .mumu-ccard__row select { min-width: 130px; padding: 4px 7px; font-size: 12px; }
+  .mumu-ccard__panel-hint { font-size: 10.5px; line-height: 1.6; }
+
+  /* 对话框身份小字与结算卡也要跟着矮视口收：身份行贴着名字下方；
+     结算卡不再自己套内滚动（max-height:none），溢出交给 .dialogue 那层封顶处理 */
+  .mumu-dlg-role { margin: -6px 0 6px; font-size: 10.5px; gap: 5px; }
+  .mumu-dlg-role::before { width: 12px; }
+  .mumu-finale {
+    max-height: none;
+    margin-top: 6px;
+    padding: 8px 12px 9px;
+    border-radius: 12px;
+  }
+  .mumu-finale__kicker { font-size: 8.5px; }
+  .mumu-finale__title { font-size: 14px; margin-top: 4px; }
+  .mumu-finale__sub { font-size: 10.5px; }
+  /* 行距靠 .mumu-finale__rows 的 gap 控制，row 自身不要再加 padding（基础样式是 grid gap:9） */
+  .mumu-finale__rows { gap: 5px; margin-top: 9px; }
+  .mumu-finale__row { padding: 0; }
+  .mumu-finale__row dt { font-size: 10px; }
+  .mumu-finale__row dd { font-size: 11.5px; line-height: 1.5; }
+  .mumu-finale__line { font-size: 11px; }
+  .mumu-finale__cards { gap: 4px; }
+  .mumu-finale__card { padding: 1px 8px; font-size: 10.5px; }
+}
