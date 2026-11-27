@@ -186,9 +186,10 @@ node serve.js        # → http://localhost:5173
 - **移动端必须是横屏体验**（2026-11-26 定的硬要求）：分镜与对话框都以横向为前提，竖屏只由
   `scripts/rotate-hint.js` 提示「请横屏体验」（短边 ≤500 且竖屏才提示，可「仍以竖屏继续」，
   横屏后自动清除，记忆写在 sessionStorage `mumu.rotate.dismiss`），**不要**改成竖屏分镜。
-  矮视口重排集中在 `@media (max-height: 460px)`：`styles/main.css`（首页主视觉 + 项目介绍三列 + 对话框与提示条）与
-  `styles/extensions.css`（剧目选择 / 图鉴 / 自定义卡片 / 结算）。改这几处后必须在 844×390 与
-  812×375 截图复验，同时确认 1440×900 桌面外观不变。剧目选择里「开始体验」贴在居中封面正下方，
+  矮视口重排集中在 `@media (max-height: 600px)`：`styles/main.css`（首页主视觉 + 项目介绍三列 + 对话框与提示条）与
+  `styles/extensions.css`（剧目选择 / 图鉴 / 自定义卡片 / 结算）。2026-11-26 真机实测：横屏手机的 CSS 视口约为
+  1400×524（物理像素 2800×1280，受浏览器地址栏影响），旧 460px 断点不会命中；600px 同时覆盖 1400×524、
+  844×390 与 812×375。改这几处后必须在这三种尺寸截图复验，同时确认 1440×900 桌面外观不变。剧目选择里「开始体验」贴在居中封面正下方，
   矮视口靠 `.mumu-scripts__stage { max-height }` 给容器封顶来腾出空间（`carousel.js` 的 `CAPTION_SPACE`
   为 0、字幕区不参与测量，所以别指望改字幕来避让）。
 - **矮屏对话框口径（2026-11-26 实测，改 `.dialogue` 前先看）**：桌面口径的对话框在 390 高屏上会占到
@@ -198,7 +199,8 @@ node serve.js        # → http://localhost:5173
   结算卡在矮视口改为 `max-height: none`（不再自己套内滚动，行距只靠 `.mumu-finale__rows { gap }` 控制，
   `__row` 上不要再加 padding），结束按钮用兄弟选择器
   `.mumu-finale:not([hidden]) ~ .dlg-choices` 转成横排药丸，整块再由 `.dialogue` 的
-  `max-height: calc(100vh - 62px); overflow-y: auto` 兜底（62 = 底部 14 + 顶栏留 48，免得压到「换个剧本」那一排）。
+  `max-height: calc(100vh - 62px); max-height: calc(100dvh - 62px); overflow-y: auto` 兜底（先写 vh 兼容旧浏览器，
+  再用 dvh 跟随手机地址栏收放；62 = 底部 14 + 顶栏留 48，免得压到「换个剧本」那一排）。
   实测 812×375 结束页 `client == scroll`（不需要滚）、三颗按钮全在屏内；844×390 结算卡完整可读。
   **两条踩过的坑**：① 同特异性的 `@media` 覆盖块必须排在基础规则**之后**（`.dialogue` 在 `main.css:359`，
   所以那段媒体查询写在 `.mumu-dlg-back` 之后，不是文件里已有的第 290 行那块）；② `.toast` 基础规则只有

@@ -285,9 +285,9 @@ html, body {
   .intro-note { margin-top: 14px; }
   .intro-foot { margin-top: 18px; }
 }
-/* 横屏手机（视口很矮，如 844×390）：主视觉按视口高重排，
+/* 横屏手机（视口 ≤600 高）：主视觉按视口高重排，
    标题不再被顶边裁掉，介绍页改三列把滚动量压到一屏多一点。 */
-@media (max-height: 460px) {
+@media (max-height: 600px) {
   .hero { top: 44%; max-width: min(560px, 66vw); }
   .hero-kicker { margin-bottom: 7px; }
   .hero-title { font-size: clamp(30px, 7.6vh, 46px); }
@@ -407,12 +407,12 @@ html, body {
 .mumu-dlg-back:focus-visible { outline: 1px solid rgba(255, 157, 87, 0.6); outline-offset: 3px; }
 .mumu-dlg-back[hidden] { display: none; }
 
-/* 横屏手机（视口 ≤460 高）：对话框必须给舞台让出高度。
+/* 横屏手机（视口 ≤600 高）：对话框必须给舞台让出高度。
    桌面口径下旁白屏占到视口高的 58%、选项屏 73%，人物下半身和道具都被压在板子下面；
    实测压到旁白 18–23% / 选项 38%（844×390，见 .tmp-shots/w1-stage-390.jpg），
    同时保持字仍可读、热区不缩。
    本块必须排在上面基础规则之后（同特异性，后来者胜）。 */
-@media (max-height: 460px) {
+@media (max-height: 600px) {
   .dialogue {
     bottom: 14px; width: min(720px, 94vw);
     padding: 13px 20px 12px; min-height: 0; border-radius: 14px;
@@ -420,7 +420,9 @@ html, body {
        会把对话框顶到屏幕外（实测 top:-7）。这里给整块封顶并让它自己滚（兜底），
        结算卡内部就不再套第二层滚动（extensions.css 里 max-height:none）；
        62px = 底部 14 + 顶部留给顶栏 48，保证不压到「换个剧本」那一排。 */
-    max-height: calc(100vh - 62px); overflow-y: auto; overscroll-behavior: contain;
+    max-height: calc(100vh - 62px);
+    max-height: calc(100dvh - 62px);
+    overflow-y: auto; overscroll-behavior: contain;
   }
   .dlg-name { font-size: 15px; margin-bottom: 5px; min-height: 0; }
   .dlg-text { font-size: 14.5px; line-height: 1.62; min-height: 0; }
@@ -624,10 +626,10 @@ html, body {
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* 横屏手机（≤460 高）：轻提示原本贴在 bottom:40px，矮屏正好压在结算卡下方的结束按钮上，
+/* 横屏手机（≤600 高）：轻提示原本贴在 bottom:40px，矮屏正好压在结算卡下方的结束按钮上，
    改挂到顶栏下面。必须排在上面 .toast 基础规则之后——同特异性，后来者才压得住 bottom，
    否则 top 与 bottom 同时生效会把胶囊拉成一整屏（实测 296px 高）。 */
-@media (max-height: 460px) {
+@media (max-height: 600px) {
   .toast { top: 54px; bottom: auto; padding: 9px 18px; font-size: 12.5px; max-width: 84vw; }
 }
 
