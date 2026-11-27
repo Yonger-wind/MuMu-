@@ -61,8 +61,10 @@ export function stretchSquash(width, targetWidth) {
 /** 欠阻尼阻尼比 → 阻尼系数：ζ = 1 − 0.55·bounce，bounce=0 时临界阻尼不回弹。 */
 export const dampingOf = (k, bounce) => 2 * (1 - 0.55 * clamp(bounce, 0, 1)) * Math.sqrt(k);
 
-/** 克隆条目时不带走的属性：id 必须唯一，交互语义与接管标记不该出现在装饰层上。 */
-const STRIP_ATTRS = ['id', 'title', 'aria-pressed', 'aria-expanded', 'aria-current', 'data-mg-item'];
+/** 克隆条目时不带走的属性：id 必须唯一，交互语义与接管标记不该出现在装饰层上，
+ *  hidden 也不能带——顶栏那颗 ⛶ 建轨时还是隐藏的（只有横屏手机才露），
+ *  带上克隆体就会让它在墨层里永远是空的，悬停时药丸上没有墨字。 */
+const STRIP_ATTRS = ['id', 'title', 'aria-pressed', 'aria-expanded', 'aria-current', 'data-mg-item', 'hidden'];
 
 function twinOf(button) {
   const twin = button.cloneNode(true);
@@ -157,6 +159,9 @@ export function createGlideNav(nav, options = {}) {
       rects[i] = rect;
       twins[i].style.left = `${rect.left}px`;
       twins[i].style.width = `${rect.width}px`;
+      // 条目此刻没被渲染（display:none 量出来全是 0）就别给它在墨层里留克隆体，
+      // 负 left 加 0 宽的溢出会漂到药丸裁剪区里。重新露出后 refresh() 会再量一次。
+      twins[i].hidden = !(rect.width > 0);
     });
   }
 

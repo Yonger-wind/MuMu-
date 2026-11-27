@@ -113,6 +113,9 @@ async function main() {
       if (step.eval) {
         const r = await c.send('Runtime.evaluate', {
           expression: step.eval, awaitPromise: true, returnByValue: true,
+          // gesture:true 让这次求值带真实用户激活——全屏 / 锁定横屏 / 音频解锁
+          // 都只在有激活时才允许，不带就会一律 SecurityError，验不了成功路径。
+          userGesture: !!step.gesture,
         });
         if (r.exceptionDetails) {
           console.error('EVAL ERROR:', r.exceptionDetails.text, r.exceptionDetails.exception && r.exceptionDetails.exception.description);

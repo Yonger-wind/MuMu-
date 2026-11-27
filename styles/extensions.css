@@ -3107,6 +3107,10 @@
   letter-spacing: var(--mg-track);
 }
 
+/* 隐藏的条目（桌面不出现的 ⛶）必须留在轨道外：上面那条 display 的作者样式
+   会把 UA 的 [hidden]{display:none} 抢回来，于是按钮在桌面上照样渲染。 */
+.mumu-glide.mumu-glide [data-mg-item][hidden] { display: none; }
+
 .mumu-glide.mumu-glide [data-mg-item] {
   display: inline-flex;
   align-items: center;
@@ -3283,6 +3287,23 @@
   font-size: 12.5px; line-height: 1.9; letter-spacing: 0.04em;
   color: rgba(255,244,230,0.72); margin-bottom: 24px;
 }
+/* 全屏主按钮：能真锁横屏的浏览器才有（rotateInner(canFullscreen)） */
+.mumu-rotate__fs {
+  display: block; width: 100%; padding: 13px 20px; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(180deg, #ffd9a8, #ff9d57);
+  border: 1px solid rgba(255,214,160,0.5);
+  color: #2b1a10; font-family: var(--sans); font-size: 13px; font-weight: 600;
+  letter-spacing: 0.1em; box-shadow: 0 12px 28px rgba(255,140,70,0.24);
+  margin-bottom: 12px; transition: filter .2s ease, opacity .2s ease;
+}
+.mumu-rotate__fs:hover { filter: brightness(1.06); }
+.mumu-rotate__fs:active { transform: translateY(1px); }
+.mumu-rotate__fs[disabled] { opacity: 0.55; cursor: default; }
+.mumu-rotate__note {
+  margin-top: 14px; font-size: 11.5px; line-height: 1.85;
+  color: rgba(255,224,196,0.78); letter-spacing: 0.03em;
+}
+.mumu-rotate__note[hidden] { display: none; }
 .mumu-rotate__skip {
   padding: 11px 20px; border-radius: 999px; cursor: pointer;
   background: transparent; border: 1px solid rgba(255,244,230,0.22);

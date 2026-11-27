@@ -18,6 +18,7 @@ import { identityOfSpeaker } from './series-meta.js';
 import { buildFinale } from './finale.js';
 import { playOpening, isOpeningActive, hasOpening, prefetchOpenings } from './openings/index.js';
 import { createGlideNav } from './glide-nav.js';
+import { createFullscreenController } from './fullscreen.js';
 import { createRotateHint } from './rotate-hint.js';
 
 const $ = (id) => document.getElementById(id);
@@ -579,8 +580,36 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal
 
 refreshResume();
 
-/* 手机竖屏：舞台是横向分镜，先请用户转成横屏（可拒绝，本标签页内不再打扰） */
-const rotateHint = createRotateHint();
+/* 手机全屏 + 锁定横屏：安卓 Chrome 系（含部分国产壳）能真锁，
+   iPhone Safari / 微信 iOS 两个 API 都没有，所以全靠特性检测，
+   不支持就不给按钮、只在支持时提示手动转屏。 */
+const fullscreen = createFullscreenController({
+  onNotice: (msg) => toast(msg),
+  onState: () => { syncFsButton(); rotateHint.refresh(); },
+});
+const fsBtn = $('stage-fullscreen');
+
+/** ⛶ 只在横屏手机出现；出现或消失都得重量一次滑行药丸。 */
+function syncFsButton() {
+  if (!fsBtn) return;
+  fsBtn.hidden = !fullscreen.shouldShow;
+  fsBtn.setAttribute('aria-pressed', String(fullscreen.active));
+  fsBtn.setAttribute('aria-label', fullscreen.active ? '退出全屏' : '全屏并锁定横屏');
+  fsBtn.title = fullscreen.active
+    ? (fullscreen.locked ? '退出全屏（横屏已锁定）' : '退出全屏')
+    : '全屏并锁定横屏';
+  fsBtn.classList.toggle('is-on', fullscreen.active);
+  stageGlide.refresh();
+}
+
+if (fsBtn) fsBtn.addEventListener('click', () => fullscreen.toggle());
+window.addEventListener('resize', syncFsButton);
+window.addEventListener('orientationchange', syncFsButton);
+syncFsButton();
+
+/* 手机竖屏：舞台是横向分镜，先请用户转成横屏（可拒绝，本标签页内不再打扰）。
+   能全屏的浏览器把「全屏并锁定横屏」摆在面板上作为主按钮。 */
+const rotateHint = createRotateHint({ fullscreen, onNotice: (msg) => toast(msg) });
 
 // 对外暴露，便于调试
-window.__mumu = { engine, audio, sunset, castManager, sceneRenderer, rotate: rotateHint, get state() { return engine.state; } };
+window.__mumu = { engine, audio, sunset, castManager, sceneRenderer, rotate: rotateHint, fullscreen, get state() { return engine.state; } };

@@ -32,6 +32,12 @@ html, body {
   user-select: none;
 }
 
+/* 全屏（手机顶栏那颗 ⛶，或桌面 F11）：底色跟页面走，别在比例不合时露黑边。
+   带前缀的写法要单独成条——选择器列表里有一个不认识的伪类会整条作废。 */
+html:fullscreen { background: #120d22; }
+html:fullscreen::backdrop { background: #120d22; }
+html:-webkit-full-screen { background: #120d22; }
+
 .screen {
   position: fixed;
   inset: 0;
@@ -340,6 +346,12 @@ html, body {
 }
 .stage-btn:hover { background: rgba(255,244,230,0.18); }
 .stage-btn.icon-only { padding: 9px 13px; }
+/* 全屏那颗：只有横屏手机会露出来（main.js syncFsButton），进入全屏后加一圈暖边当状态 */
+#stage-fullscreen { font-size: 15px; line-height: 1; }
+#stage-fullscreen.is-on {
+  border-color: rgba(255,196,130,0.66);
+  box-shadow: 0 0 0 1px rgba(255,196,130,0.22), 0 6px 18px rgba(0,0,0,0.32);
+}
 .stage-meta {
   font-family: var(--serif); font-size: 16px; letter-spacing: 0.2em;
   color: rgba(255,244,230,0.85);
