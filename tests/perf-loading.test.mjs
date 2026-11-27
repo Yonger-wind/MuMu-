@@ -144,6 +144,16 @@ test('lazy-scene：装载失败给中文提示入口，下次调用会重试', a
   assert.equal(rec.starts, 1);
 });
 
+test('lazy-scene：preloadImages 必须转发给真实渲染器，否则场景大图永远不会请求', async () => {
+  const rec = { sets: [], starts: 0, stops: 0, preloads: 0, changes: [] };
+  const r = createLazySceneRenderer({}, { load: () => Promise.resolve(fakeModule(rec)) });
+  r.preloadImages();
+  await tick();
+  assert.equal(rec.preloads, 1, '装载完成后要把预加载请求补给真实渲染器');
+  r.preloadImages();
+  assert.equal(rec.preloads, 2, '就绪后直接转发');
+});
+
 test('lazy-scene：已就绪后重复 preloadImages 不再拉包', async () => {
   const rec = { sets: [], starts: 0, stops: 0, preloads: 0, changes: [] };
   let loads = 0;

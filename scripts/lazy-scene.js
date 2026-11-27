@@ -11,9 +11,12 @@ export function createLazySceneRenderer(canvas, { onFail, load = () => import('.
   let loading = null;
   let lastSet = null;      // 最近一次要显示的画面
   let wantRun = false;     // 调用方此刻是否希望它在跑
+  let wantPreload = false; // 调用方是否要过场景大图（星月夜 / 陆家嘴 / 乐谱）
   const listeners = [];
 
   function flush(r) {
+    // 先补大图请求再补画面：src 赋值晚一帧，第一帧就会画成程序化兜底夜景
+    if (wantPreload) { wantPreload = false; r.preloadImages(); }
     if (lastSet) r.set(lastSet);
     for (const fn of listeners) r.onChange(fn);
     if (wantRun) r.start();
@@ -55,7 +58,8 @@ export function createLazySceneRenderer(canvas, { onFail, load = () => import('.
       if (real) real.stop();
     },
     preloadImages() {
-      ensure();
+      if (real) real.preloadImages();
+      else { wantPreload = true; ensure(); }
     },
     resize() {
       if (real) real.resize();
