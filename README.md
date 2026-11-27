@@ -154,7 +154,7 @@ styles/extensions.css 扩展样式（只含 .mumu-* 命名空间；悬浮层挂�
 assets/models/      二十八张半身立绘（透明 PNG）：七张现代人物 + 六张国风人物 +
                     八位《漩涡与深蓝》人物 + 七位《月光下的未完奏鸣》人物
                     原始 PNG 与 *.cut.png 并存；cut 版由 tools/png-alpha.js 去底、裁边后直接使用
-assets/images/      starry-night.jpg（《星月夜》原图：沙龙展墙、画库真迹与曲目卡封面）
+assets/images/      starry-night.png（《星月夜》原图：沙龙展墙、画库真迹与曲目卡封面）
                     pathetique-score.png（《悲怆》第二乐章手稿：曲目封面与剧情特写）
                     cicada-photo.jpg（《蝉鸣》第二章的半张黑白旧照片：相纸内框里整幅覆盖）
                     lujiazui-day.png / lujiazui-night.png（陆家嘴昼/夜：城市远景与写字楼幕墙）
@@ -170,6 +170,9 @@ scripts/
                     真渲染器；ready 前的 start 缓存重放，加载失败走 onFail 中文提示
   rotate-hint.js    移动端竖屏提示层「请横屏体验」：短边 ≤500 且竖屏才提示，可「仍以竖屏继续」，
                     横屏后自动清除（mumu.rotate.dismiss 只记本次会话；单测 tests/rotate-hint.test.mjs）
+  fullscreen.js     移动端全屏 + 锁定横屏：requestFullscreen({navigationUI:'hide'}) 成功后才
+                    orientation.lock('landscape')；能力全走特性检测，缺 API 就退回文案引导，
+                    ⛶ 只在横屏触摸设备出现（单测 tests/fullscreen.test.mjs）
   glide-nav.js      滑行药丸导航引擎：悬停时一枚暖白药丸滑到条目下、经过之处文字由浅转深，
                     弹簧拉伸/回弹、进场揭开（首页右上功能组与舞台右上顶栏共用）
   scene.js          剧情舞台渲染器：二十七类场景底图、晨昏夜/火夜光影、浮尘、镜头推拉、
@@ -319,7 +322,10 @@ tools/perf-baseline.cjs 首屏性能基线采集（headless Edge + CDP，零依�
   《月光》深蓝夜空金色五线谱、《漩涡》星月夜漩涡），约 6.2 s（《漩涡》7.2 s）浮现大标题，
   标题后可点击 / 回车 / 空格开演，Esc 或右上「跳过动画」立即进入；WebGL2 不可用时退回 Canvas 2D。
 - **移动端横屏**：舞台按横屏分镜设计，竖屏打开时出现「请横屏体验」提示层（可「仍以竖屏继续」，
-  横屏后自动不再打扰）；矮视口（≤460px 高）下首页主视觉、项目介绍、剧目选择、图鉴、
+  横屏后自动不再打扰）；提示层顶部另有「全屏并锁定横屏」主按钮，横屏进剧情后右上角也有一颗 ⛶，
+  两者都走**先进全屏、再 `screen.orientation.lock('landscape')`** 的标准路径（顺序反了 Chrome 一定拒绝），
+  并把地址栏那一截还给画面。iPhone Safari / 微信 iOS 没有这两个 API，检测不到就整颗按钮不渲染、
+  只留中文引导，绝不放点了没反应的按钮；桌面不出现 ⛶（用浏览器自己的 F11）。矮视口（≤460px 高）下首页主视觉、项目介绍、剧目选择、图鉴、
   自定义卡片面板、开场动画标题、**对话框与终幕结算卡**都做了专门重排，844×390 与 812×375
   逐面截图验证通过。矮视口下对话框只占视口高的 18–38%（桌面口径原本 58–73%，会把人物和
   特写道具整块压住），终章结算卡连同三颗结束按钮一屏装完、不需要滚动。
@@ -332,7 +338,7 @@ tools/perf-baseline.cjs 首屏性能基线采集（headless Edge + CDP，零依�
 
 - 剧本库为「曲目 → 章节」两级：库中有四张曲目卡——《蝉鸣止于逢魔时》《青绿长卷·千里未归》
   《月光下的未完奏鸣》各四章，《漩涡与深蓝：星月夜的回响》三章（双结局），共十五章；
-  《漩涡与深蓝》以 `assets/images/starry-night.jpg` 作封面，《月光》以
+  《漩涡与深蓝》以 `assets/images/starry-night.png` 作封面，《月光》以
   `assets/images/pathetique-score.png` 作封面。点击曲目后才列出章节，再点章节进入。
   导入的剧本仍是独立卡片。首页「开始体验」会先打开「选择剧本」，不直接开演。
 - 章节走到【结束】时，对话框会多出「继续下一章」与「换一个剧本」：

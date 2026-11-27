@@ -19,11 +19,17 @@ node serve.js        # → http://localhost:5173
 - 单元测试：仓库根目录执行 `node --test`（Node 内置测试运行器，零依赖）；用例在 `tests/*.test.mjs`。
 - 性能基线：`PORT=5199 node serve.js` 后 `node tools/perf-baseline.cjs --runs=3 --stage`；
   数字口径见 `docs/perf-baseline.md`（同机同版本 Edge 前后对比才有意义）。
-  最近一次（2026-11-26 晚，开场分帧 + 剧情内章节面板之后）：首屏可交互 273 ms、
-  34 请求 / 661 KB、首页 41.9 FPS / 舞台 55.7 FPS、异常 0（首页 FPS 的抖动是软件渲染噪声，
-  体积 +18KB 来自 `extensions.css` 的章节面板段与 `shell.js` 的分帧）。
+  最近一次（2026-11-26 深夜，移动端全屏 + 锁定横屏之后）：首屏可交互 255 ms、
+  35 请求 / 676 KB、首页 49.4 FPS / 舞台 59.3 FPS、异常 0
+  （比上一轮多 1 请求 / +15KB，就是新增的 `scripts/fullscreen.js`）。
 - 截图回归用 `node tools/cdp-shoot.cjs <steps.json>`（CDP 9333，新起 Edge 配置所以存储是空的）；
-  步骤键只有 `navigate` / `eval` / `shot` / `viewport` / `wait`，所有点击和按键都要写在 `eval` 里。
+  步骤键只有 `navigate` / `eval` / `shot` / `viewport` / `wait` / `gesture`，
+  所有点击和按键都要写在 `eval` 里；`"gesture": true` 让那次求值带真实用户激活
+  （全屏、锁定横屏、音频解锁只在有激活时才允许，不加一律 SecurityError / "not granted"）。
+  **headless Edge 永远进不了真全屏**：`requestFullscreen` 回 `TypeError: not granted`，
+  `screen.orientation.lock` 回 `NotSupportedError: not available on this device`——
+  成功路径只能在页面里打桩（覆盖 `documentElement.requestFullscreen` / `document.exitFullscreen` /
+  `screen.orientation.lock`，并派发 `fullscreenchange`）验状态机与样式，真机行为仍需用户实测。
   横屏验收把 `viewport` 设成 844×390 与 812×375，竖屏用 390×844；截图是 JPEG 字节，
   文件名要写 `.jpg` 才能直接读。
 - 必须走 HTTP，且 `serve.js` 不发缓存头：改完代码一定强制刷新（ignoreCache / Ctrl+F5）。
@@ -68,6 +74,28 @@ node serve.js        # → http://localhost:5173
   **必须 `z-index:-1` 沉到文字底下**——定位伪元素默认排在普通流内容之上，再叠 `backdrop-filter`
   就会把按钮自己的字糊进模糊里（实测整条文字消失）。揭开动画只在本页第一次进舞台时播一次，
   之后再进只 `refresh()` 重量尺寸、不重播；左侧「← 返回首页」保持原来的 chip 外观，不参与。
+- **移动端全屏 + 锁定横屏**（2026-11-26 加，`scripts/fullscreen.js`）：舞台右上那一排在**横屏手机**上
+  多一颗 `#stage-fullscreen`（⛶），点一下 `requestFullscreen({navigationUI:'hide'})` 成功后立刻
+  `screen.orientation.lock('landscape')`——顺序不能反，Chrome 系在非全屏时一定拒绝 lock。
+  竖屏时这颗按钮**不出现**（`shouldShowButton` 要 `w > h`），改由「请横屏体验」面板顶部的
+  暖色主按钮「全屏并锁定横屏」承接（`rotateInner(canFullscreen)`，`enter({quiet:true})`，
+  失败文案写进面板自己的 `.mumu-rotate__note`，因为 `.toast` 在 z120 面板底下会被盖住）；
+  全屏成功后面板撤掉并把 `mumu.rotate.dismiss` 写进 sessionStorage，转回横屏时 `refresh()` 清掉记忆。
+  能力全部走特性检测：iPhone Safari / 微信 iOS 两个 API 都没有 → 主按钮整个不渲染、只留「仍以竖屏继续」；
+  安卓微信等「能全屏不能锁」→ 进全屏后给一句「已进入全屏 · 这个浏览器不会自动转横屏，请把手机横过来」；
+  请求被拒给「全屏没有被允许，请在浏览器菜单里选「全屏」再试」。**桌面不出现这颗按钮**
+  （`pointer: coarse` 为假，且 AGENTS.md 要求桌面外观不变，靠 F11），
+  桌面唯一的视觉变化是 `html:fullscreen` 的底色补了 `#120d22`。
+  按钮态（`aria-pressed` / `.is-on` 暖圈 / title）由 `syncFsButton()` 统一刷，
+  它同时是 `onState` 回调，被 `fullscreenchange` 事件驱动——所以浏览器自己撤掉全屏时
+  也会补一句「已退出全屏，横屏锁定已解除。」；主动点退出走 `hush` 不重复提示。
+  **滑行药丸的坑**：`.mumu-glide.mumu-glide [data-mg-item] { display:inline-flex }` 的作者样式会抢回
+  UA 的 `[hidden]{display:none}`，隐藏条目必须单独写
+  `.mumu-glide.mumu-glide [data-mg-item][hidden] { display: none; }`，否则桌面上那颗 ⛶ 照样渲染；
+  `glide-nav.js` 的 `STRIP_ATTRS` 里也要带 `'hidden'`（墨层克隆不能继承 hidden，否则字永远不亮），
+  `measure()` 靠 `twins[i].hidden = !(rect.width > 0)` 让没渲染的条目克隆也不显示。
+  单测 `tests/fullscreen.test.mjs`（20 条，含调用顺序 `request → lock → unlock → exit` 的断言，
+  把 lock 提到 request 前面会红三条）。
 - 每次改动后先确认入口：首页「开始体验」应打开全屏环形剧本选择（不是旧陈列弹窗）：
   默认居中为《漩涡与深蓝：星月夜的回响》（《星月夜》封面），左邻《月光下的未完奏鸣》
   （乐谱封面）、右邻《青绿长卷·千里未归》（青绿山水封面），再往外左侧是「敬请期待」占位卡、
@@ -176,7 +204,7 @@ node serve.js        # → http://localhost:5173
 - 剧本选择动画的硬约束：真实剧本（内置曲目 + 用户导入）≤10 部时走环形卡带并补 7 张
   「敬请期待」占位；占位卡不参与阈值计数；真实剧本 >10 部时必须回退到原陈列弹窗
   （`openLibrary`），不得为了动画丢卡片。曲目封面：蝉鸣 = `assets/images/covers/cicada-dusk.jpg`，
-  青绿 = `assets/images/covers/qinglv-spring.jpg`，漩涡 = `starry-night.jpg`，
+  青绿 = `assets/images/covers/qinglv-spring.jpg`，漩涡 = `starry-night.png`，
   未完奏鸣 = `pathetique-score.png`。
 - 曲目关键词固定为：蝉鸣「青春校园」、青绿「古风」、漩涡「悬疑」、未完奏鸣「言情」；
   选择页左下角必须保留「剧本由AI生成，如有雷同，纯属巧合」原文。
@@ -186,6 +214,9 @@ node serve.js        # → http://localhost:5173
 - **移动端必须是横屏体验**（2026-11-26 定的硬要求）：分镜与对话框都以横向为前提，竖屏只由
   `scripts/rotate-hint.js` 提示「请横屏体验」（短边 ≤500 且竖屏才提示，可「仍以竖屏继续」，
   横屏后自动清除，记忆写在 sessionStorage `mumu.rotate.dismiss`），**不要**改成竖屏分镜。
+  允许（且已实现）的是**用全屏把横屏锁住**：`scripts/fullscreen.js` 只在特性检测通过时调
+  `requestFullscreen` + `screen.orientation.lock('landscape')`，检测不过就退回文案引导，
+  **绝不放点了没反应的按钮**；桌面不出现 ⛶，桌面外观口径仍是「与改动前一致」。
   矮视口重排集中在 `@media (max-height: 600px)`：`styles/main.css`（首页主视觉 + 项目介绍三列 + 对话框与提示条）与
   `styles/extensions.css`（剧目选择 / 图鉴 / 自定义卡片 / 结算）。2026-11-26 真机实测：横屏手机的 CSS 视口约为
   1400×524（物理像素 2800×1280，受浏览器地址栏影响），旧 460px 断点不会命中；600px 同时覆盖 1400×524、
@@ -210,6 +241,12 @@ node serve.js        # → http://localhost:5173
   （与 `createSceneRenderer` 同接口的代理），真模块在首次绘制场景时 `import()`。新增场景相关调用
   一律走这个代理；代理在 ready 前会缓存最后一次 `start()` 参数并重放，加载失败只走 `onFail`
   中文 toast，不能抛出未处理的 rejection。首屏体积/FPS 口径见 `docs/perf-baseline.md` 第二轮。
+- **代理的 `preloadImages()` 必须转发给真实渲染器**（2026-11-26 踩过的坑）：`main.js` 进舞台 / 开剧目选择时
+  调的是 `lazy-scene` 代理，代理若只 `ensure()` 而不把请求补给 `scene.js`，四张场景大图
+  （`starry-night.png` / 陆家嘴昼夜 / `pathetique-score.png`）就永远不会被请求，于是沙龙展墙、画库镜像、
+  修复室防潮箱、特写道具与陆家嘴天际线全部长期落在 `paintStarry` 的**程序化兜底夜景**上——画面"看着像"，
+  其实是假的。单测只记录了 `preloads` 计数没断言，所以一直没暴露；现在 `tests/perf-loading.test.mjs`
+  会断言转发次数，改代理时别把它删掉。
 - **自定义卡片是隔离的**：内置角色卡 / 曲目卡 / 典藏卡渲染时永远不传 `fx`，`gallery-card.js` 的
   无-`fx` 分支必须保持原来的固定值（`--pc-radius:0px`、`--pc-foil:0.65`、`--pc-pattern:STRIPES`、
   `--pc-holo-gain:1.25`、静态 `<span>` 星点、位移写死 `'0px'`）；用户在「效果调节」面板调的任何参数
@@ -240,7 +277,7 @@ node serve.js        # → http://localhost:5173
 | 曲目关键词 / 发言身份 / AI 免责声明 | `scripts/series-meta.js`（`SERIES_KEYWORDS` / `identityOfSpeaker` / `AI_DISCLAIMER`，身份取自 `gallery-data.js` 的 `SERIES`） |
 | 发言人名称下的身份小字 | `index.html`（`#dlg-role`）、`scripts/main.js`（`setName`）、`styles/extensions.css`（`.mumu-dlg-role`） |
 | 分镜取景、人物站位、场景光影、镜头运动 | `scripts/scene.js` |
-| 《星月夜》原图（沙龙展墙 / 画库镜像 / 曲目卡封面） | `assets/images/starry-night.jpg`；场景在 `scene.js`，道具在 `prop.js`，封面在 `modals.js` |
+| 《星月夜》原图（沙龙展墙 / 画库镜像 / 曲目卡封面） | `assets/images/starry-night.png`；场景在 `scene.js`，道具在 `prop.js`，封面在 `modals.js` |
 | 《悲怆》乐谱原图（曲目封面 / 剧情特写） | `assets/images/pathetique-score.png`；道具 `drawScoreProp` 在 `prop.js`，封面在 `modals.js` |
 | 《蝉鸣》黑白旧照片原图（特写相纸内框 / 顶部对齐裁切） | `assets/images/cicada-photo.jpg`；`prop.js` 的 `drawPhoto` 在有 photo 时整幅覆盖，`scene.js` 的 `detailPhotoBoy` 在特写台词命中「旧照片 / 小男孩」时启用 |
 | 陆家嘴昼/夜原图（城市远景 / 写字楼幕墙） | `assets/images/lujiazui-day.png`、`lujiazui-night.png`；`drawCity` / `drawOffice` 在 `scene.js` |
@@ -261,7 +298,8 @@ node serve.js        # → http://localhost:5173
 | 角色卡卡面（深靛斜纹立式 4:5.4 / 剪影 contain 不被卡框裁切 / 名字左下、星点右下） | `scripts/gallery-card.js`（`applyVars` 的 `--pc-aspect`）、`styles/extensions.css`（`.mumu-holo-card--char*`） |
 | 章节通关发卡与解锁存储 | `scripts/gallery-store.js`（`mumu.gallery.v1`，按 `script.id` 幂等，只对内置曲目发放） |
 | 首页视觉、按钮、模块装配 | `scripts/sunset.js`、`scripts/main.js`、`index.html` |
-| 竖屏提示「请横屏体验」 | `scripts/rotate-hint.js`（`PHONE_SHORT_EDGE` / `shouldPrompt` / 文案）、`styles/extensions.css`（`.mumu-rotate*`）、单测 `tests/rotate-hint.test.mjs`；`window.__mumu.rotate`（`shown` 是 getter） |
+| 竖屏提示「请横屏体验」 | `scripts/rotate-hint.js`（`PHONE_SHORT_EDGE` / `shouldPrompt` / `rotateInner(canFullscreen)` 文案）、`styles/extensions.css`（`.mumu-rotate*` / `.mumu-rotate__fs` / `.mumu-rotate__note`）、单测 `tests/rotate-hint.test.mjs`；`window.__mumu.rotate`（`shown` 是 getter） |
+| 移动端全屏 + 锁定横屏（⛶ / 全屏主按钮 / 提示文案 / 桌面不出现） | `scripts/fullscreen.js`（`pick*` / `supports*` / `isMobileViewport` / `shouldShowButton` / `enterNotice` / `exitNotice` / `createFullscreenController`）、`scripts/main.js`（`syncFsButton`、`#stage-fullscreen` 接线）、`index.html`（`#stage-fullscreen`）、`styles/main.css`（`html:fullscreen` 底色、`#stage-fullscreen.is-on`）、`styles/extensions.css`（`.mumu-glide [data-mg-item][hidden]`）、单测 `tests/fullscreen.test.mjs`；`window.__mumu.fullscreen` |
 | 横屏矮视口（844×390 / 812×375）布局 | `styles/main.css` 与 `styles/extensions.css` 各自的 `@media (max-height: 460px)` 段（首页 / 介绍页 / 剧目选择 / 图鉴 / 自定义卡片）；对话框与结算卡见 `main.css` 中排在 `.mumu-dlg-back` 之后那段、`extensions.css` 末尾的 `.mumu-finale*`，提示条单独放在 `.toast.show` 之后 |
 | 场景渲染的懒加载与首屏体积 | `scripts/lazy-scene.js`（代理）+ `scripts/main.js`（`createLazySceneRenderer` 接线）；口径与数字见 `docs/perf-baseline.md` 第二轮 |
 | 滑行药丸（首页右上 + 舞台右上两排：悬停编排 / 托板 / 进场揭开） | `scripts/glide-nav.js`（弹簧与墨层引擎，条目靠 `data-mg-item` 接管）、`styles/extensions.css`（`.mumu-glide*`，舞台那组的 token 在 `.mumu-glide.stage-top-right`）、`scripts/main.js`（`createGlideNav` / 遮罩点击后 `topGlide.playIntro` / `showScreen('stage')` 里的 `revealStageGlide`） |
@@ -381,6 +419,14 @@ node serve.js        # → http://localhost:5173
       390×844 竖屏出现「请横屏体验」，点「仍以竖屏继续」后 `window.__mumu.rotate.shown` 为 false 且页面可正常玩；
       转回横屏提示自动消失。1440×900 桌面外观与改动前一致（`.dialogue` 仍是 `bottom:40px`、
       `padding:26px 32px 30px`、字号 17px、结束按钮竖排满宽）。
+- [ ] **移动端全屏 ⛶**：844×390 与 812×375 剧情页右上多一颗 `#stage-fullscreen`（右缘不越屏、
+      不压「← 返回首页」），点一下调用顺序是 `requestFullscreen → orientation.lock`（打桩验），
+      按钮变 `aria-pressed="true"` + `.is-on` 暖圈、title 换成「退出全屏（横屏已锁定）」；
+      再点顺序是 `unlock → exit`；模拟浏览器自行撤全屏会补一句「已退出全屏，横屏锁定已解除。」；
+      390×844 竖屏顶栏**不出现** ⛶，「请横屏体验」面板顶部出现暖色主按钮「全屏并锁定横屏」，
+      点它成功后面板撤掉、`mumu.rotate.dismiss` 写入 sessionStorage，失败就地显示
+      `.mumu-rotate__note` 而不是靠 toast；1440×900 桌面该按钮 `display:none`、
+      右上仍是「换个剧本 / 选章节 / 保存进度 / ♪」四颗且托板宽度不变。
 - [ ] 首屏仍是 0 图片请求、`scene.js`/`prop.js` 不在首屏导入图内（改完复跑
       `node tools/perf-baseline.cjs --runs=3 --stage`，与 `docs/perf-baseline.md` 第二轮对比）。
 - [ ] 控制台无错误、无 404。
