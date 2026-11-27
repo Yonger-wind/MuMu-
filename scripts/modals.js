@@ -58,7 +58,7 @@ function coverStyle(s) {
 const SERIES_COVER = {
   cicada: "linear-gradient(180deg, rgba(20,16,30,0.06), rgba(20,16,30,0.52)), url('./assets/images/covers/cicada-dusk.jpg') center/cover no-repeat",
   qinglv: "linear-gradient(180deg, rgba(14,24,20,0.06), rgba(14,24,20,0.50)), url('./assets/images/covers/qinglv-spring.jpg') center/cover no-repeat",
-  vortex: "linear-gradient(180deg, rgba(18,22,38,0.10), rgba(18,22,38,0.58)), url('./assets/images/starry-night.jpg') center/cover no-repeat",
+  vortex: "linear-gradient(180deg, rgba(18,22,38,0.10), rgba(18,22,38,0.58)), url('./assets/images/starry-night.png') center/cover no-repeat",
   moonlight: "linear-gradient(180deg, rgba(20,22,32,0.06), rgba(20,22,32,0.62)), url('./assets/images/pathetique-score.png') center/cover no-repeat",
 };
 

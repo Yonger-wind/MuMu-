@@ -63,7 +63,7 @@ export function createSceneRenderer(canvas) {
   function preloadSceneImages() {
     if (sceneImagesRequested) return;
     sceneImagesRequested = true;
-    starry.src = './assets/images/starry-night.jpg';
+    starry.src = './assets/images/starry-night.png';
     cityDay.src = './assets/images/lujiazui-day.png';
     cityNight.src = './assets/images/lujiazui-night.png';
     scoreSheet.src = './assets/images/pathetique-score.png';

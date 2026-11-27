@@ -18,7 +18,7 @@ const COVER_H = 830;
 const BUILTIN_COVERS = {
   cicada: './assets/images/covers/cicada-dusk.jpg',
   qinglv: './assets/images/covers/qinglv-spring.jpg',
-  vortex: './assets/images/starry-night.jpg',
+  vortex: './assets/images/starry-night.png',
   moonlight: './assets/images/pathetique-score.png',
 };
 

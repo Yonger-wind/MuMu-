@@ -11,7 +11,7 @@ export const SEVEN_CARDS = Object.freeze([
     kind: 'seven',
     name: '星月夜',
     identity: '1889·布面油画',
-    image: './assets/images/starry-night.jpg',
+    image: './assets/images/starry-night.png',
     stars: 7,
     photoPos: 'center',
     art: 'linear-gradient(160deg, #1b2c4a 0%, #2f4666 52%, #12182a 100%)',

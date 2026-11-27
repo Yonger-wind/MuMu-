@@ -555,7 +555,7 @@ async function buildCovers(entries) {
   const got = await Promise.all(keys.map((k) => loadImg('../assets/models/' + k + '.cut.png')));
   const lib = {}; keys.forEach((k, i) => { lib[k] = got[i]; });
   const [starry, score] = await Promise.all([
-    loadImg('../assets/images/starry-night.jpg'),
+    loadImg('../assets/images/starry-night.png'),
     loadImg('../assets/images/pathetique-score.png'),
   ]);
   const map = {};
