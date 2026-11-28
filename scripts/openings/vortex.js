@@ -1,13 +1,13 @@
 /* ============================================================
    《漩涡与深蓝：星月夜的回响》第一章开场动画
    ------------------------------------------------------------
-   画面：梵高《星月夜》式的深蓝星空 —— 冷蓝笔触绕着金色星体与月亮旋成涡卷，
-   下方一道起伏的光带与远山，笔触从六处光辉向外生长成画。
-   源自 demo/vortex-opening.html，只换成 scripts/openings/shell.js 的驱动契约，
-   画面逻辑（流场、配色、粒子、WebGL2 拖尾/辉光/ACES）原样保留。
+   画面：梵高《星月夜》式的深蓝星空 —— 冷蓝笔触绕成涡卷，右上一弯金色 C 形月，
+   下方一道起伏的光带与远山，笔触从五处光辉向外生长成画。
+   画面逻辑（流场、配色、粒子、WebGL2 拖尾/辉光/ACES）与 demo 保持一致；
+   第六个生长槽禁用，仅用于兼容外壳与着色器固定的 6 槽数组。
    外壳负责：标题「点击任意处开始剧本」提示、跳过按钮、生长时间轴、
    30fps 累加器、帧率降级、点击/键盘、淡出销毁。
-   标题时刻仍是 7.2s（比铺满早 1.4s），与已验收的行为一致。
+   本版标题在画面铺满后（8.6s）浮现。
    ============================================================ */
 
 const TAU = Math.PI * 2;
@@ -16,21 +16,21 @@ const FEATHER = 0.10;
 // Film 的合成参数（原 demo params 里的 bloom / exposure，与外壳的 speed / density 分开）
 const COMPOSITE = { bloom: 1.80, exposure: 2.00 };
 
+const MOON = { x: 1.28, y: 0.22, rm: 0.055, halo: 0.115 };
 const SEEDS = [
   { x: 0.60, y: 0.40, t0: 0.15, dur: 6.4, maxR: 1.05, warm: false },
-  { x: 1.28, y: 0.22, t0: 0.85, dur: 5.9, maxR: 0.95, warm: true },
-  { x: 1.47, y: 0.115, t0: 1.50, dur: 5.5, maxR: 0.90, warm: true },
+  { x: MOON.x, y: MOON.y, t0: 0.85, dur: 5.9, maxR: 0.95, warm: true },
   { x: 0.79, y: 0.50, t0: 2.10, dur: 5.6, maxR: 0.95, warm: false },
   { x: 0.18, y: 0.16, t0: 2.65, dur: 5.2, maxR: 0.90, warm: true },
   { x: 0.32, y: 0.73, t0: 3.20, dur: 5.2, maxR: 0.95, warm: true },
+  { x: 0, y: 0, t0: 0, dur: 1, maxR: 0, warm: false, disabled: true },
 ];
 
 /* ---------- 流场：涡旋 + 横向风 + 起伏光带 ---------- */
 const VORT = [
   { x: 0.60, y: 0.40, r: 0.150, s: -0.34, warm: false },  // 主涡旋
   { x: 0.79, y: 0.50, r: 0.092, s: -0.22, warm: false },  // 副涡旋
-  { x: 1.28, y: 0.22, r: 0.100, s: -0.26, warm: true },   // 大星
-  { x: 1.47, y: 0.115, r: 0.075, s: 0.18, warm: true },   // 月
+  { x: MOON.x, y: MOON.y, r: MOON.rm * 1.4, s: 0.18, warm: true },   // 月
   { x: 0.18, y: 0.16, r: 0.052, s: 0.15, warm: true },
   { x: 0.42, y: 0.10, r: 0.038, s: -0.12, warm: true },
   { x: 0.95, y: 0.12, r: 0.042, s: 0.13, warm: true },
@@ -267,13 +267,13 @@ export const VORTEX = {
   key: 'vortex',
   title: '漩涡与深蓝：',
   subtitle: '星月夜的回响',
-  ariaLabel: '梵高星月夜风格的流动星空，蓝青笔触围绕金色星体缓慢旋转。',
+  ariaLabel: '梵高星月夜风格的流动星空，蓝青笔触围绕光辉旋转，右上一弯金色新月。',
   params: { speed: 2.00, density: 6000 },
-  // 分辨率上限 1150（约 210 万像素/帧）：全屏高 dpr 下不再推至 410 万像素，CSS 放大由辉光/颗粒掩盖
-  scaleCap: 1150,
+  // 与 demo 一致：逻辑画布上限 800，避免高 dpr 全屏推满物理像素
+  scaleCap: 800,
   introEnd: 8.6,
-  // 标题比画面铺满早 1.4s 出现，留出「点击任意处开始剧本」的提示时间
-  titleAt: 7.2,
+  // 本版等画面完整铺满后再浮现标题
+  titleAt: 8.6,
   seed: 18890601,
 
   create(api) {
@@ -345,9 +345,59 @@ export const VORTEX = {
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
+      /* 右上弯月：淡金满盘 → 金盘 → 右侧淡金挖切 = 金色 C 形（凸左凹右）。
+         合成器曝光 2.0，实心填充预压到短笔触版 multiply 后的等效值，
+         避免整盘烧白、C 形消失。 */
+      const M = MOON;
+      ctx.fillStyle = '#726843';
+      ctx.beginPath(); ctx.arc(M.x * scale, M.y * scale, M.rm * 1.02 * scale, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#73500d';
+      ctx.beginPath(); ctx.arc(M.x * scale, M.y * scale, M.rm * scale, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#726843';
+      ctx.beginPath(); ctx.arc((M.x + M.rm * 0.30) * scale, (M.y - M.rm * 0.04) * scale, M.rm * 0.92 * scale, 0, TAU); ctx.fill();
+      const pickTone = (arr) => arr[Math.floor(api.rnd() * arr.length)];
+      /* 弯月与淡盘上的切向笔触纹理 */
+      for (let i = 0; i < 380; i++) {
+        const an = api.rnd() * TAU, r = Math.sqrt(api.rnd()) * M.rm;
+        const x = M.x + Math.cos(an) * r, y = M.y + Math.sin(an) * r;
+        const cx = x - (M.x + M.rm * 0.30), cy = y - (M.y - M.rm * 0.04);
+        const inGold = Math.hypot(cx, cy) > M.rm * 0.92;
+        const tx = -Math.sin(an), ty = Math.cos(an);
+        const l = 0.006 + api.rnd() * 0.008;
+        ctx.strokeStyle = inGold ? pickTone([GOLD[1], GOLD[2], GOLD[3]]) : pickTone(['#8a7d52', '#9c8f60', '#7c7048']);
+        ctx.globalAlpha = 0.25 + api.rnd() * 0.35;
+        ctx.lineWidth = (0.4 + api.rnd() ** 2 * 1.2) * scale / 800;
+        ctx.beginPath();
+        ctx.moveTo(x * scale, y * scale);
+        ctx.lineTo((x + tx * l) * scale, (y + ty * l) * scale);
+        ctx.stroke();
+      }
+      /* 月晕：同心笔触环，金 / 青 / 奶白交替，向外渐隐 */
+      const mRingCols = [GOLD[3], '#c9b878', COLD[4], GOLD[2], COLD[3], '#cfc09a', COLD[4], GOLD[3]];
+      for (let k = 0; k < 8; k++) {
+        const r = M.rm * (1.15 + k * 0.155);
+        const n = Math.round(50 + k * 14);
+        ctx.strokeStyle = mRingCols[k];
+        ctx.lineWidth = (0.4 + api.rnd() ** 2 * 1.4) * scale / 800;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * TAU + api.rnd() * 0.05;
+          const px = M.x + Math.cos(a) * r, py = M.y + Math.sin(a) * r * 0.92;
+          const tx = -Math.sin(a), ty = Math.cos(a) * 0.92;
+          const l = 0.008 + api.rnd() * 0.008;
+          ctx.moveTo(px * scale, py * scale);
+          ctx.lineTo((px + tx * l) * scale, (py + ty * l) * scale);
+        }
+        ctx.globalAlpha = (0.35 + api.rnd() * 0.2) * (1 - k / 10);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
       for (const v of VORT) if (v.warm) {
+        const soft = v.r > 0.06;   // 弯月自带静态柔光，强度收敛以免吞掉 C 形对比
         const g = ctx.createRadialGradient(v.x * scale, v.y * scale, 0, v.x * scale, v.y * scale, v.r * scale);
-        g.addColorStop(0, '#e2d18a7d'); g.addColorStop(0.12, '#b5a14c30'); g.addColorStop(1, '#b5a14c00');
+        g.addColorStop(0, soft ? '#e2d18a26' : '#e2d18a7d');
+        g.addColorStop(0.12, soft ? '#b5a14c10' : '#b5a14c30');
+        g.addColorStop(1, '#b5a14c00');
         ctx.fillStyle = g;
         ctx.fillRect((v.x - v.r) * scale, (v.y - v.r) * scale, v.r * 2 * scale, v.r * 2 * scale);
       }
@@ -429,7 +479,7 @@ export const VORTEX = {
           inkCtx.fillRect(s.x * scale - r, s.y * scale - r, r * 2, r * 2);
         }
       } else {
-        for (const v of VORT) if (v.warm) {
+        for (const v of VORT) if (v.warm && v.r <= 0.06) {   // 弯月不逐帧累积动态光晕，保住 C 形对比
           const r = v.r * 0.95 * scale;
           const g = inkCtx.createRadialGradient(v.x * scale, v.y * scale, 0, v.x * scale, v.y * scale, r);
           g.addColorStop(0, 'rgba(255,240,179,0.055)');
@@ -444,6 +494,7 @@ export const VORTEX = {
     /* ---------- 开场：光辉生长 ---------- */
     function updateGrowth(_api, t) {
       for (const s of api.growth || []) {
+        if (s.disabled) { s.r = 0; s.rOut = 0; s.rOut2 = 0; continue; }
         const u = Math.min(1, Math.max(0, (t - s.t0) / s.dur));
         s.r = u <= 0 ? 0 : s.maxR * u;
         s.rOut = s.r + FEATHER;

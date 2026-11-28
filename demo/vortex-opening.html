@@ -32,7 +32,7 @@
 </head>
 <body>
 <div id="frame">
-  <canvas id="sky" role="img" aria-label="漩涡与深蓝开场：梵高星月夜风格的流动星空，蓝青笔触围绕金色星体旋转。"></canvas>
+  <canvas id="sky" role="img" aria-label="漩涡与深蓝开场：梵高星月夜风格的流动星空，蓝青笔触围绕金色星体旋转，右上一弯金色新月。"></canvas>
   <div id="title">漩涡与深蓝：<span class="t-sub">星月夜的回响</span></div>
 </div>
 
@@ -59,13 +59,16 @@ const params = { speed: 2.00, density: 6000, bloom: 1.80, exposure: 2.00 };
 /* ---------- 确定性随机 ---------- */
 let seed = 18890601;
 function rnd() { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; }
+const pick = (arr, idxs) => arr[idxs ? idxs[(rnd() * idxs.length) | 0] : ((rnd() * arr.length) | 0)];
 
 /* ---------- 流场：涡旋 + 横向风 + 起伏光带 ---------- */
+/* 右上弯月（参照短笔触版《星月夜》的月亮）：金色 C 形 + 淡金满盘 + 柔光环。
+   位置占用原「大星」黄色涡旋的槽位——按用户口径用弯月替换那团黄涡 */
+const MOON = { x: 1.28, y: 0.22, rm: 0.055, halo: 0.115 };
 const VORT = [
   { x: 0.60, y: 0.40, r: 0.150, s: -0.34, warm: false },  // 主涡旋
   { x: 0.79, y: 0.50, r: 0.092, s: -0.22, warm: false },  // 副涡旋
-  { x: 1.28, y: 0.22, r: 0.100, s: -0.26, warm: true },   // 大星
-  { x: 1.47, y: 0.115, r: 0.075, s: 0.18, warm: true },   // 月
+  { x: MOON.x, y: MOON.y, r: MOON.rm * 1.4, s: 0.18, warm: true },   // 月
   { x: 0.18, y: 0.16, r: 0.052, s: 0.15, warm: true },
   { x: 0.42, y: 0.10, r: 0.038, s: -0.12, warm: true },
   { x: 0.95, y: 0.12, r: 0.042, s: 0.13, warm: true },
@@ -305,8 +308,8 @@ class Film {
     gl.uniform1f(this.pAcc.u.uDecay, Math.min(0.3, 0.03 * dt));
     gl.uniform1f(this.pAcc.u.uGrow, seeds ? 1 : 0);
     if (seeds) {
-      const arr = new Float32Array(24);
-      for (let i = 0; i < 6; i++) { const s = seeds[i]; arr[i * 4] = s.x; arr[i * 4 + 1] = s.y; arr[i * 4 + 2] = s.r; arr[i * 4 + 3] = s.rOut; }
+      const arr = new Float32Array(24);   // 不足 6 个时余槽保持 0，shader 见 rOut<=0 即跳过
+      for (let i = 0; i < 6 && i < seeds.length; i++) { const s = seeds[i]; arr[i * 4] = s.x; arr[i * 4 + 1] = s.y; arr[i * 4 + 2] = s.r; arr[i * 4 + 3] = s.rOut; }
       gl.uniform4fv(this.pAcc.u.uSeeds, arr);
     }
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -376,9 +379,58 @@ function paintUnder() {
     baseCtx.stroke();
   }
   baseCtx.globalAlpha = 1;
+  /* 右上弯月：淡金满盘 → 金盘 → 右侧淡金挖切 = 金色 C 形（凸左凹右）。
+     合成器曝光 2.0 约 4× 线性且本版无全局压暗，故实心填充预压到短笔触版
+     multiply 后的等效值（淡盘 #726843 / 金 #73500d），否则整盘烧白、C 形消失 */
+  const M = MOON;
+  baseCtx.fillStyle = '#726843';
+  baseCtx.beginPath(); baseCtx.arc(M.x * scale, M.y * scale, M.rm * 1.02 * scale, 0, TAU); baseCtx.fill();
+  baseCtx.fillStyle = '#73500d';
+  baseCtx.beginPath(); baseCtx.arc(M.x * scale, M.y * scale, M.rm * scale, 0, TAU); baseCtx.fill();
+  baseCtx.fillStyle = '#726843';
+  baseCtx.beginPath(); baseCtx.arc((M.x + M.rm * 0.30) * scale, (M.y - M.rm * 0.04) * scale, M.rm * 0.92 * scale, 0, TAU); baseCtx.fill();
+  /* 弯月与淡盘上的切向笔触纹理 */
+  for (let i = 0; i < 380; i++) {
+    const an = rnd() * TAU, r = Math.sqrt(rnd()) * M.rm;
+    const x = M.x + Math.cos(an) * r, y = M.y + Math.sin(an) * r;
+    const cx = x - (M.x + M.rm * 0.30), cy = y - (M.y - M.rm * 0.04);
+    const inGold = Math.hypot(cx, cy) > M.rm * 0.92;
+    const tx = -Math.sin(an), ty = Math.cos(an);
+    const l = 0.006 + rnd() * 0.008;
+    baseCtx.strokeStyle = inGold ? pick(GOLD, [1, 2, 3]) : pick(['#8a7d52', '#9c8f60', '#7c7048']);
+    baseCtx.globalAlpha = 0.25 + rnd() * 0.35;
+    baseCtx.lineWidth = (0.4 + rnd() ** 2 * 1.2) * scale / 800;
+    baseCtx.beginPath();
+    baseCtx.moveTo(x * scale, y * scale);
+    baseCtx.lineTo((x + tx * l) * scale, (y + ty * l) * scale);
+    baseCtx.stroke();
+  }
+  /* 月晕：同心笔触环，金 / 青 / 奶白交替，向外渐隐 */
+  const mRingCols = [GOLD[3], '#c9b878', COLD[4], GOLD[2], COLD[3], '#cfc09a', COLD[4], GOLD[3]];
+  for (let k = 0; k < 8; k++) {
+    const r = M.rm * (1.15 + k * 0.155);
+    const n = Math.round(50 + k * 14);
+    baseCtx.strokeStyle = mRingCols[k];
+    baseCtx.lineWidth = (0.4 + rnd() ** 2 * 1.4) * scale / 800;
+    baseCtx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + rnd() * 0.05;
+      const px = M.x + Math.cos(a) * r, py = M.y + Math.sin(a) * r * 0.92;
+      const tx = -Math.sin(a), ty = Math.cos(a) * 0.92;
+      const l = 0.008 + rnd() * 0.008;
+      baseCtx.moveTo(px * scale, py * scale);
+      baseCtx.lineTo((px + tx * l) * scale, (py + ty * l) * scale);
+    }
+    baseCtx.globalAlpha = (0.35 + rnd() * 0.2) * (1 - k / 10);
+    baseCtx.stroke();
+  }
+  baseCtx.globalAlpha = 1;
   for (const v of VORT) if (v.warm) {
+    const soft = v.r > 0.06;   // 弯月自带静态柔光，强度收敛以免吞掉 C 形对比
     const g = baseCtx.createRadialGradient(v.x * scale, v.y * scale, 0, v.x * scale, v.y * scale, v.r * scale);
-    g.addColorStop(0, '#e2d18a7d'); g.addColorStop(0.12, '#b5a14c30'); g.addColorStop(1, '#b5a14c00');
+    g.addColorStop(0, soft ? '#e2d18a26' : '#e2d18a7d');
+    g.addColorStop(0.12, soft ? '#b5a14c10' : '#b5a14c30');
+    g.addColorStop(1, '#b5a14c00');
     baseCtx.fillStyle = g;
     baseCtx.fillRect((v.x - v.r) * scale, (v.y - v.r) * scale, v.r * 2 * scale, v.r * 2 * scale);
   }
@@ -459,7 +511,7 @@ function step(dt, show) {
       inkCtx.fillRect(s.x * scale - r, s.y * scale - r, r * 2, r * 2);
     }
   } else {
-    for (const v of VORT) if (v.warm) {
+    for (const v of VORT) if (v.warm && v.r <= 0.06) {   // 弯月不逐帧累积动态光晕，保住 C 形对比
       const r = v.r * 0.95 * scale;
       const g = inkCtx.createRadialGradient(v.x * scale, v.y * scale, 0, v.x * scale, v.y * scale, r);
       g.addColorStop(0, 'rgba(255,240,179,0.055)');
@@ -477,8 +529,7 @@ function present() { if (gpu) gpu.render(); else ctx2d.drawImage(ink, 0, 0); }
 /* ---------- 开场：光辉生长 ---------- */
 const SEEDS = [
   { x: 0.60, y: 0.40, t0: 0.15, dur: 6.4, maxR: 1.05, warm: false },
-  { x: 1.28, y: 0.22, t0: 0.85, dur: 5.9, maxR: 0.95, warm: true },
-  { x: 1.47, y: 0.115, t0: 1.50, dur: 5.5, maxR: 0.90, warm: true },
+  { x: MOON.x, y: MOON.y, t0: 0.85, dur: 5.9, maxR: 0.95, warm: true },  // 月（继承原大星槽位的生长节奏）
   { x: 0.79, y: 0.50, t0: 2.10, dur: 5.6, maxR: 0.95, warm: false },
   { x: 0.18, y: 0.16, t0: 2.65, dur: 5.2, maxR: 0.90, warm: true },
   { x: 0.32, y: 0.73, t0: 3.20, dur: 5.2, maxR: 0.95, warm: true },
@@ -550,16 +601,16 @@ function skipIntro() {
 let setupEpoch = 0;
 function setup(replayIntro) {
   // 全屏 cover：取视口宽与「视口高×1.6」的较大者作为渲染宽度，保证铺满不变形
-  // 分辨率上限 1150（约 210 万像素/帧）：全屏高 dpr 下不再推至 410 万像素，CSS 放大由辉光/颗粒掩盖
+  // 分辨率上限 800：全屏高 dpr 下不再推满物理像素，CSS 放大由辉光/颗粒掩盖
   const coverW = Math.max(innerWidth, innerHeight * W);
-  scale = Math.min(1150, Math.max(600, coverW * Math.min(devicePixelRatio || 1, 2) / W));
+  scale = Math.min(800, Math.max(600, coverW * Math.min(devicePixelRatio || 1, 2) / W));
   const pw = Math.round(scale * W), ph = Math.round(scale);
   for (const c of [sky, under, ink, maskC, baseIntro]) { c.width = pw; c.height = ph; }
   if (gpu) gpu.resize(pw, ph);
   seed = 18890601;
   paintUnder();
   if (gpu) gpu.setBase(under);
-  particles = Array.from({ length: params.density }, () => spawn(true));
+  particles = Array.from({ length: Math.round(params.density * Q_FACTOR[quality]) }, () => spawn(true));
   warmLeft = 48;
   const epoch = ++setupEpoch;
   if (replayIntro && !reducedMotion) { beginIntro(performance.now()); return; }
@@ -629,6 +680,11 @@ window.__flow = {
   get phase() { return phase; },
   get fps() { return fps; },
   get renderer() { return gpu ? 'webgl2' : 'canvas2d'; },
+  get quality() { return quality; },
+  get pw() { return sky.width; },
+  get ph() { return sky.height; },
+  get setups() { return setupEpoch; },
+  get warmLeft() { return warmLeft; },
   get titleShown() { return titleEl.classList.contains('show'); },
   params,
   skip: () => skipIntro(),
