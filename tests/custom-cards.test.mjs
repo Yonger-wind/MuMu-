@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   CUSTOM_CARDS_KEY, CUSTOM_FX_KEY, MAX_STARS, MAX_CARDS, MAX_IMAGE_EDGE,
   ASPECTS, PATTERNS, THEMES,
@@ -32,6 +33,12 @@ test('常量：星级与容量上限写死', () => {
   assert.deepEqual(ASPECTS, ['4 / 5', '3 / 4', '2 / 3', '1 / 1', '16 / 9']);
   assert.deepEqual(PATTERNS, ['none', 'stripes', 'grating', 'dots', 'hex']);
   assert.deepEqual(THEMES, ['dark', 'light']);
+});
+
+test('自定义卡片画幅选项不显示视频同款文案', () => {
+  const source = readFileSync(new URL('../scripts/custom-cards.js', import.meta.url), 'utf8');
+  assert.equal(source.includes('视频同款'), false);
+  assert.match(source, /'4 \/ 5': '4 : 5'/);
 });
 
 test('clampStar 把任何星级压进 0~5', () => {

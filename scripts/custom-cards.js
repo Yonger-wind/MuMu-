@@ -35,7 +35,7 @@ import {
 } from './custom-cards-data.js';
 
 const ASPECT_LABEL = {
-  '4 / 5': '4 : 5（视频同款）',
+  '4 / 5': '4 : 5',
   '3 / 4': '3 : 4',
   '2 / 3': '2 : 3',
   '1 / 1': '1 : 1',
